@@ -1,0 +1,20 @@
+import dotenv from 'dotenv';
+
+dotenv.config({ path: `.env.${process.env.NODE_ENV || 'development'}` });
+
+const required = ['AUTH_SECRET', 'MONGODB_URI'];
+const missing = required.filter((key) => !process.env[key]);
+
+if (missing.length) {
+  throw new Error(`Missing required env: ${missing.join(', ')}`);
+}
+
+export const env = {
+  appName: process.env.APP_NAME || 'Sales CRM API',
+  authSecret: process.env.AUTH_SECRET,
+  corsOrigin: process.env.CORS_ORIGIN || '*',
+  isProduction: process.env.NODE_ENV === 'production',
+  mongoUri: process.env.MONGODB_URI,
+  nodeEnv: process.env.NODE_ENV || 'development',
+  port: Number(process.env.PORT || 4000),
+};
