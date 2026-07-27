@@ -13,6 +13,7 @@ export type MenuItemType = {
   parentKey?: string
   target?: HTMLAttributeAnchorTarget
   isDisabled?: boolean
+  roles?: string[]
   children?: MenuItemType[]
 }
 

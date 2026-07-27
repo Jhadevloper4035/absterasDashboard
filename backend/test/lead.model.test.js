@@ -82,6 +82,20 @@ test('active lead without owner goes to assignment exception queue', async () =>
   assert.equal(lead.assignmentException, true);
 });
 
+test('assigned lead leaves assignment exception queue', async () => {
+  const lead = new Lead({
+    name: 'Acme',
+    source: 'api',
+    owner: new mongoose.Types.ObjectId(),
+    assignmentException: true,
+    status: 'ASSIGNED',
+  });
+
+  await lead.validate();
+
+  assert.equal(lead.assignmentException, false);
+});
+
 test('lost and on-hold leads require reasons', async () => {
   await assert.rejects(
     () => new Lead({ name: 'Acme', source: 'manual', status: 'LOST' }).validate(),

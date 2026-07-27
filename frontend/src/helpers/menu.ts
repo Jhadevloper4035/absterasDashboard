@@ -1,8 +1,11 @@
 import { MENU_ITEMS } from '@/assets/data/menu-items'
 import type { MenuItemType } from '@/types/menu'
 
-export const getMenuItems = (): MenuItemType[] => {
-  return MENU_ITEMS
+export const getMenuItems = (role?: string): MenuItemType[] => {
+  return MENU_ITEMS.map((item) => ({
+    ...item,
+    children: item.children?.filter((child) => !child.roles || child.roles.includes(role || '')),
+  })).filter((item) => (!item.roles || item.roles.includes(role || '')) && (!item.children || item.children.length))
 }
 
 export const findAllParent = (menuItems: MenuItemType[], menuItem: MenuItemType): string[] => {

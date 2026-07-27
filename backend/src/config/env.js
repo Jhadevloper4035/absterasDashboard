@@ -17,4 +17,11 @@ export const env = {
   mongoUri: process.env.MONGODB_URI,
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 4000),
+  s3: {
+    bucket: process.env.S3_BUCKET,
+    endpoint: process.env.S3_ENDPOINT,
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+    region: process.env.AWS_REGION || 'us-east-1',
+    uploadPrefix: process.env.S3_UPLOAD_PREFIX || 'uploads',
+  },
 };

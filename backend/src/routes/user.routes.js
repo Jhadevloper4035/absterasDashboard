@@ -14,7 +14,7 @@ import {
 
 export const userRouter = Router();
 
-userRouter.get('/', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(listUsers));
+userRouter.get('/', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listUsers));
 userRouter.post('/', asyncHandler(allowFirstSuperadminOrSuperadmin), asyncHandler(createUser));
 userRouter.get('/:id', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(getUser));
 userRouter.patch('/:id', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(updateUser));

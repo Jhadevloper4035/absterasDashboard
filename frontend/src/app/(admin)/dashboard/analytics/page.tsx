@@ -2,6 +2,8 @@ import { Col, Row } from 'react-bootstrap'
 
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb'
 import PageMetaData from '@/components/PageTitle'
+import TaskCreateCard from '@/components/TaskCreateCard'
+import TodoCompletedList from '@/components/TodoCompletedList'
 import Conversions from './components/Conversions'
 import SessionByBrowser from './components/SessionByBrowser'
 import SessionsByCountry from './components/SessionsByCountry'
@@ -33,6 +35,14 @@ export default function Home() {
         </Col>
         <Col lg={8}>
           <TopPages />
+        </Col>
+      </Row>
+      <Row>
+        <Col lg={4}>
+          <TaskCreateCard />
+        </Col>
+        <Col lg={8}>
+          <TodoCompletedList />
         </Col>
       </Row>
     </>

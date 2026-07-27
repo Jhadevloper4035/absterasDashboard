@@ -6,8 +6,11 @@ Small Express + Mongoose API foundation for the Sales CRM. The repo is ready to 
 
 ```sh
 npm install
+npm run db:seed
 npm run dev
 ```
+
+The seed creates 10 unassigned demo leads for admin assignment testing. Create sales users from the Users page, then assign these leads from `/leads`.
 
 With Docker:
 

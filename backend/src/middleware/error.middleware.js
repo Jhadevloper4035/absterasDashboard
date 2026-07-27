@@ -3,6 +3,10 @@ export function notFound(req, res) {
 }
 
 export function errorHandler(err, req, res, next) {
+  if (err.name === 'MulterError') {
+    return res.status(400).json({ error: { message: err.message } });
+  }
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: { message: err.message } });
   }

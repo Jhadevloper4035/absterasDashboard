@@ -94,6 +94,35 @@ const followUpSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const nextMeetingSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      trim: true,
+      default: 'Next meeting',
+    },
+    startsAt: Date,
+    notes: {
+      type: String,
+      trim: true,
+    },
+    scheduledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    scheduledAt: {
+      type: Date,
+      default: Date.now,
+    },
+    status: {
+      type: String,
+      enum: ['SCHEDULED', 'CANCELLED'],
+      default: 'SCHEDULED',
+    },
+  },
+  { _id: false },
+);
+
 const leadSchema = new mongoose.Schema(
   {
     name: {
@@ -224,6 +253,7 @@ const leadSchema = new mongoose.Schema(
       },
     ],
     nextAction: followUpSchema,
+    meetingHistory: [nextMeetingSchema],
     notes: [noteSchema],
     attachments: [attachmentSchema],
     closedAt: Date,
@@ -268,9 +298,7 @@ leadSchema.pre('validate', function setDerivedLeadFields() {
     this.normalizedPhone = this.phone.replace(/[^\d+]/g, '');
   }
 
-  if (!this.owner && ACTIVE_LEAD_STATUSES.includes(this.status)) {
-    this.assignmentException = true;
-  }
+  this.assignmentException = !this.owner && ACTIVE_LEAD_STATUSES.includes(this.status);
 
   if (['LOST', 'ON_HOLD'].includes(this.status) && !this.statusReason) {
     this.invalidate('statusReason', `${this.status} requires a reason`);

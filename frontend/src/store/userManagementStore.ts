@@ -20,7 +20,7 @@ type UserManagementStore = {
   clearUsers: () => void
   fetchUsers: () => Promise<UserType[]>
   createUser: (payload: CreateUserPayload) => Promise<UserType>
-  updateUser: (id: string, patch: Partial<UserType>) => Promise<UserType>
+  updateUser: (id: string, patch: Partial<UserType> & { password?: string }) => Promise<UserType>
 }
 
 const authedFetch = <T>(path: string, options: RequestInit = {}) => {

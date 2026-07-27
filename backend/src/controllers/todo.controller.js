@@ -1,0 +1,107 @@
+import { Todo, TODO_PRIORITIES, TODO_STATUSES } from '../models/todo.model.js';
+import { User } from '../models/user.model.js';
+
+const ADMIN_ROLES = ['superadmin', 'admin'];
+
+function canManageTodos(user) {
+  return ADMIN_ROLES.includes(user.role);
+}
+
+function todoQueryFor(user, extra = {}) {
+  return canManageTodos(user) ? extra : { ...extra, assignedTo: user._id };
+}
+
+function populateTodo(todo) {
+  return todo.populate([
+    { path: 'assignedTo', select: 'name email role status' },
+    { path: 'createdBy', select: 'name email role status' },
+    { path: 'completedBy', select: 'name email role status' },
+  ]);
+}
+
+function patchTodo(todo, patch, actorId) {
+  if (patch.title !== undefined) todo.title = patch.title;
+  if (patch.dueDate !== undefined) todo.dueDate = patch.dueDate ? new Date(patch.dueDate) : undefined;
+  if (TODO_PRIORITIES.includes(patch.priority)) todo.priority = patch.priority;
+  if (TODO_STATUSES.includes(patch.status)) {
+    todo.status = patch.status;
+    todo.completedAt = patch.status === 'Completed' ? todo.completedAt || new Date() : undefined;
+    todo.completedBy = patch.status === 'Completed' ? actorId : undefined;
+  }
+}
+
+export async function listTodos(req, res) {
+  const todos = await Todo.find(todoQueryFor(req.user))
+    .populate('assignedTo', 'name email role status')
+    .populate('createdBy', 'name email role status')
+    .populate('completedBy', 'name email role status')
+    .sort({ dueDate: 1, createdAt: -1 })
+    .limit(100);
+
+  res.json({ data: todos });
+}
+
+export async function createTodo(req, res) {
+  const assignedTo = canManageTodos(req.user) ? req.body.assignedTo : req.user._id;
+
+  if (!req.body.title?.trim()) {
+    return res.status(400).json({ error: { message: 'Task title is required' } });
+  }
+
+  const assignee = await User.findOne({ _id: assignedTo, role: 'sales', status: 'active' });
+  if (!assignee) {
+    return res.status(400).json({ error: { message: 'Assign task to an active salesperson' } });
+  }
+
+  const todo = new Todo({
+    title: req.body.title,
+    dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+    status: TODO_STATUSES.includes(req.body.status) ? req.body.status : 'Pending',
+    priority: TODO_PRIORITIES.includes(req.body.priority) ? req.body.priority : 'Medium',
+    assignedTo: assignee._id,
+    createdBy: req.user._id,
+  });
+  if (todo.status === 'Completed') {
+    todo.completedAt = new Date();
+    todo.completedBy = req.user._id;
+  }
+
+  await todo.save();
+  await populateTodo(todo);
+  return res.status(201).json({ data: todo });
+}
+
+export async function updateTodo(req, res) {
+  const todo = await Todo.findOne(todoQueryFor(req.user, { _id: req.params.id }));
+
+  if (!todo) {
+    return res.status(404).json({ error: { message: 'Todo not found' } });
+  }
+
+  if (req.body.assignedTo !== undefined) {
+    if (!canManageTodos(req.user)) {
+      return res.status(403).json({ error: { message: 'Forbidden' } });
+    }
+
+    const assignee = await User.findOne({ _id: req.body.assignedTo, role: 'sales', status: 'active' });
+    if (!assignee) {
+      return res.status(400).json({ error: { message: 'Assign task to an active salesperson' } });
+    }
+    todo.assignedTo = assignee._id;
+  }
+
+  patchTodo(todo, req.body, req.user._id);
+  await todo.save();
+  await populateTodo(todo);
+  return res.json({ data: todo });
+}
+
+export async function deleteTodo(req, res) {
+  const todo = await Todo.findOneAndDelete(todoQueryFor(req.user, { _id: req.params.id }));
+
+  if (!todo) {
+    return res.status(404).json({ error: { message: 'Todo not found' } });
+  }
+
+  return res.json({ data: { id: req.params.id } });
+}

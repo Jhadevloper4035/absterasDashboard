@@ -1,11 +1,20 @@
 import { lazy } from 'react'
 import { Navigate, type RouteProps } from 'react-router-dom'
+import { useAuthStore } from '@/store/authStore'
 
 // Dashboard Routes
 const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'))
 const Finance = lazy(() => import('@/app/(admin)/dashboard/finance/page'))
 const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'))
 const Users = lazy(() => import('@/app/(admin)/users/page'))
+const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
+const Leads = lazy(() => import('@/app/(admin)/leads/page'))
+const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
+const ArchitectLeads = lazy(() => import('@/app/(admin)/leads/architect/page'))
+const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
+const WonLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
+const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
+const CreateTask = lazy(() => import('@/app/(admin)/tasks/create/page'))
 
 // Apps Routes
 const EcommerceProducts = lazy(() => import('@/app/(admin)/ecommerce/products/page'))
@@ -21,7 +30,6 @@ const Email = lazy(() => import('@/app/(admin)/apps/email/page'))
 const Schedule = lazy(() => import('@/app/(admin)/calendar/schedule/page'))
 const Integration = lazy(() => import('@/app/(admin)/calendar/integration/page'))
 const Help = lazy(() => import('@/app/(admin)/calendar/help/page'))
-const Todo = lazy(() => import('@/app/(admin)/apps/todo/page'))
 const Social = lazy(() => import('@/app/(admin)/apps/social/page'))
 const Contacts = lazy(() => import('@/app/(admin)/apps/contacts/page'))
 const Invoices = lazy(() => import('@/app/(admin)/invoices/page'))
@@ -127,6 +135,13 @@ const ResetPassword2 = lazy(() => import('@/app/(other)/auth/reset-pass-2/page')
 const LockScreen = lazy(() => import('@/app/(other)/auth/lock-screen/page'))
 const LockScreen2 = lazy(() => import('@/app/(other)/auth/lock-screen-2/page'))
 
+const dashboardPath = (role?: string) => (role === 'sales' ? '/dashboard/sales' : '/dashboard/analytics')
+
+const DashboardRedirect = () => {
+  const role = useAuthStore((state) => state.user?.role)
+  return <Navigate to={dashboardPath(role)} replace />
+}
+
 export type RoutesProps = {
   path: RouteProps['path']
   name: string
@@ -138,7 +153,7 @@ const initialRoutes: RoutesProps[] = [
   {
     path: '/',
     name: 'root',
-    element: <Navigate to="/dashboard/analytics" />,
+    element: <DashboardRedirect />,
   },
   {
     path: '*',
@@ -167,6 +182,41 @@ const generalRoutes: RoutesProps[] = [
     path: '/users',
     name: 'Users',
     element: <Users />,
+  },
+  {
+    path: '/users/create',
+    name: 'Create User',
+    element: <CreateUser />,
+  },
+  {
+    path: '/leads',
+    name: 'Leads',
+    element: <Leads />,
+  },
+  {
+    path: '/leads/create',
+    name: 'Create Lead',
+    element: <CreateLead />,
+  },
+  {
+    path: '/leads/architect',
+    name: 'Architect Leads',
+    element: <ArchitectLeads />,
+  },
+  {
+    path: '/leads/scheduled',
+    name: 'Meeting Scheduled Leads',
+    element: <ScheduledLeads />,
+  },
+  {
+    path: '/leads/won',
+    name: 'Won Leads',
+    element: <WonLeads />,
+  },
+  {
+    path: '/leads/:leadId',
+    name: 'Lead Detail',
+    element: <LeadDetail />,
   },
 ]
 
@@ -222,8 +272,23 @@ const appsRoutes: RoutesProps[] = [
     element: <Email />,
   },
   {
-    name: 'Schedule',
+    name: 'Todo Management',
     path: '/calendar/schedule',
+    element: <Schedule />,
+  },
+  {
+    name: 'Create Task',
+    path: '/tasks/create',
+    element: <CreateTask />,
+  },
+  {
+    name: 'All Tasks',
+    path: '/tasks/all',
+    element: <Schedule />,
+  },
+  {
+    name: 'Pending Tasks',
+    path: '/tasks/pending',
     element: <Schedule />,
   },
   {
@@ -239,7 +304,7 @@ const appsRoutes: RoutesProps[] = [
   {
     name: 'Todo',
     path: '/apps/todo',
-    element: <Todo />,
+    element: <Navigate to="/tasks/all" replace />,
   },
   {
     name: 'Social',
