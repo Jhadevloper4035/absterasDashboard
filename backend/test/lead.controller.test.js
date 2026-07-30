@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createLead, getLead, listLeads, updateLead } from '../src/controllers/lead.controller.js';
+import { createLead, deleteLead, getLead, listLeads, updateLead } from '../src/controllers/lead.controller.js';
 import { Lead } from '../src/models/lead.model.js';
 import { User } from '../src/models/user.model.js';
 
 const originalLeadCreate = Lead.create;
 const originalLeadFind = Lead.find;
 const originalLeadFindOne = Lead.findOne;
+const originalLeadFindOneAndDelete = Lead.findOneAndDelete;
 const originalLeadCountDocuments = Lead.countDocuments;
 const originalUserFindOne = User.findOne;
 
@@ -29,6 +30,7 @@ afterEach(() => {
   Lead.create = originalLeadCreate;
   Lead.find = originalLeadFind;
   Lead.findOne = originalLeadFindOne;
+  Lead.findOneAndDelete = originalLeadFindOneAndDelete;
   Lead.countDocuments = originalLeadCountDocuments;
   User.findOne = originalUserFindOne;
 });
@@ -46,6 +48,7 @@ test('created leads always enter the admin assignment queue', async () => {
       body: {
         name: 'Acme',
         source: 'website',
+        phone: '9876543210',
         owner: 'sales-1',
         status: 'ASSIGNED',
       },
@@ -57,6 +60,22 @@ test('created leads always enter the admin assignment queue', async () => {
   assert.equal(payload.owner, undefined);
   assert.equal(payload.status, 'NEW');
   assert.equal(payload.assignmentException, true);
+});
+
+test('lead creation requires mobile number', async () => {
+  const response = res();
+  await createLead(
+    {
+      body: {
+        name: 'Acme',
+        source: 'website',
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Mobile number is required');
 });
 
 test('salespeople only list their assigned leads', async () => {
@@ -110,6 +129,32 @@ test('lead list supports status and upcoming meeting filters', async () => {
 
   assert.equal(query.status, 'WON');
   assert.ok(query['meetingHistory.startsAt'].$gte instanceof Date);
+});
+
+test('lead list supports pending assignment filter', async () => {
+  let query;
+  Lead.find = (filter) => {
+    query = filter;
+    return {
+      populate() {
+        return this;
+      },
+      sort() {
+        return this;
+      },
+      skip() {
+        return this;
+      },
+      limit() {
+        return Promise.resolve([]);
+      },
+    };
+  };
+  Lead.countDocuments = async () => 0;
+
+  await listLeads({ user: { _id: 'admin-1', role: 'admin' }, query: { assignmentException: 'true' } }, res());
+
+  assert.deepEqual(query, { assignmentException: true });
 });
 
 test('lead list ignores invalid status filters', async () => {
@@ -168,6 +213,24 @@ test('salespeople cannot assign leads', async () => {
   );
 
   assert.equal(response.statusCode, 403);
+});
+
+test('only admins can delete leads', async () => {
+  let deletedFilter;
+  Lead.findOneAndDelete = async (filter) => {
+    deletedFilter = filter;
+    return { _id: filter._id };
+  };
+
+  const salesResponse = res();
+  await deleteLead({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'lead-1' } }, salesResponse);
+  assert.equal(salesResponse.statusCode, 403);
+  assert.equal(deletedFilter, undefined);
+
+  const adminResponse = res();
+  await deleteLead({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'lead-1' } }, adminResponse);
+  assert.equal(adminResponse.statusCode, 200);
+  assert.deepEqual(deletedFilter, { _id: 'lead-1' });
 });
 
 test('admin and assigned salespeople can add lead notes', async () => {
@@ -328,4 +391,64 @@ test('admin can assign and schedule meeting together', async () => {
   assert.equal(lead.status, 'MEETING_SCHEDULED');
   assert.equal(lead.meetingHistory[0].notes, 'Bring samples');
   assert.equal(response.body.data.nextMeeting.notes, 'Bring samples');
+});
+
+test('lead update ignores append-only history and system fields', async () => {
+  const statusHistory = [{ from: 'NEW', to: 'ASSIGNED', actor: 'admin-1' }];
+  const meetingHistory = [{ title: 'Intro', startsAt: new Date('2026-08-01T10:00'), status: 'SCHEDULED' }];
+  const assignmentHistory = [{ previousOwner: undefined, newOwner: 'sales-1', actor: 'admin-1' }];
+  const notes = [{ text: 'Original note', createdBy: 'sales-1' }];
+  const lead = {
+    _id: 'lead-1',
+    name: 'Original',
+    email: 'old@example.com',
+    normalizedEmail: 'old@example.com',
+    phone: '+1 555 0000',
+    normalizedPhone: '+15550000',
+    owner: 'sales-1',
+    status: 'ASSIGNED',
+    assignmentException: false,
+    statusHistory,
+    meetingHistory,
+    assignmentHistory,
+    notes,
+    save: async () => {},
+    populate: async () => {},
+  };
+  Lead.findOne = async () => lead;
+
+  const response = res();
+  await updateLead(
+    {
+      user: { _id: 'admin-1', role: 'admin' },
+      params: { id: 'lead-1' },
+      body: {
+        name: 'Updated',
+        email: 'new@example.com',
+        phone: '+1 555 1111',
+        status: 'WON',
+        statusHistory: [{ to: 'WON', actor: 'attacker' }],
+        meetingHistory: [],
+        assignmentHistory: [],
+        assignmentException: true,
+        notes: [],
+        closedAt: new Date('2026-08-02T10:00'),
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(lead.name, 'Updated');
+  assert.equal(lead.email, 'new@example.com');
+  assert.equal(lead.normalizedEmail, undefined);
+  assert.equal(lead.phone, '+1 555 1111');
+  assert.equal(lead.normalizedPhone, undefined);
+  assert.equal(lead.status, 'ASSIGNED');
+  assert.equal(lead.assignmentException, false);
+  assert.equal(lead.closedAt, undefined);
+  assert.equal(lead.statusHistory, statusHistory);
+  assert.equal(lead.meetingHistory, meetingHistory);
+  assert.equal(lead.assignmentHistory, assignmentHistory);
+  assert.equal(lead.notes, notes);
 });

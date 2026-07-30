@@ -1,11 +1,19 @@
 import { MENU_ITEMS } from '@/assets/data/menu-items'
 import type { MenuItemType } from '@/types/menu'
 
+const isVisible = (item: MenuItemType, role?: string) => !item.roles || item.roles.includes(role || '')
+
+const filterMenuItem = (item: MenuItemType, role?: string): MenuItemType | null => {
+  if (!isVisible(item, role)) return null
+
+  const children = item.children?.map((child) => filterMenuItem(child, role)).filter((child): child is MenuItemType => Boolean(child))
+  if (item.children && !children?.length) return null
+
+  return { ...item, children }
+}
+
 export const getMenuItems = (role?: string): MenuItemType[] => {
-  return MENU_ITEMS.map((item) => ({
-    ...item,
-    children: item.children?.filter((child) => !child.roles || child.roles.includes(role || '')),
-  })).filter((item) => (!item.roles || item.roles.includes(role || '')) && (!item.children || item.children.length))
+  return MENU_ITEMS.map((item) => filterMenuItem(item, role)).filter((item): item is MenuItemType => Boolean(item))
 }
 
 export const findAllParent = (menuItems: MenuItemType[], menuItem: MenuItemType): string[] => {

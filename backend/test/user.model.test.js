@@ -7,6 +7,7 @@ test('user defaults to sales role', () => {
   const user = new User({
     name: 'Asha',
     email: 'asha@example.com',
+    phone: '9876543210',
     passwordHash: 'scrypt:salt:hash',
   });
 
@@ -24,6 +25,7 @@ test('user role is limited to current roles', async () => {
     () => new User({
       name: 'Asha',
       email: 'asha@example.com',
+      phone: '9876543210',
       passwordHash: 'scrypt:salt:hash',
       role: 'manager',
     }).validate(),
@@ -35,6 +37,7 @@ test('user requires a valid timezone and morning summary time', async () => {
   await new User({
     name: 'Asha',
     email: 'asha@example.com',
+    phone: '9876543210',
     passwordHash: 'scrypt:salt:hash',
     timezone: 'Asia/Kolkata',
     notificationPreferences: { morningSummary: { time: '08:30' } },
@@ -44,6 +47,7 @@ test('user requires a valid timezone and morning summary time', async () => {
     () => new User({
       name: 'Asha',
       email: 'asha@example.com',
+      phone: '9876543210',
       passwordHash: 'scrypt:salt:hash',
       timezone: 'Mars/Base',
     }).validate(),
@@ -54,6 +58,7 @@ test('user requires a valid timezone and morning summary time', async () => {
     () => new User({
       name: 'Asha',
       email: 'asha@example.com',
+      phone: '9876543210',
       passwordHash: 'scrypt:salt:hash',
       notificationPreferences: { morningSummary: { time: '25:00' } },
     }).validate(),
@@ -65,6 +70,7 @@ test('user json never includes password hash', () => {
   const user = new User({
     name: 'Asha',
     email: 'asha@example.com',
+    phone: '9876543210',
     passwordHash: 'scrypt:salt:hash',
   });
 

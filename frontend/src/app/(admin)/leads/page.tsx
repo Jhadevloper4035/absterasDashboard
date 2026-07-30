@@ -1,6 +1,7 @@
 import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import ReactTable from '@/components/Table'
+import DeleteConfirmModal from '@/components/DeleteConfirmModal'
 import { apiFetch } from '@/helpers/api'
 import { useAuthStore } from '@/store/authStore'
 import type { LeadType } from '@/types/lead'
@@ -9,6 +10,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, Badge, Button, Card, CardBody, Col, Form, Modal, Row } from 'react-bootstrap'
+import { toast } from 'react-toastify'
 
 const ownerId = (owner: LeadType['owner']) => (typeof owner === 'string' ? owner : owner?._id || '')
 const ownerName = (owner: LeadType['owner']) => (typeof owner === 'object' ? owner.name : '')
@@ -30,7 +32,9 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ name: '', phone: '', email: '' })
   const [meetingLead, setMeetingLead] = useState<LeadType>()
+  const [deleteTarget, setDeleteTarget] = useState<LeadType>()
   const [meeting, setMeeting] = useState({ owner: '', startsAt: '', title: '', notes: '' })
+  const [deleting, setDeleting] = useState(false)
   const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
 
   const salespeople = useMemo(() => users.filter((item) => item.role === 'sales' && item.status === 'active'), [users])
@@ -57,8 +61,29 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         token,
       })
       setLeads((items) => items.map((item) => (item._id === leadId ? res.data : item)))
+      toast.success('Lead assigned successfully')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to assign lead')
+      const message = e instanceof Error ? e.message : 'Unable to assign lead'
+      setError(message)
+      toast.error(message)
+    }
+  }
+
+  const deleteLead = async () => {
+    if (!token || !canAssign || !deleteTarget) return
+
+    setDeleting(true)
+    try {
+      await apiFetch(`/leads/${deleteTarget._id}`, { method: 'DELETE', token })
+      setLeads((items) => items.filter((item) => item._id !== deleteTarget._id))
+      setDeleteTarget(undefined)
+      toast.success('Lead deleted')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to delete lead'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -88,8 +113,11 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
       })
       setLeads((items) => items.map((item) => (item._id === meetingLead._id ? res.data : item)))
       setMeetingLead(undefined)
+      toast.success('Meeting saved successfully')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to schedule meeting')
+      const message = e instanceof Error ? e.message : 'Unable to schedule meeting'
+      setError(message)
+      toast.error(message)
     }
   }
 
@@ -128,7 +156,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         cell: ({ row: { original } }) => original.sourceType || '-',
       },
       {
-        header: 'Product Enquire',
+        header: 'Product Enquiry',
         accessorKey: 'productInterest',
         cell: ({ row: { original } }) => original.productInterest || '-',
       },
@@ -146,7 +174,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         ),
       },
       {
-        header: canAssign ? 'Assign To' : 'Owner',
+        header: canAssign ? 'Assign to' : 'Owner',
         cell: ({ row: { original } }) =>
           canAssign ? (
             <div style={{ minWidth: 210 }}>
@@ -168,21 +196,26 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         cell: ({ row: { original } }) => (original.createdAt ? new Date(original.createdAt).toLocaleDateString() : '-'),
       },
       {
-        header: 'Next Meeting',
+        header: 'Next meeting',
         cell: ({ row: { original } }) => (original.nextMeeting?.startsAt ? new Date(original.nextMeeting.startsAt).toLocaleString() : '-'),
       },
       {
         header: 'Action',
         cell: ({ row: { original } }) => (
-          <div className="d-flex justify-content-end gap-2" style={{ minWidth: 230 }}>
+          <div className="d-flex justify-content-end gap-2" style={{ minWidth: canAssign ? 310 : 230 }}>
             <Button size="sm" variant="outline-success" type="button" className="text-nowrap" onClick={() => openMeeting(original)}>
               Schedule
             </Button>
             <Link to={`/leads/${original._id}`}>
               <Button size="sm" variant="outline-primary" type="button" className="text-nowrap">
-                View More
+                View details
               </Button>
             </Link>
+            {canAssign && (
+              <Button size="sm" variant="outline-danger" type="button" className="text-nowrap" onClick={() => setDeleteTarget(original)}>
+                Delete
+              </Button>
+            )}
           </div>
         ),
       },
@@ -240,7 +273,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
           {loading && !visibleLeads.length ? (
             <div className="text-center py-5">
               <Spinner className="spinner-border-sm me-2" tag="span" />
-              <span className="text-muted">Loading data...</span>
+              <span className="text-muted">Loading leads...</span>
             </div>
           ) : (
             <ReactTable<LeadType> columns={columns} data={visibleLeads} rowsPerPageList={[10, 25, 50]} pageSize={10} tableClass="text-nowrap mb-0" theadClass="bg-light bg-opacity-50" showPagination />
@@ -250,7 +283,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
       <Modal show={!!meetingLead} onHide={() => setMeetingLead(undefined)} centered>
         <Form onSubmit={scheduleMeeting}>
           <Modal.Header closeButton>
-            <Modal.Title>Schedule Next Meeting</Modal.Title>
+            <Modal.Title>Schedule next meeting</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             <Form.Group className="mb-3">
@@ -271,26 +304,34 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
               </Form.Group>
             )}
             <Form.Group className="mb-3">
-              <Form.Label>Meeting Title</Form.Label>
+                <Form.Label>Meeting title</Form.Label>
               <Form.Control value={meeting.title} onChange={(event) => setMeeting({ ...meeting, title: event.target.value })} />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Date & Time</Form.Label>
+                <Form.Label>Date and time</Form.Label>
               <Form.Control type="datetime-local" required value={meeting.startsAt} onChange={(event) => setMeeting({ ...meeting, startsAt: event.target.value })} />
             </Form.Group>
             <Form.Group>
               <Form.Label>Notes</Form.Label>
-              <Form.Control as="textarea" rows={3} placeholder="Add a little meeting note" value={meeting.notes} onChange={(event) => setMeeting({ ...meeting, notes: event.target.value })} />
+              <Form.Control as="textarea" rows={3} placeholder="Add agenda, location, or next-step notes" value={meeting.notes} onChange={(event) => setMeeting({ ...meeting, notes: event.target.value })} />
             </Form.Group>
           </Modal.Body>
           <Modal.Footer>
             <Button variant="light" type="button" onClick={() => setMeetingLead(undefined)}>
               Cancel
             </Button>
-            <Button type="submit">Save Meeting</Button>
+            <Button type="submit">Save meeting</Button>
           </Modal.Footer>
         </Form>
       </Modal>
+      <DeleteConfirmModal
+        show={!!deleteTarget}
+        title="Delete lead?"
+        itemName={deleteTarget?.name}
+        confirming={deleting}
+        onCancel={() => setDeleteTarget(undefined)}
+        onConfirm={deleteLead}
+      />
     </>
   )
 }

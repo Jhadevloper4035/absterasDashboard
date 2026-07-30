@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectUploadType, validatePresignRequest } from '../src/services/upload.service.js';
+import { detectUploadType } from '../src/services/upload.service.js';
 
 test('upload type detection rejects mismatched file content', () => {
   const type = detectUploadType({
@@ -24,9 +24,28 @@ test('upload type detection accepts matching PDF magic bytes', () => {
   assert.equal(type.key, 'pdf');
 });
 
-test('presign request rejects unsupported extensions', () => {
-  assert.throws(
-    () => validatePresignRequest({ fileName: 'payload.exe', contentType: 'application/octet-stream', size: 1024 }),
-    /Unsupported file type or size/,
+test('upload type detection accepts Word and Excel documents', () => {
+  const ole = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00]);
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]);
+
+  assert.equal(detectUploadType({ originalname: 'brief.doc', mimetype: 'application/msword', buffer: ole, size: ole.length })?.key, 'doc');
+  assert.equal(
+    detectUploadType({
+      originalname: 'brief.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer: zip,
+      size: zip.length,
+    })?.key,
+    'docx',
+  );
+  assert.equal(detectUploadType({ originalname: 'plan.xls', mimetype: 'application/vnd.ms-excel', buffer: ole, size: ole.length })?.key, 'xls');
+  assert.equal(
+    detectUploadType({
+      originalname: 'plan.xlsx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: zip,
+      size: zip.length,
+    })?.key,
+    'xlsx',
   );
 });

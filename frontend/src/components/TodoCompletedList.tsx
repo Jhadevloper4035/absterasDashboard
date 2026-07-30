@@ -61,7 +61,7 @@ const TodoCompletedList = () => {
         <div className="d-flex align-items-center justify-content-between mb-3">
           <div>
             <h4 className="card-title mb-1">Todo Tasks</h4>
-            <div className="text-muted">{user?.role === 'sales' ? 'Your assigned todos' : 'Team assigned todos'}</div>
+            <div className="text-muted">Your assigned todos</div>
           </div>
           <div className="d-flex gap-2">
             <Badge bg="warning" text="dark">
@@ -122,7 +122,7 @@ const TodoCompletedList = () => {
                       {todo.completedAt && <span className="text-muted fs-13 ms-2">{new Date(todo.completedAt).toLocaleDateString()}</span>}
                     </td>
                     <td className="text-end">
-                      <Link to="/tasks/all">
+                      <Link to="/apps/todo">
                         <Button size="sm" variant="outline-primary">
                           View
                         </Button>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
-import { createTodo, listTodos, updateTodo } from '../src/controllers/todo.controller.js';
+import { createTodo, listTodoAssignees, listTodos, updateTodo } from '../src/controllers/todo.controller.js';
 import { Todo } from '../src/models/todo.model.js';
 import { User } from '../src/models/user.model.js';
 
@@ -52,11 +52,15 @@ test('salespeople only list their assigned todos', async () => {
   assert.deepEqual(query, { assignedTo: 'sales-1' });
 });
 
-test('admin can assign todo to active salesperson', async () => {
+test('admin can assign todo to any active user', async () => {
   const adminId = new mongoose.Types.ObjectId();
-  const salesId = new mongoose.Types.ObjectId();
+  const assigneeId = new mongoose.Types.ObjectId();
   let saved;
-  User.findOne = async () => ({ _id: salesId, role: 'sales', status: 'active' });
+  let userQuery;
+  User.findOne = async (filter) => {
+    userQuery = filter;
+    return { _id: assigneeId, role: 'admin', status: 'active' };
+  };
   const originalSave = Todo.prototype.save;
   const originalPopulate = Todo.prototype.populate;
   Todo.prototype.save = async function save() {
@@ -69,14 +73,15 @@ test('admin can assign todo to active salesperson', async () => {
     await createTodo(
       {
         user: { _id: adminId, role: 'admin' },
-        body: { title: 'Call client', assignedTo: salesId, priority: 'High' },
+        body: { title: 'Call client', assignedTo: assigneeId, priority: 'High' },
       },
       response,
     );
 
     assert.equal(response.statusCode, 201);
+    assert.deepEqual(userQuery, { _id: assigneeId, status: 'active' });
     assert.equal(saved.title, 'Call client');
-    assert.equal(String(saved.assignedTo), String(salesId));
+    assert.equal(String(saved.assignedTo), String(assigneeId));
     assert.equal(String(saved.createdBy), String(adminId));
   } finally {
     Todo.prototype.save = originalSave;
@@ -112,4 +117,11 @@ test('assigned salesperson can mark todo completed', async () => {
   assert.equal(todo.status, 'Completed');
   assert.equal(todo.completedBy, 'sales-1');
   assert.ok(todo.completedAt instanceof Date);
+});
+
+test('only admins can list todo assignees', async () => {
+  const response = res();
+  await listTodoAssignees({ user: { _id: 'sales-1', role: 'sales' } }, response);
+
+  assert.equal(response.statusCode, 403);
 });

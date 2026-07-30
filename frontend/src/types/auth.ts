@@ -2,6 +2,7 @@ export type UserType = {
   _id: string
   email: string
   name: string
+  phone?: string
   role: 'superadmin' | 'admin' | 'sales'
   status: 'active' | 'inactive' | 'invited' | 'suspended'
   timezone?: string
@@ -11,5 +12,7 @@ export type UserType = {
 
 export type AuthSessionType = {
   token: string
+  accessToken?: string
+  accessTokenExpiresAt?: string
   user: UserType
 }

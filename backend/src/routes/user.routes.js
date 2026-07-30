@@ -7,7 +7,7 @@ import {
 } from '../controllers/user.controller.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import {
-  allowFirstSuperadminOrSuperadmin,
+  allowFirstSuperadminOrUserManager,
   authenticate,
   authorizeRoles,
 } from '../middleware/auth.middleware.js';
@@ -15,6 +15,6 @@ import {
 export const userRouter = Router();
 
 userRouter.get('/', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listUsers));
-userRouter.post('/', asyncHandler(allowFirstSuperadminOrSuperadmin), asyncHandler(createUser));
-userRouter.get('/:id', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(getUser));
-userRouter.patch('/:id', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(updateUser));
+userRouter.post('/', asyncHandler(allowFirstSuperadminOrUserManager), asyncHandler(createUser));
+userRouter.get('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(getUser));
+userRouter.patch('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(updateUser));

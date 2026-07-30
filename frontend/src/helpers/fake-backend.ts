@@ -30,7 +30,6 @@ export const fakeUsers = [
 
 export default function configureFakeBackend() {
   mock.onPost('/login').reply(function (config) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     return new Promise(function (resolve, _reject) {
       setTimeout(function () {
         // get parameters from post request

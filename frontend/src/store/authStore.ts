@@ -1,11 +1,12 @@
-import { apiFetch } from '@/helpers/api'
+import { buildApiUrl } from '@/helpers/apiUrl'
 import type { AuthSessionType, UserType } from '@/types/auth'
 import { create } from 'zustand'
-import { createJSONStorage, devtools, persist } from 'zustand/middleware'
+import { devtools } from 'zustand/middleware'
 
 type SetupSuperadminPayload = {
   name: string
   email: string
+  phone: string
   password: string
 }
 
@@ -16,8 +17,10 @@ type AuthStore = {
   error: string | undefined
   setSession: (session: AuthSessionType) => void
   login: (email: string, password: string) => Promise<AuthSessionType>
+  refresh: () => Promise<AuthSessionType>
   setupSuperadmin: (payload: SetupSuperadminPayload) => Promise<AuthSessionType>
-  logout: () => void
+  logout: () => Promise<void>
+  clearSession: () => void
 }
 
 const emptyAuth = {
@@ -27,50 +30,87 @@ const emptyAuth = {
   error: undefined,
 }
 
+let refreshPromise: Promise<AuthSessionType> | undefined
+
 export const useAuthStore = create<AuthStore>()(
   devtools(
-    persist(
-      (set, get) => ({
-        ...emptyAuth,
-        setSession: (session) => set({ user: session.user, token: session.token, error: undefined }, false, 'auth/setSession'),
-        login: async (email, password) => {
-          set({ loading: true, error: undefined }, false, 'auth/login:start')
-          try {
-            const res = await apiFetch<{ data: AuthSessionType }>('/auth/login', {
-              method: 'POST',
-              body: JSON.stringify({ email, password }),
-            })
-            get().setSession(res.data)
-            set({ loading: false }, false, 'auth/login:success')
-            return res.data
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'Login failed'
-            set({ loading: false, error: message }, false, 'auth/login:error')
-            throw e
-          }
-        },
-        setupSuperadmin: async (payload) => {
-          set({ loading: true, error: undefined }, false, 'auth/setup:start')
-          try {
-            await apiFetch('/users', {
-              method: 'POST',
-              body: JSON.stringify({ ...payload, role: 'superadmin' }),
-            })
-            return await get().login(payload.email, payload.password)
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'Setup failed'
-            set({ loading: false, error: message }, false, 'auth/setup:error')
-            throw e
-          }
-        },
-        logout: () => set(emptyAuth, false, 'auth/logout'),
-      }),
-      {
-        name: 'sales-crm-auth',
-        storage: createJSONStorage(() => localStorage),
-        partialize: (state) => ({ user: state.user, token: state.token }),
+    (set, get) => ({
+      ...emptyAuth,
+      loading: true,
+      setSession: (session) => set({ user: session.user, token: session.accessToken || session.token, loading: false, error: undefined }, false, 'auth/setSession'),
+      login: async (email, password) => {
+        set({ loading: true, error: undefined }, false, 'auth/login:start')
+        try {
+          const response = await fetch(buildApiUrl('/auth/login'), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          })
+          const res = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(res.error?.message || 'Login failed')
+          get().setSession(res.data)
+          return res.data
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Login failed'
+          set({ loading: false, error: message }, false, 'auth/login:error')
+          throw e
+        }
       },
-    ),
+      refresh: async () => {
+        if (refreshPromise) return refreshPromise
+        set({ loading: true }, false, 'auth/refresh:start')
+        refreshPromise = (async () => {
+          const response = await fetch(buildApiUrl('/auth/refresh'), {
+            method: 'POST',
+            credentials: 'include',
+          })
+          const res = await response.json().catch(() => ({}))
+
+          if (!response.ok) {
+            get().clearSession()
+            throw new Error(res.error?.message || 'Please sign in again')
+          }
+
+          get().setSession(res.data)
+          return res.data
+        })()
+
+        try {
+          return await refreshPromise
+        } finally {
+          refreshPromise = undefined
+        }
+      },
+      setupSuperadmin: async (payload) => {
+        set({ loading: true, error: undefined }, false, 'auth/setup:start')
+        try {
+          const response = await fetch(buildApiUrl('/users'), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...payload, role: 'superadmin' }),
+          })
+          const res = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(res.error?.message || 'Setup failed')
+          return await get().login(payload.email, payload.password)
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Setup failed'
+          set({ loading: false, error: message }, false, 'auth/setup:error')
+          throw e
+        }
+      },
+      clearSession: () => set(emptyAuth, false, 'auth/clearSession'),
+      logout: async () => {
+        const token = get().token
+        await fetch(buildApiUrl('/auth/logout'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }).catch(() => {})
+        get().clearSession()
+      },
+    }),
     { name: 'AuthStore' },
   ),
 )

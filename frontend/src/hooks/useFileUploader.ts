@@ -22,7 +22,7 @@ export default function useFileUploader(showPreview: boolean = true) {
       setSelectedFiles(allFiles)
     }
 
-    if (callback) callback(allFiles)
+    if (callback) callback(files)
   }
 
   const removeFile = (file: UploadFileType) => {

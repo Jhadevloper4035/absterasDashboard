@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createTodo,
   deleteTodo,
+  listTodoAssignees,
   listTodos,
   updateTodo,
 } from '../controllers/todo.controller.js';
@@ -12,6 +13,7 @@ export const todoRouter = Router();
 
 todoRouter.use(asyncHandler(authenticate), authorizeRoles('superadmin', 'admin', 'sales'));
 todoRouter.get('/', asyncHandler(listTodos));
+todoRouter.get('/assignees', asyncHandler(listTodoAssignees));
 todoRouter.post('/', asyncHandler(createTodo));
 todoRouter.patch('/:id', asyncHandler(updateTodo));
 todoRouter.delete('/:id', asyncHandler(deleteTodo));

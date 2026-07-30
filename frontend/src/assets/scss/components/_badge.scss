@@ -2,6 +2,11 @@
 // _badges.scss
 //
 
+.badge.bg-warning,
+.badge.bg-info {
+    color: #1f2937 !important;
+}
+
 // Soft badge
 @each $color, $value in $theme-colors-rgb {
     .badge-soft-#{$color} {

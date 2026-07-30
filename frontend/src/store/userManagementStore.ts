@@ -7,6 +7,7 @@ import { useAuthStore } from './authStore'
 export type CreateUserPayload = {
   name: string
   email: string
+  phone: string
   password: string
   role: UserType['role']
   status: UserType['status']

@@ -9,6 +9,7 @@ const architectSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
+      required: true,
       trim: true,
     },
     email: {

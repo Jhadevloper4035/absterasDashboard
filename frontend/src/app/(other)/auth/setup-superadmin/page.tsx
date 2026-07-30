@@ -13,6 +13,7 @@ import * as yup from 'yup'
 const setupSchema = yup.object({
   name: yup.string().required('Please enter your name'),
   email: yup.string().email('Please enter a valid email').required('Please enter your email'),
+  phone: yup.string().required('Please enter your mobile number'),
   password: yup.string().min(8, 'Use at least 8 characters').required('Please enter a password'),
 })
 
@@ -23,7 +24,7 @@ const SetupSuperadmin = () => {
   const navigate = useNavigate()
   const { control, handleSubmit } = useForm({
     resolver: yupResolver(setupSchema),
-    defaultValues: { name: '', email: '', password: '' },
+    defaultValues: { name: '', email: '', phone: '', password: '' },
   })
 
   const createSuperadmin = handleSubmit(async (values) => {
@@ -51,6 +52,7 @@ const SetupSuperadmin = () => {
               <form onSubmit={createSuperadmin} className="authentication-form">
                 <TextFormInput control={control} name="name" containerClassName="mb-3" label="Name" placeholder="Enter your name" />
                 <TextFormInput control={control} name="email" containerClassName="mb-3" label="Email" type="email" placeholder="Enter your email" />
+                <TextFormInput control={control} name="phone" containerClassName="mb-3" label="Mobile Number" type="tel" placeholder="10-digit mobile number" />
                 <PasswordFormInput control={control} name="password" containerClassName="mb-3" label="Password" placeholder="Enter a password" />
                 <div className="mb-1 text-center d-grid">
                   <Button variant="primary" type="submit" disabled={loading}>

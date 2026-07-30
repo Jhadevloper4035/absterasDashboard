@@ -8,8 +8,8 @@ const CreateTask = () => (
   <>
     <PageBreadcrumb subName="Task Management" title="Create Task" />
     <PageMetaData title="Create Task" />
-    <Row className="justify-content-center">
-      <Col lg={6} xl={5}>
+    <Row>
+      <Col>
         <TaskCreateCard />
       </Col>
     </Row>

@@ -1,4 +1,4 @@
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash, createHmac } from 'node:crypto';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -62,6 +62,42 @@ const TYPES = [
     matches: isSafeText,
   },
   {
+    key: 'doc',
+    kind: 'document',
+    extensions: ['.doc'],
+    mimes: ['application/msword'],
+    contentType: 'application/msword',
+    outputExtension: 'doc',
+    matches: isOleDocument,
+  },
+  {
+    key: 'docx',
+    kind: 'document',
+    extensions: ['.docx'],
+    mimes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    outputExtension: 'docx',
+    matches: isZipDocument,
+  },
+  {
+    key: 'xls',
+    kind: 'document',
+    extensions: ['.xls'],
+    mimes: ['application/vnd.ms-excel'],
+    contentType: 'application/vnd.ms-excel',
+    outputExtension: 'xls',
+    matches: isOleDocument,
+  },
+  {
+    key: 'xlsx',
+    kind: 'document',
+    extensions: ['.xlsx'],
+    mimes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    outputExtension: 'xlsx',
+    matches: isZipDocument,
+  },
+  {
     key: 'text',
     kind: 'text',
     extensions: ['.txt'],
@@ -88,6 +124,14 @@ function isSafeText(buffer) {
   }
 }
 
+function isOleDocument(buffer) {
+  return buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+}
+
+function isZipDocument(buffer) {
+  return buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+}
+
 function cleanMetadata(value) {
   return String(value || '')
     .replace(/[^\w .@-]/g, '')
@@ -104,6 +148,26 @@ function assertS3Configured() {
   }
 }
 
+function isTrustedUploadKey(key) {
+  return typeof key === 'string' && key.startsWith(`${env.s3.uploadPrefix}/`) && !key.startsWith(`${env.s3.uploadPrefix}/pending/`) && !key.includes('..');
+}
+
+export function createAttachmentToken({ key, checksum }) {
+  return createHmac('sha256', env.authSecret).update(`${key}:${checksum || ''}`).digest('base64url');
+}
+
+export function trustedAttachment(file) {
+  const attachment = {
+    key: file?.key,
+    contentType: file?.contentType,
+    originalName: file?.originalName,
+    size: file?.size,
+    checksum: file?.checksum,
+  };
+
+  return isTrustedUploadKey(attachment.key) && file?.attachmentToken === createAttachmentToken(attachment) ? attachment : null;
+}
+
 export function detectUploadType({ originalname, mimetype, buffer, size = buffer?.length || 0 }) {
   if (!buffer?.length || size > MAX_UPLOAD_BYTES) return null;
 
@@ -115,16 +179,18 @@ export function detectUploadType({ originalname, mimetype, buffer, size = buffer
   return type;
 }
 
-export function validatePresignRequest({ fileName, contentType, size }) {
-  const extension = path.extname(fileName || '').toLowerCase();
-  const type = TYPES.find((item) => item.extensions.includes(extension) && item.mimes.includes(String(contentType || '').toLowerCase()));
-  const bytes = Number(size);
+export async function signAttachmentUrls(attachments = []) {
+  return Promise.all(
+    attachments.map(async ({ url, attachmentToken, ...file }) => {
+      const safeFile = { ...file, attachmentToken: createAttachmentToken(file) };
+      if (!env.s3.bucket || !isTrustedUploadKey(file.key)) return safeFile;
 
-  if (!type || !Number.isFinite(bytes) || bytes <= 0 || bytes > MAX_UPLOAD_BYTES) {
-    throw uploadError(400, 'Unsupported file type or size');
-  }
-
-  return type;
+      return {
+        ...safeFile,
+        url: await getSignedUrl(s3Client, new GetObjectCommand({ Bucket: env.s3.bucket, Key: file.key }), { expiresIn: 900 }),
+      };
+    }),
+  );
 }
 
 async function compressIfImage(file, type) {
@@ -191,39 +257,8 @@ export async function uploadMultipartFiles(files, user) {
         size: body.length,
         compressed: body.length < file.size,
         checksum,
+        attachmentToken: createAttachmentToken({ key, checksum }),
       };
     }),
   );
-}
-
-export async function createPresignedUpload(body, user) {
-  assertS3Configured();
-
-  const type = validatePresignRequest(body);
-  const key = `${env.s3.uploadPrefix}/pending/${String(user._id)}/${randomUUID()}.${type.outputExtension}`;
-  const command = new PutObjectCommand({
-    Bucket: env.s3.bucket,
-    Key: key,
-    ContentType: type.contentType,
-    Metadata: {
-      originalName: cleanMetadata(body.fileName),
-      uploadedBy: String(user._id),
-      validation: 'pending',
-    },
-    ServerSideEncryption: 'AES256',
-  });
-
-  const url = await getSignedUrl(s3Client, command, {
-    expiresIn: 300,
-    signableHeaders: new Set(['content-type']),
-  });
-
-  return {
-    key,
-    url,
-    method: 'PUT',
-    expiresIn: 300,
-    headers: { 'content-type': type.contentType },
-    note: 'Presigned uploads are stored under pending/ and must be validated before use.',
-  };
 }

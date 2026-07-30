@@ -33,7 +33,7 @@ const useSignIn = () => {
 
   const redirectUser = (role?: string) => {
     const redirectLink = searchParams.get('redirectTo')
-    if (redirectLink) navigate(redirectLink)
+    if (redirectLink?.startsWith('/') && !redirectLink.startsWith('//') && !redirectLink.startsWith('/auth/')) navigate(redirectLink)
     else navigate(dashboardPath(role))
   }
 

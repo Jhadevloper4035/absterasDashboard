@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import { connectDatabase } from './config/db.js';
 import { Architect } from './models/architect.model.js';
 import { Lead } from './models/lead.model.js';
+import { Task } from './models/task.model.js';
+import { User } from './models/user.model.js';
 
 const demoLeads = [
   ['Urban Nest Interiors', 'manual', 'Website enquiry', 'urban@example.com', '+971501110001', 'PVC HPL'],
@@ -46,6 +48,31 @@ const demoArchitects = [
   notes: 'Dummy architect profile',
 }));
 
+const demoTasks = [
+  ['Call new website leads', 'Contact all new web enquiries and record the first response.', 'To Do', 'High', 'Lead Intake'],
+  ['Review duplicate lead queue', 'Check uncertain phone/email matches before assignment.', 'In Progress', 'Critical', 'Data Quality'],
+  ['Prepare WhatsApp reminder template', 'Draft salesperson meeting reminder copy for approval.', 'Review', 'High', 'Notifications'],
+  ['Update meeting MOM checklist', 'Confirm required fields for meeting outcome capture.', 'To Do', 'Medium', 'Meetings'],
+  ['Reassign stale leads', 'Move overdue uncontacted leads to the manager exception queue.', 'Blocked', 'High', 'Assignment'],
+  ['Audit pending follow-ups', 'Find follow-ups due today and mark missed items for escalation.', 'Testing', 'Medium', 'Follow Ups'],
+  ['Create pipeline export sample', 'Generate a manager-friendly pipeline CSV sample.', 'Backlog', 'Low', 'Reports'],
+  ['Verify upload attachment rules', 'Test PDF, image, spreadsheet, and rejected file uploads.', 'In Progress', 'Medium', 'Files'],
+  ['Document lost reason options', 'List approved lost/on-hold reasons for configuration.', 'To Do', 'Low', 'Configuration'],
+  ['Close won demo lead', 'Convert one qualified lead into a customer/deal test record.', 'Done', 'High', 'Conversion'],
+].map(([title, description, status, priority, projectEpic], index) => ({
+  title,
+  description,
+  acceptanceCriteria: 'You can see this task in the list with owner, status, priority, and due date.',
+  status,
+  priority,
+  projectEpic,
+  labels: ['demo', projectEpic.toLowerCase().replaceAll(' ', '-')],
+  dueDate: new Date(Date.UTC(2026, 7, index + 1)),
+  estimate: index % 3 === 0 ? '1 day' : '2 days',
+  definitionOfDone: 'This task appears correctly in the CRM task list.',
+  completedAt: status === 'Done' ? new Date(Date.UTC(2026, 6, 29)) : undefined,
+}));
+
 async function seed() {
   await connectDatabase();
 
@@ -61,8 +88,29 @@ async function seed() {
     }
   }
 
+  const creator = await User.findOne({ status: 'active', role: { $in: ['admin', 'superadmin'] } }).sort({ role: 1, createdAt: 1 });
+  const assignees = await User.find({ status: 'active', role: { $ne: 'superadmin' } }).sort({ createdAt: 1 });
+  let taskCount = 0;
+
+  if (creator && assignees.length) {
+    for (const [index, task] of demoTasks.entries()) {
+      if (!(await Task.exists({ title: task.title }))) {
+        await Task.create({
+          ...task,
+          assignee: assignees[index % assignees.length]._id,
+          createdBy: creator._id,
+          completedBy: task.status === 'Done' ? assignees[index % assignees.length]._id : undefined,
+        });
+        taskCount += 1;
+      }
+    }
+  } else {
+    console.log('Skipped demo tasks; create one active admin/superadmin and one active non-superadmin user first');
+  }
+
   console.log(`Seeded ${demoLeads.length} demo leads`);
   console.log(`Seeded ${demoArchitects.length} demo architects`);
+  console.log(`Seeded ${taskCount} demo tasks`);
 }
 
 seed()

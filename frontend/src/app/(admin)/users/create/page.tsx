@@ -12,6 +12,7 @@ const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 const emptyForm: CreateUserPayload = {
   name: '',
   email: '',
+  phone: '',
   password: '',
   role: 'sales',
   status: 'active',
@@ -29,12 +30,16 @@ const CreateUserPage = () => {
   const [form, setForm] = useState(emptyForm)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const createRoles = useMemo(() => roles.filter((role) => role === 'sales' || !users.some((item) => item.role === role)), [users])
+  const canManageUsers = user?.role === 'superadmin' || user?.role === 'admin'
+  const createRoles = useMemo(
+    () => (user?.role === 'admin' ? ['sales'] : roles.filter((role) => role === 'sales' || !users.some((item) => item.role === role))),
+    [users, user?.role],
+  )
 
   useEffect(() => {
-    if (user?.role === 'superadmin') fetchUsers().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
+    if (canManageUsers) fetchUsers().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
     else clearUsers()
-  }, [clearUsers, fetchUsers, user?.role])
+  }, [canManageUsers, clearUsers, fetchUsers])
 
   useEffect(() => {
     if (!createRoles.includes(form.role)) setForm((value) => ({ ...value, role: 'sales' }))
@@ -54,11 +59,11 @@ const CreateUserPage = () => {
     }
   }
 
-  if (user?.role !== 'superadmin') {
+  if (!canManageUsers) {
     return (
       <>
         <PageMetaData title="Create User" />
-        <Alert variant="warning">Only superadmin can manage users.</Alert>
+        <Alert variant="warning">Only administrators can manage users.</Alert>
       </>
     )
   }
@@ -79,6 +84,10 @@ const CreateUserPage = () => {
             <Form.Group className="mb-3">
               <Form.Label>Email</Form.Label>
               <Form.Control required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Mobile Number</Form.Label>
+              <Form.Control required type="tel" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="10-digit mobile number" />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Password</Form.Label>

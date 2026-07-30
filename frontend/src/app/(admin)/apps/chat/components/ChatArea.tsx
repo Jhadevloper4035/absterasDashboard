@@ -490,7 +490,6 @@ const ChatArea = ({ selectedUser }: { selectedUser: SocialUserType }) => {
                       <IconifyIcon icon="bx:smile" className="fs-18" />
                     </DropdownToggle>
                     <DropdownMenu className="p-0 rounded-4">
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       <EmojiPicker onEmojiClick={(emojiObject) => console.info(emojiObject.emoji)} autoFocusSearch={false} />{' '}
                     </DropdownMenu>
                   </Dropdown>

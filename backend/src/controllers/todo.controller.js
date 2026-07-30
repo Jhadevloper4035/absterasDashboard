@@ -41,6 +41,15 @@ export async function listTodos(req, res) {
   res.json({ data: todos });
 }
 
+export async function listTodoAssignees(req, res) {
+  if (!canManageTodos(req.user)) {
+    return res.status(403).json({ error: { message: 'Forbidden' } });
+  }
+
+  const users = await User.find({ status: 'active' }).select('name email role status').sort({ name: 1 }).limit(100);
+  res.json({ data: users });
+}
+
 export async function createTodo(req, res) {
   const assignedTo = canManageTodos(req.user) ? req.body.assignedTo : req.user._id;
 
@@ -48,9 +57,9 @@ export async function createTodo(req, res) {
     return res.status(400).json({ error: { message: 'Task title is required' } });
   }
 
-  const assignee = await User.findOne({ _id: assignedTo, role: 'sales', status: 'active' });
+  const assignee = await User.findOne({ _id: assignedTo, status: 'active' });
   if (!assignee) {
-    return res.status(400).json({ error: { message: 'Assign task to an active salesperson' } });
+    return res.status(400).json({ error: { message: 'Assign task to an active user' } });
   }
 
   const todo = new Todo({
@@ -83,9 +92,9 @@ export async function updateTodo(req, res) {
       return res.status(403).json({ error: { message: 'Forbidden' } });
     }
 
-    const assignee = await User.findOne({ _id: req.body.assignedTo, role: 'sales', status: 'active' });
+    const assignee = await User.findOne({ _id: req.body.assignedTo, status: 'active' });
     if (!assignee) {
-      return res.status(400).json({ error: { message: 'Assign task to an active salesperson' } });
+      return res.status(400).json({ error: { message: 'Assign task to an active user' } });
     }
     todo.assignedTo = assignee._id;
   }

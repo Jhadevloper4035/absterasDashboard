@@ -1,7 +1,9 @@
 import { Lead, LEAD_STATUSES } from '../models/lead.model.js';
 import { User } from '../models/user.model.js';
+import { notifyUsers } from '../services/notification.service.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
+const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'territory'];
 
 function canManageLeads(user) {
   return ADMIN_ROLES.includes(user.role);
@@ -23,6 +25,15 @@ function withCurrentMeeting(lead) {
   return data;
 }
 
+function applyLeadPatch(lead, patch) {
+  for (const field of LEAD_UPDATE_FIELDS) {
+    if (patch[field] !== undefined) lead[field] = patch[field];
+  }
+
+  if (patch.email !== undefined) lead.normalizedEmail = undefined;
+  if (patch.phone !== undefined) lead.normalizedPhone = undefined;
+}
+
 export async function createLead(req, res) {
   const {
     owner,
@@ -33,6 +44,10 @@ export async function createLead(req, res) {
     statusHistory,
     ...payload
   } = req.body;
+
+  if (!String(payload.phone || '').trim()) {
+    return res.status(400).json({ error: { message: 'Mobile number is required' } });
+  }
 
   const lead = await Lead.create({
     ...payload,
@@ -47,6 +62,7 @@ export async function listLeads(req, res) {
   const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 50);
   const query = leadQueryFor(req.user);
   if (LEAD_STATUSES.includes(req.query.status)) query.status = req.query.status;
+  if (req.query.assignmentException === 'true') query.assignmentException = true;
   if (req.query.hasMeeting === 'true') query['meetingHistory.startsAt'] = { $exists: true };
   if (req.query.upcomingMeeting === 'true') query['meetingHistory.startsAt'] = { $gte: new Date() };
   const [leads, total] = await Promise.all([
@@ -80,9 +96,14 @@ export async function getLead(req, res) {
 export async function updateLead(req, res) {
   const { owner, ...patch } = req.body;
   const lead = await Lead.findOne(leadQueryFor(req.user, { _id: req.params.id }));
+  const notifications = [];
 
   if (!lead) {
     return res.status(404).json({ error: { message: 'Lead not found' } });
+  }
+
+  if (patch.phone !== undefined && !String(patch.phone).trim()) {
+    return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
 
   if (owner !== undefined) {
@@ -114,12 +135,24 @@ export async function updateLead(req, res) {
 
     lead.owner = newOwner._id;
     lead.status = 'ASSIGNED';
+    notifications.push({
+      users: [newOwner._id],
+      title: 'Lead assigned',
+      body: lead.name,
+      type: 'lead.assigned',
+    });
   }
 
   if (patch.noteText) {
     lead.notes.push({
       text: patch.noteText,
       createdBy: req.user._id,
+    });
+    notifications.push({
+      users: [lead.owner],
+      title: 'Lead note added',
+      body: lead.name,
+      type: 'lead.note',
     });
   }
 
@@ -155,6 +188,12 @@ export async function updateLead(req, res) {
       });
       lead.status = 'MEETING_SCHEDULED';
     }
+    notifications.push({
+      users: [lead.owner],
+      title: 'Meeting scheduled',
+      body: `${lead.name}: ${meeting.title}`,
+      type: 'lead.meeting',
+    });
   }
 
   if (patch.cancelMeeting) {
@@ -180,16 +219,15 @@ export async function updateLead(req, res) {
       actor: req.user._id,
     });
     lead.status = 'CONTACTED';
+    notifications.push({
+      users: [lead.owner],
+      title: 'Meeting cancelled',
+      body: lead.name,
+      type: 'lead.meeting.cancelled',
+    });
   }
 
-  delete patch.noteText;
-  delete patch.nextMeeting;
-  delete patch.cancelMeeting;
-  delete patch.cancelMeetingNote;
-  delete patch.assignmentReason;
-  delete patch.assignmentHistory;
-  delete patch.assignmentException;
-  Object.assign(lead, patch);
+  applyLeadPatch(lead, patch);
 
   await lead.save();
   await lead.populate([
@@ -200,5 +238,26 @@ export async function updateLead(req, res) {
     { path: 'assignmentHistory.newOwner', select: 'name email role status' },
   ]);
 
+  for (const notification of notifications) {
+    await notifyUsers(notification.users.filter((id) => String(id || '') !== String(req.user._id)), {
+      title: notification.title,
+      body: notification.body,
+      metadata: { type: notification.type, leadId: lead._id },
+    });
+  }
+
   return res.json({ data: withCurrentMeeting(lead) });
+}
+
+export async function deleteLead(req, res) {
+  if (!canManageLeads(req.user)) {
+    return forbidden(res);
+  }
+
+  const lead = await Lead.findOneAndDelete({ _id: req.params.id });
+  if (!lead) {
+    return res.status(404).json({ error: { message: 'Lead not found' } });
+  }
+
+  return res.json({ data: { id: req.params.id } });
 }

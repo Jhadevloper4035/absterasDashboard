@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 import { DEFAULT_PAGE_TITLE } from '@/context/constants'
+import NotificationToasts from '@/components/NotificationToasts'
 import { AuthProvider } from '@/context/useAuthContext'
 import { LayoutProvider } from '@/context/useLayoutContext'
 import { NotificationProvider } from '@/context/useNotificationContext'
@@ -28,6 +30,7 @@ const AppProvidersWrapper = ({ children }: ChildrenType) => {
       <LayoutProvider>
         <NotificationProvider>
           {children}
+          <NotificationToasts />
           <ToastContainer theme="colored" />
         </NotificationProvider>
       </LayoutProvider>

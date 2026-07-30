@@ -1,30 +1,33 @@
-export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:4000/api').replace(/\/+$/, '')
-
-export const buildApiUrl = (path: string) => {
-  const apiPath = path.startsWith('/') ? path : `/${path}`
-  if (apiBaseUrl.endsWith('/api') && apiPath.startsWith('/api/')) return `${apiBaseUrl}${apiPath.slice(4)}`
-  return `${apiBaseUrl}${apiPath}`
-}
+import { useAuthStore } from '@/store/authStore'
+import { buildApiUrl } from './apiUrl'
 
 type ApiFetchOptions = RequestInit & {
   token?: string
+  skipRefresh?: boolean
 }
 
-export async function apiFetch<T>(path: string, { token, headers, ...options }: ApiFetchOptions = {}) {
+export async function apiFetch<T>(path: string, { token, headers, skipRefresh, ...options }: ApiFetchOptions = {}) {
   const requestHeaders = new Headers(headers)
+  const authToken = token || useAuthStore.getState().token
 
-  if (token) requestHeaders.set('Authorization', `Bearer ${token}`)
+  if (authToken) requestHeaders.set('Authorization', `Bearer ${authToken}`)
   if (options.body && !(typeof FormData !== 'undefined' && options.body instanceof FormData) && !requestHeaders.has('Content-Type')) {
     requestHeaders.set('Content-Type', 'application/json')
   }
 
   const response = await fetch(buildApiUrl(path), {
     ...options,
+    credentials: 'include',
     headers: requestHeaders,
   })
   const body = await response.json().catch(() => ({}))
 
   if (!response.ok) {
+    if (response.status === 401 && !skipRefresh) {
+      const session = await useAuthStore.getState().refresh()
+      return apiFetch<T>(path, { token: session.token, headers, skipRefresh: true, ...options })
+    }
+
     throw new Error(body.error?.message || body.message || body.error || 'Request failed')
   }
 

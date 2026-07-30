@@ -8,7 +8,7 @@ test('lead requires a name and source', async () => {
 });
 
 test('lead defaults to NEW status', () => {
-  const lead = new Lead({ name: 'Acme', source: 'manual' });
+  const lead = new Lead({ name: 'Acme', source: 'manual', phone: '9876543210' });
 
   assert.equal(lead.status, 'NEW');
   assert.equal(lead.sourceType, 'manual');
@@ -32,6 +32,7 @@ test('lead notes support paragraph text and images', async () => {
   const lead = new Lead({
     name: 'Acme',
     source: 'manual',
+    phone: '9876543210',
     notes: [
       {
         text: 'Customer wants a detailed proposal with multiple paragraphs.\nFollow up next week.',
@@ -75,7 +76,7 @@ test('lead stores assignment, status history, and next action context', async ()
 });
 
 test('active lead without owner goes to assignment exception queue', async () => {
-  const lead = new Lead({ name: 'Acme', source: 'api', status: 'NEW' });
+  const lead = new Lead({ name: 'Acme', source: 'api', phone: '9876543210', status: 'NEW' });
 
   await lead.validate();
 
@@ -86,6 +87,7 @@ test('assigned lead leaves assignment exception queue', async () => {
   const lead = new Lead({
     name: 'Acme',
     source: 'api',
+    phone: '9876543210',
     owner: new mongoose.Types.ObjectId(),
     assignmentException: true,
     status: 'ASSIGNED',
@@ -98,12 +100,12 @@ test('assigned lead leaves assignment exception queue', async () => {
 
 test('lost and on-hold leads require reasons', async () => {
   await assert.rejects(
-    () => new Lead({ name: 'Acme', source: 'manual', status: 'LOST' }).validate(),
+    () => new Lead({ name: 'Acme', source: 'manual', phone: '9876543210', status: 'LOST' }).validate(),
     /LOST requires a reason/,
   );
 
   await assert.rejects(
-    () => new Lead({ name: 'Acme', source: 'manual', status: 'ON_HOLD' }).validate(),
+    () => new Lead({ name: 'Acme', source: 'manual', phone: '9876543210', status: 'ON_HOLD' }).validate(),
     /ON_HOLD requires a reason/,
   );
 });

@@ -1,20 +1,23 @@
 import { lazy } from 'react'
 import { Navigate, type RouteProps } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
+import type { UserType } from '@/types/auth'
 
 // Dashboard Routes
 const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'))
-const Finance = lazy(() => import('@/app/(admin)/dashboard/finance/page'))
 const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'))
 const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
 const Leads = lazy(() => import('@/app/(admin)/leads/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
+const PendingLeads = lazy(() => import('@/app/(admin)/leads/pending/page'))
 const ArchitectLeads = lazy(() => import('@/app/(admin)/leads/architect/page'))
 const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
 const WonLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
 const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
 const CreateTask = lazy(() => import('@/app/(admin)/tasks/create/page'))
+const TaskDetail = lazy(() => import('@/app/(admin)/tasks/[taskId]/page'))
+const UpdateTask = lazy(() => import('@/app/(admin)/tasks/[taskId]/edit/page'))
 
 // Apps Routes
 const EcommerceProducts = lazy(() => import('@/app/(admin)/ecommerce/products/page'))
@@ -34,6 +37,7 @@ const Social = lazy(() => import('@/app/(admin)/apps/social/page'))
 const Contacts = lazy(() => import('@/app/(admin)/apps/contacts/page'))
 const Invoices = lazy(() => import('@/app/(admin)/invoices/page'))
 const InvoiceDetails = lazy(() => import('@/app/(admin)/invoices/[invoiceId]/page'))
+const Todo = lazy(() => import('@/app/(admin)/apps/todo/page'))
 
 // Pages Routes
 const Welcome = lazy(() => import('@/app/(admin)/pages/welcome/page'))
@@ -146,8 +150,13 @@ export type RoutesProps = {
   path: RouteProps['path']
   name: string
   element: RouteProps['element']
+  roles?: UserType['role'][]
   exact?: boolean
 }
+
+const adminRoles: UserType['role'][] = ['superadmin', 'admin']
+const superadminRoles: UserType['role'][] = ['superadmin']
+const superadminOnly = (routes: RoutesProps[]) => routes.map((route) => ({ ...route, roles: route.roles ?? superadminRoles }))
 
 const initialRoutes: RoutesProps[] = [
   {
@@ -165,28 +174,33 @@ const initialRoutes: RoutesProps[] = [
 const generalRoutes: RoutesProps[] = [
   {
     path: '/dashboard/analytics',
-    name: 'Analytics',
+    name: 'Admin Dashboard',
     element: <Analytics />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/dashboard/finance',
     name: 'Finance',
-    element: <Finance />,
+    element: <Navigate to="/dashboard/analytics" replace />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/dashboard/sales',
     name: 'Sales',
     element: <Sales />,
+    roles: ['sales'],
   },
   {
     path: '/users',
     name: 'Users',
     element: <Users />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/users/create',
     name: 'Create User',
     element: <CreateUser />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/leads',
@@ -197,11 +211,19 @@ const generalRoutes: RoutesProps[] = [
     path: '/leads/create',
     name: 'Create Lead',
     element: <CreateLead />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/leads/pending',
+    name: 'Pending Lead Assignment',
+    element: <PendingLeads />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/leads/architect',
     name: 'Architect Leads',
     element: <ArchitectLeads />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/leads/scheduled',
@@ -218,6 +240,48 @@ const generalRoutes: RoutesProps[] = [
     name: 'Lead Detail',
     element: <LeadDetail />,
   },
+  {
+    path: '/upcoming/events-management',
+    name: 'Events Management',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/upcoming/hr-management',
+    name: 'HR Management',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/upcoming/seo-website',
+    name: 'SEO Website',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/upcoming/challan-management',
+    name: 'Challan Management',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/upcoming/sales-bill',
+    name: 'Sales Bill',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/upcoming/purchase-bill',
+    name: 'Purchase Bill',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/upcoming/client-management',
+    name: 'Client Management',
+    element: <ComingSoon />,
+    roles: ['superadmin', 'admin'],
+  },
 ]
 
 const appsRoutes: RoutesProps[] = [
@@ -225,106 +289,138 @@ const appsRoutes: RoutesProps[] = [
     name: 'Products',
     path: '/ecommerce/products',
     element: <EcommerceProducts />,
+    roles: adminRoles,
   },
   {
     name: 'Product Details',
     path: '/ecommerce/products/:productId',
     element: <EcommerceProductDetails />,
+    roles: adminRoles,
   },
   {
     name: 'Create Product',
     path: '/ecommerce/products/create',
     element: <EcommerceProductCreate />,
+    roles: adminRoles,
   },
   {
     name: 'Customers',
     path: '/ecommerce/customers',
     element: <EcommerceCustomers />,
+    roles: adminRoles,
   },
   {
     name: 'Sellers',
     path: '/ecommerce/sellers',
     element: <EcommerceSellers />,
+    roles: adminRoles,
   },
   {
     name: 'Orders',
     path: '/ecommerce/orders',
     element: <EcommerceOrders />,
+    roles: adminRoles,
   },
   {
     name: 'Order Details',
     path: '/ecommerce/orders/:orderId',
     element: <EcommerceOrderDetails />,
+    roles: adminRoles,
   },
   {
     name: 'Inventory',
     path: '/ecommerce/inventory',
     element: <EcommerceInventory />,
+    roles: adminRoles,
   },
   {
     name: 'Chat',
     path: '/apps/chat',
     element: <Chat />,
+    roles: adminRoles,
   },
   {
     name: 'Email',
     path: '/apps/email',
     element: <Email />,
+    roles: adminRoles,
   },
   {
     name: 'Todo Management',
     path: '/calendar/schedule',
     element: <Schedule />,
+    roles: adminRoles,
   },
   {
     name: 'Create Task',
     path: '/tasks/create',
     element: <CreateTask />,
+    roles: ['superadmin', 'admin'],
   },
   {
     name: 'All Tasks',
     path: '/tasks/all',
     element: <Schedule />,
+    roles: ['superadmin', 'admin'],
   },
   {
     name: 'Pending Tasks',
     path: '/tasks/pending',
     element: <Schedule />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    name: 'Task Detail',
+    path: '/tasks/:taskId',
+    element: <TaskDetail />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    name: 'Update Task',
+    path: '/tasks/:taskId/edit',
+    element: <UpdateTask />,
+    roles: ['superadmin', 'admin'],
   },
   {
     name: 'Integration',
     path: '/calendar/integration',
     element: <Integration />,
+    roles: adminRoles,
   },
   {
     name: 'Help',
     path: '/calendar/help',
     element: <Help />,
+    roles: adminRoles,
   },
   {
     name: 'Todo',
     path: '/apps/todo',
-    element: <Navigate to="/tasks/all" replace />,
+    element: <Todo />,
   },
   {
     name: 'Social',
     path: '/apps/social',
     element: <Social />,
+    roles: adminRoles,
   },
   {
     name: 'Contacts',
     path: '/apps/contacts',
     element: <Contacts />,
+    roles: adminRoles,
   },
   {
     name: 'Invoices List',
     path: '/invoices',
     element: <Invoices />,
+    roles: adminRoles,
   },
   {
     name: 'Invoices Details',
     path: '/invoices/:invoiceId',
     element: <InvoiceDetails />,
+    roles: adminRoles,
   },
 ]
 
@@ -766,12 +862,11 @@ export const appRoutes = [
   ...initialRoutes,
   ...generalRoutes,
   ...appsRoutes,
-  ...customRoutes,
-  ...baseUIRoutes,
-  ...advancedUIRoutes,
-  ...chartsNMapsRoutes,
-  ...formsRoutes,
-  ...tableRoutes,
-  ...iconRoutes,
-  ...authRoutes,
+  ...superadminOnly(customRoutes),
+  ...superadminOnly(baseUIRoutes),
+  ...superadminOnly(advancedUIRoutes),
+  ...superadminOnly(chartsNMapsRoutes),
+  ...superadminOnly(formsRoutes),
+  ...superadminOnly(tableRoutes),
+  ...superadminOnly(iconRoutes),
 ]

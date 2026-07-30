@@ -1,4 +1,5 @@
 import { User } from '../models/user.model.js';
+import { isAccessTokenBlocked } from '../services/auth-session.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
 
 function authError(statusCode, message) {
@@ -12,7 +13,7 @@ export async function authenticate(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   const claims = token ? verifyAccessToken(token) : null;
 
-  if (!claims) {
+  if (!claims || await isAccessTokenBlocked(claims)) {
     return next(authError(401, 'Authentication required'));
   }
 
@@ -36,11 +37,11 @@ export function authorizeRoles(...roles) {
   };
 }
 
-export async function allowFirstSuperadminOrSuperadmin(req, res, next) {
+export async function allowFirstSuperadminOrUserManager(req, res, next) {
   if (await User.exists()) {
     return authenticate(req, res, (error) => {
       if (error) return next(error);
-      return authorizeRoles('superadmin')(req, res, next);
+      return authorizeRoles('superadmin', 'admin')(req, res, next);
     });
   }
 

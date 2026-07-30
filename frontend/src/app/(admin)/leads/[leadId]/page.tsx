@@ -1,4 +1,5 @@
 import PageMetaData from '@/components/PageTitle'
+import DeleteConfirmModal from '@/components/DeleteConfirmModal'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
 import { useAuthStore } from '@/store/authStore'
@@ -6,7 +7,8 @@ import type { UserType } from '@/types/auth'
 import type { LeadOwner, LeadType } from '@/types/lead'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'react-toastify'
 
 const personName = (person?: string | LeadOwner) => (typeof person === 'object' ? person.name : '')
 const personRole = (person?: string | LeadOwner) => (typeof person === 'object' ? person.role : '')
@@ -15,12 +17,15 @@ const roleBadge = (role?: string) => (role === 'sales' ? 'info' : role === 'admi
 
 const LeadDetailPage = () => {
   const { leadId } = useParams()
+  const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const [lead, setLead] = useState<LeadType>()
   const [users, setUsers] = useState<UserType[]>([])
   const [noteText, setNoteText] = useState('')
   const [meetingForm, setMeetingForm] = useState({ title: '', startsAt: '', notes: '' })
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
@@ -68,8 +73,11 @@ const LeadDetailPage = () => {
       })
       setLead(res.data)
       setMessage('Lead updated')
+      toast.success('Lead updated')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to update lead')
+      const message = e instanceof Error ? e.message : 'Unable to update lead'
+      setError(message)
+      toast.error(message)
     }
   }
 
@@ -88,6 +96,23 @@ const LeadDetailPage = () => {
 
   const cancelMeeting = async () => {
     await updateLead({ cancelMeeting: true, cancelMeetingNote: meetingForm.notes })
+  }
+
+  const deleteLead = async () => {
+    if (!token || !leadId || !lead || !canAssign) return
+
+    setDeleting(true)
+    try {
+      await apiFetch(`/leads/${leadId}`, { method: 'DELETE', token })
+      toast.success('Lead deleted')
+      navigate('/leads')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to delete lead'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   if (!lead) {
@@ -110,6 +135,11 @@ const LeadDetailPage = () => {
           <IconifyIcon icon="bx:left-arrow-alt" className="me-1" />
           Back
         </Link>
+        {canAssign && (
+          <Button type="button" size="sm" variant="outline-danger" className="ms-2" onClick={() => setDeleteOpen(true)}>
+            Delete lead
+          </Button>
+        )}
       </div>
       {error && <Alert variant="danger">{error}</Alert>}
       {message && <Alert variant="success">{message}</Alert>}
@@ -140,11 +170,11 @@ const LeadDetailPage = () => {
                   <div className="fw-medium">{lead.source}</div>
                 </Col>
                 <Col md={6}>
-                  <div className="text-muted fs-13">Product Enquire</div>
+                  <div className="text-muted fs-13">Product enquiry</div>
                   <div className="fw-medium">{lead.productInterest || '-'}</div>
                 </Col>
                 <Col md={6}>
-                  <div className="text-muted fs-13">Assigned Salesperson</div>
+                  <div className="text-muted fs-13">Assigned salesperson</div>
                   <div className="fw-medium">{personName(lead.owner) || 'Unassigned'}</div>
                 </Col>
                 <Col md={6}>
@@ -158,9 +188,9 @@ const LeadDetailPage = () => {
             <CardBody>
               <h4 className="card-title mb-3">Notes</h4>
               <Form onSubmit={addNote} className="mb-3">
-                <Form.Control as="textarea" rows={3} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Share an update with admin and sales..." />
+                <Form.Control as="textarea" rows={3} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Add a call note, customer update, or next action" />
                 <Button type="submit" className="mt-2">
-                  Add Note
+                  Add note
                 </Button>
               </Form>
               <ul className="list-unstyled left-timeline mb-0">
@@ -205,27 +235,27 @@ const LeadDetailPage = () => {
           </Card>
           <Card>
             <CardBody>
-              <h4 className="card-title mb-3">Meeting Schedule</h4>
+              <h4 className="card-title mb-3">Meeting schedule</h4>
               <Form onSubmit={saveMeeting} className="mb-3">
                 <Form.Group className="mb-2">
-                  <Form.Label>Meeting Title</Form.Label>
+                  <Form.Label>Meeting title</Form.Label>
                   <Form.Control value={meetingForm.title} onChange={(event) => setMeetingForm({ ...meetingForm, title: event.target.value })} />
                 </Form.Group>
                 <Form.Group className="mb-2">
-                  <Form.Label>Date & Time</Form.Label>
+                  <Form.Label>Date and time</Form.Label>
                   <Form.Control type="datetime-local" required value={meetingForm.startsAt} onChange={(event) => setMeetingForm({ ...meetingForm, startsAt: event.target.value })} />
                 </Form.Group>
                 <Form.Group className="mb-2">
-                  <Form.Label>Note</Form.Label>
+                  <Form.Label>Meeting notes</Form.Label>
                   <Form.Control as="textarea" rows={2} value={meetingForm.notes} onChange={(event) => setMeetingForm({ ...meetingForm, notes: event.target.value })} />
                 </Form.Group>
                 <div className="d-flex gap-2">
                   <Button type="submit" size="sm">
-                    {lead.nextMeeting?.startsAt ? 'Update Meeting' : 'Schedule Meeting'}
+                    {lead.nextMeeting?.startsAt ? 'Update meeting' : 'Schedule meeting'}
                   </Button>
                   {lead.nextMeeting?.startsAt && (
                     <Button type="button" size="sm" variant="outline-danger" onClick={cancelMeeting}>
-                      Cancel Meeting
+                      Cancel meeting
                     </Button>
                   )}
                 </div>
@@ -237,16 +267,16 @@ const LeadDetailPage = () => {
                     <div className="fw-medium">{lead.nextMeeting.title || 'Next meeting'}</div>
                   </div>
                   <div className="mb-3">
-                    <div className="text-muted fs-13">Date & Time</div>
+                    <div className="text-muted fs-13">Date and time</div>
                     <div className="fw-medium">{new Date(lead.nextMeeting.startsAt).toLocaleString()}</div>
                   </div>
                   <div className="mb-3">
-                    <div className="text-muted fs-13">Note</div>
+                    <div className="text-muted fs-13">Meeting notes</div>
                     <div className="fw-medium">{lead.nextMeeting.notes || '-'}</div>
                   </div>
                 </>
               ) : (
-                <div className="text-muted">{lead.status === 'MEETING_SCHEDULED' ? 'Meeting status is scheduled, but date/time and note were not saved. Schedule it again to store details.' : 'No meeting scheduled'}</div>
+                <div className="text-muted">{lead.status === 'MEETING_SCHEDULED' ? 'This lead is marked as meeting scheduled, but no meeting details were saved. Schedule the meeting again to store the date, time, and notes.' : 'No meeting scheduled'}</div>
               )}
               <div className="border-top pt-3 mt-3">
                 <div className="text-muted fs-13 mb-2">History</div>
@@ -269,7 +299,7 @@ const LeadDetailPage = () => {
           </Card>
           <Card>
             <CardBody>
-              <h4 className="card-title mb-3">Assignment History</h4>
+              <h4 className="card-title mb-3">Assignment history</h4>
               {(lead.assignmentHistory || []).map((item, index) => (
                 <div key={`${item.assignedAt}-${index}`} className="border-top py-3">
                   <div className="fw-medium">{personName(item.newOwner) || 'Unassigned'}</div>
@@ -282,6 +312,14 @@ const LeadDetailPage = () => {
           </Card>
         </Col>
       </Row>
+      <DeleteConfirmModal
+        show={deleteOpen}
+        title="Delete lead?"
+        itemName={lead.name}
+        confirming={deleting}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={deleteLead}
+      />
     </>
   )
 }

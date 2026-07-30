@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createLead,
+  deleteLead,
   getLead,
   listLeads,
   updateLead,
@@ -15,3 +16,4 @@ leadRouter.get('/', asyncHandler(listLeads));
 leadRouter.post('/', asyncHandler(createLead));
 leadRouter.get('/:id', asyncHandler(getLead));
 leadRouter.patch('/:id', asyncHandler(updateLead));
+leadRouter.delete('/:id', asyncHandler(deleteLead));

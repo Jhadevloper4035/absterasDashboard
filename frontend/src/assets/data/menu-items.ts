@@ -9,24 +9,9 @@ export const MENU_ITEMS: MenuItemType[] = [
   {
     key: 'dashboards',
     icon: 'iconamoon:home-duotone',
-    label: 'Dashboards',
+    label: 'Dashboard',
+    url: '/dashboard/analytics',
     roles: ['superadmin', 'admin'],
-    children: [
-      {
-        key: 'dashboard-analytics',
-        label: 'Analytics',
-        url: '/dashboard/analytics',
-        parentKey: 'dashboards',
-        roles: ['superadmin', 'admin'],
-      },
-      {
-        key: 'dashboard-finance',
-        label: 'Finance',
-        url: '/dashboard/finance',
-        parentKey: 'dashboards',
-        roles: ['superadmin', 'admin'],
-      },
-    ],
   },
   {
     key: 'dashboard-sales',
@@ -36,29 +21,16 @@ export const MENU_ITEMS: MenuItemType[] = [
     roles: ['sales'],
   },
   {
-    key: 'apps',
-    label: 'APPS',
+    key: 'crm',
+    label: 'CRM',
     isTitle: true,
   },
   {
-    key: 'user-management',
-    icon: 'iconamoon:profile-circle-duotone',
-    label: 'User Management',
-    roles: ['superadmin'],
-    children: [
-      {
-        key: 'users-create',
-        label: 'Create User',
-        url: '/users/create',
-        parentKey: 'user-management',
-      },
-      {
-        key: 'users-list',
-        label: 'All Users',
-        url: '/users',
-        parentKey: 'user-management',
-      },
-    ],
+    key: 'apps-todo',
+    icon: 'iconamoon:check-circle-1-duotone',
+    label: 'Todo',
+    url: '/apps/todo',
+    roles: ['superadmin', 'admin', 'sales'],
   },
   {
     key: 'leads',
@@ -77,6 +49,13 @@ export const MENU_ITEMS: MenuItemType[] = [
         label: 'All Leads',
         url: '/leads',
         parentKey: 'leads',
+      },
+      {
+        key: 'leads-pending',
+        label: 'Pending Assignment',
+        url: '/leads/pending',
+        parentKey: 'leads',
+        roles: ['superadmin', 'admin'],
       },
       {
         key: 'leads-architect',
@@ -100,25 +79,165 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
+    key: 'tasks',
+    icon: 'iconamoon:calendar-1-duotone',
+    label: 'Task Management',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'tasks-create',
+        label: 'Create Task',
+        url: '/tasks/create',
+        parentKey: 'tasks',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'tasks-all',
+        label: 'All Tasks',
+        url: '/tasks/all',
+        parentKey: 'tasks',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'tasks-pending',
+        label: 'Pending Tasks',
+        url: '/tasks/pending',
+        parentKey: 'tasks',
+      },
+    ],
+  },
+  {
+    key: 'events-management',
+    icon: 'iconamoon:flag-duotone',
+    label: 'Events Management',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'events-management-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/events-management',
+        parentKey: 'events-management',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
+    key: 'erp',
+    label: 'ERP',
+    isTitle: true,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    key: 'hr-management',
+    icon: 'iconamoon:profile-circle-duotone',
+    label: 'HR Management',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'hr-management-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/hr-management',
+        parentKey: 'hr-management',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
+    key: 'seo-website',
+    icon: 'iconamoon:search-duotone',
+    label: 'SEO Website',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'seo-website-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/seo-website',
+        parentKey: 'seo-website',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
+    key: 'challan-management',
+    icon: 'iconamoon:invoice-duotone',
+    label: 'Challan Management',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'challan-management-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/challan-management',
+        parentKey: 'challan-management',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
+    key: 'sales-bill',
+    icon: 'iconamoon:invoice-duotone',
+    label: 'Sales Bill',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'sales-bill-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/sales-bill',
+        parentKey: 'sales-bill',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
+    key: 'purchase-bill',
+    icon: 'iconamoon:invoice-duotone',
+    label: 'Purchase Bill',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'purchase-bill-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/purchase-bill',
+        parentKey: 'purchase-bill',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
+    key: 'client-management',
+    icon: 'iconamoon:profile-circle-duotone',
+    label: 'Client Management',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'client-management-overview',
+        label: 'Coming Soon',
+        url: '/upcoming/client-management',
+        parentKey: 'client-management',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
+  },
+  {
     key: 'ecommerce',
     icon: 'iconamoon:shopping-bag-duotone',
-    label: 'Ecommerce',
+    label: 'Material Management',
+    roles: ['superadmin', 'admin'],
     children: [
       {
         key: 'ecommerce-products',
-        label: 'Products',
+        label: 'Materials',
         url: '/ecommerce/products',
         parentKey: 'ecommerce',
       },
       {
         key: 'ecommerce-products-details',
-        label: 'Product Details',
+        label: 'Material Details',
         url: '/ecommerce/products/10005',
         parentKey: 'ecommerce',
       },
       {
         key: 'ecommerce-create-product',
-        label: 'Create Product',
+        label: 'Create Material',
         url: '/ecommerce/products/create',
         parentKey: 'ecommerce',
       },
@@ -155,61 +274,10 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
-    key: 'apps-chat',
-    icon: 'iconamoon:comment-dots-duotone',
-    label: 'Chat',
-    url: '/apps/chat',
-  },
-  {
-    key: 'apps-email',
-    icon: 'iconamoon:email-duotone',
-    label: 'Email',
-    url: '/apps/email',
-  },
-  {
-    key: 'apps-calendar',
-    icon: 'iconamoon:calendar-1-duotone',
-    label: 'Task Management',
-    roles: ['superadmin', 'admin', 'sales'],
-    children: [
-      {
-        key: 'tasks-create',
-        label: 'Create Task',
-        url: '/tasks/create',
-        parentKey: 'apps-calendar',
-        roles: ['superadmin', 'admin'],
-      },
-      {
-        key: 'tasks-all',
-        label: 'All Tasks',
-        url: '/tasks/all',
-        parentKey: 'apps-calendar',
-        roles: ['superadmin', 'admin'],
-      },
-      {
-        key: 'tasks-pending',
-        label: 'Pending Tasks',
-        url: '/tasks/pending',
-        parentKey: 'apps-calendar',
-      },
-    ],
-  },
-  {
-    key: 'apps-social',
-    icon: 'iconamoon:squinting-face-duotone',
-    label: 'Social',
-    url: '/apps/social',
-  },
-  {
-    key: 'apps-contacts',
-    icon: 'iconamoon:profile-circle-duotone',
-    label: 'Contacts',
-    url: '/apps/contacts',
-  },
-  {
     key: 'apps-invoices',
     icon: 'iconamoon:invoice-duotone',
     label: 'Invoices',
+    roles: ['superadmin', 'admin'],
     children: [
       {
         key: 'invoices',
@@ -226,15 +294,37 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
+    key: 'apps',
+    label: 'APPS',
+    isTitle: true,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    key: 'apps-chat',
+    icon: 'iconamoon:comment-dots-duotone',
+    label: 'Chat',
+    url: '/apps/chat',
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    key: 'apps-contacts',
+    icon: 'iconamoon:profile-circle-duotone',
+    label: 'Contacts',
+    url: '/apps/contacts',
+    roles: ['superadmin', 'admin'],
+  },
+  {
     key: 'custom',
     label: 'Custom',
     isTitle: true,
+    roles: ['superadmin'],
   },
   {
     key: 'pages',
     label: 'Pages',
     isTitle: false,
     icon: 'iconamoon:copy-duotone',
+    roles: ['superadmin'],
     children: [
       {
         key: 'page-welcome',
@@ -253,13 +343,6 @@ export const MENU_ITEMS: MenuItemType[] = [
         label: 'Profile',
         url: '/pages/profile',
         parentKey: 'pages',
-      },
-      {
-        key: 'page-coming-soon',
-        label: 'Coming Soon',
-        url: '/coming-soon',
-        parentKey: 'pages',
-        target: '_blank',
       },
       {
         key: 'page-contact-us',
@@ -292,27 +375,6 @@ export const MENU_ITEMS: MenuItemType[] = [
         parentKey: 'pages',
       },
       {
-        key: 'page-maintenance',
-        label: 'Maintenance',
-        url: '/maintenance',
-        parentKey: 'pages',
-        target: '_blank',
-      },
-      {
-        key: 'page-404-error',
-        label: '404 Error',
-        url: '/error-404',
-        parentKey: 'pages',
-        target: '_blank',
-      },
-      {
-        key: 'page-404-error2',
-        label: '404 Error 2',
-        url: '/error-404-2',
-        parentKey: 'pages',
-        target: '_blank',
-      },
-      {
         key: 'page-error-404-alt',
         label: 'Error 404 Alt',
         url: '/pages/error-404-alt',
@@ -321,76 +383,23 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
-    key: 'page-authentication',
-    label: 'Authentication',
-    isTitle: false,
-    icon: 'iconamoon:lock-duotone',
-    children: [
-      {
-        key: 'sign-in',
-        label: 'Sign In',
-        url: '/auth/sign-in',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'sign-in-2',
-        label: 'Sign In 2',
-        url: '/auth/sign-in-2',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'signup',
-        label: 'Sign Up',
-        url: '/auth/sign-up',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'signup2',
-        label: 'Sign Up 2',
-        url: '/auth/sign-up-2',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'reset-pass',
-        label: 'Reset Password',
-        url: '/auth/reset-pass',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'reset-pass2',
-        label: 'Reset Password 2',
-        url: '/auth/reset-pass-2',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'lock-screen',
-        label: 'Lock Screen',
-        url: '/auth/lock-screen',
-        parentKey: 'page-authentication',
-      },
-      {
-        key: 'lock-screen-2',
-        label: 'Lock Screen 2',
-        url: '/auth/lock-screen-2',
-        parentKey: 'page-authentication',
-      },
-    ],
-  },
-  {
     key: 'widgets',
     icon: 'iconamoon:gift-duotone',
     label: 'Widgets',
     url: '/widgets',
+    roles: ['superadmin'],
   },
   {
     key: 'components',
     label: 'COMPONENTS',
     isTitle: true,
+    roles: ['superadmin'],
   },
   {
     key: 'base-ui',
     icon: 'iconamoon:briefcase-duotone',
     label: 'Base UI',
+    roles: ['superadmin'],
     children: [
       {
         key: 'base-ui-accordions',
@@ -524,6 +533,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'advanced-ui',
     icon: 'iconamoon:component-duotone',
     label: 'Advanced UI',
+    roles: ['superadmin'],
     children: [
       {
         key: 'advanced-ui-ratings',
@@ -561,6 +571,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'charts',
     icon: 'iconamoon:3d-duotone',
     label: 'Charts',
+    roles: ['superadmin'],
     children: [
       {
         key: 'charts-area',
@@ -664,6 +675,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'forms',
     icon: 'iconamoon:cheque-duotone',
     label: 'Forms',
+    roles: ['superadmin'],
     children: [
       {
         key: 'forms-basic-elements',
@@ -737,6 +749,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'tables',
     icon: 'iconamoon:box-duotone',
     label: 'Tables',
+    roles: ['superadmin'],
     children: [
       {
         key: 'tables-basic',
@@ -756,6 +769,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'icons',
     icon: 'iconamoon:lightning-1-duotone',
     label: 'Icons',
+    roles: ['superadmin'],
     children: [
       {
         key: 'icons-boxicons',
@@ -775,6 +789,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'maps',
     icon: 'iconamoon:location-pin-duotone',
     label: 'Maps',
+    roles: ['superadmin'],
     children: [
       {
         key: 'maps-google',
@@ -794,11 +809,13 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'badge-menu',
     icon: 'iconamoon:badge-duotone',
     label: 'Badge Menu',
+    roles: ['superadmin'],
   },
   {
     key: 'menuitem',
     icon: 'iconamoon:folder-add-duotone',
     label: 'Menu Item',
+    roles: ['superadmin'],
     children: [
       {
         key: 'menu-item-1',
@@ -824,5 +841,34 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:unavailable-duotone',
     label: 'Disabled Item',
     isDisabled: true,
+    roles: ['superadmin'],
+  },
+  {
+    key: 'authentication',
+    label: 'AUTHENTICATION',
+    isTitle: true,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    key: 'user-management',
+    icon: 'iconamoon:profile-circle-duotone',
+    label: 'User Management',
+    roles: ['superadmin', 'admin'],
+    children: [
+      {
+        key: 'users-create',
+        label: 'Create User',
+        url: '/users/create',
+        parentKey: 'user-management',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'users-list',
+        label: 'Profiles & Access',
+        url: '/users',
+        parentKey: 'user-management',
+        roles: ['superadmin', 'admin'],
+      },
+    ],
   },
 ]

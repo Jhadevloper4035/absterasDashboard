@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { Readable, Writable } from 'node:stream';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
-import { app } from '../src/app.js';
+import { app, createCorsOptions, createTrustProxySetting } from '../src/app.js';
+import { env } from '../src/config/env.js';
 
 function request(method, url) {
   return new Promise((resolve, reject) => {
@@ -55,5 +56,47 @@ test('health reports degraded before MongoDB connects', async () => {
     assert.equal(body.database.state, 'disconnected');
   } finally {
     await mongoose.disconnect();
+  }
+});
+
+test('production cors rejects wildcard credentials origin', () => {
+  const originalOrigin = env.corsOrigin;
+  const originalProduction = env.isProduction;
+
+  try {
+    env.corsOrigin = '*';
+    env.isProduction = true;
+
+    assert.throws(() => createCorsOptions(), /CORS_ORIGIN must list explicit origins in production/);
+
+    env.corsOrigin = 'https://crm.example.com';
+    assert.deepEqual(createCorsOptions(), { origin: ['https://crm.example.com'], credentials: true });
+  } finally {
+    env.corsOrigin = originalOrigin;
+    env.isProduction = originalProduction;
+  }
+});
+
+test('trust proxy defaults to production only and allows env override', () => {
+  const originalTrustProxy = process.env.TRUST_PROXY;
+  const originalProduction = env.isProduction;
+
+  try {
+    delete process.env.TRUST_PROXY;
+    env.isProduction = false;
+    assert.equal(createTrustProxySetting(), false);
+
+    env.isProduction = true;
+    assert.equal(createTrustProxySetting(), 1);
+
+    process.env.TRUST_PROXY = 'loopback';
+    assert.equal(createTrustProxySetting(), 'loopback');
+
+    process.env.TRUST_PROXY = 'false';
+    assert.equal(createTrustProxySetting(), false);
+  } finally {
+    if (originalTrustProxy === undefined) delete process.env.TRUST_PROXY;
+    else process.env.TRUST_PROXY = originalTrustProxy;
+    env.isProduction = originalProduction;
   }
 });

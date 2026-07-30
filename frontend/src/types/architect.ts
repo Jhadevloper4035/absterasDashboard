@@ -1,7 +1,7 @@
 export type ArchitectType = {
   _id: string
   name: string
-  phone?: string
+  phone: string
   email?: string
   company?: string
   city?: string

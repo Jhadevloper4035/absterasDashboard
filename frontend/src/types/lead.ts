@@ -33,7 +33,7 @@ export type LeadType = {
   sourceType?: string
   productInterest?: string
   email?: string
-  phone?: string
+  phone: string
   company?: string
   status: string
   owner?: string | LeadOwner
