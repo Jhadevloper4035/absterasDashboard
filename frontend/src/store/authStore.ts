@@ -59,21 +59,24 @@ export const useAuthStore = create<AuthStore>()(
       },
       refresh: async () => {
         if (refreshPromise) return refreshPromise
-        set({ loading: true }, false, 'auth/refresh:start')
+        set({ loading: true, error: undefined }, false, 'auth/refresh:start')
         refreshPromise = (async () => {
-          const response = await fetch(buildApiUrl('/auth/refresh'), {
-            method: 'POST',
-            credentials: 'include',
-          })
-          const res = await response.json().catch(() => ({}))
+          try {
+            const response = await fetch(buildApiUrl('/auth/refresh'), {
+              method: 'POST',
+              credentials: 'include',
+            })
+            const res = await response.json().catch(() => ({}))
 
-          if (!response.ok) {
-            get().clearSession()
-            throw new Error(res.error?.message || 'Please sign in again')
+            if (!response.ok) throw new Error(res.error?.message || 'Please sign in again')
+
+            get().setSession(res.data)
+            return res.data
+          } catch (e) {
+            const message = e instanceof Error ? e.message : 'Please sign in again'
+            set({ ...emptyAuth, error: message }, false, 'auth/refresh:error')
+            throw e
           }
-
-          get().setSession(res.data)
-          return res.data
         })()
 
         try {

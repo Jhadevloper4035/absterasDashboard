@@ -10,7 +10,7 @@ if (missing.length) {
 }
 
 export const env = {
-  appName: process.env.APP_NAME || 'Sales CRM API',
+  appName: process.env.APP_NAME || 'Absteras Facade Company CRM API',
   authSecret: process.env.AUTH_SECRET,
   corsOrigin: process.env.CORS_ORIGIN || '*',
   isProduction: process.env.NODE_ENV === 'production',

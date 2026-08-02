@@ -6,7 +6,7 @@ import * as yup from 'yup'
 import { useNotificationContext } from '@/context/useNotificationContext'
 import { useAuthStore } from '@/store/authStore'
 
-const dashboardPath = (role?: string) => (role === 'sales' ? '/dashboard/sales' : '/dashboard/analytics')
+const dashboardPath = (role?: string) => (['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics')
 
 const useSignIn = () => {
   const navigate = useNavigate()

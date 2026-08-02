@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 
 export const TASK_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
@@ -18,6 +19,7 @@ const noteSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
+    attachments: [attachmentSchema],
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -29,6 +31,13 @@ const noteSchema = new mongoose.Schema(
 
 const taskSchema = new mongoose.Schema(
   {
+    ticketNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      unique: true,
+      sparse: true,
+    },
     title: {
       type: String,
       required: true,
@@ -73,5 +82,16 @@ const taskSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+taskSchema.pre('validate', async function assignTicketNumber() {
+  if (!this.isNew || this.ticketNumber) return;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const ticketNumber = `T-${randomInt(100000, 1000000)}`;
+    if (!(await this.constructor.exists({ ticketNumber }))) {
+      this.ticketNumber = ticketNumber;
+      return;
+    }
+  }
+});
 
 export const Task = mongoose.model('Task', taskSchema);

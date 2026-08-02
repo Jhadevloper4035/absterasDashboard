@@ -21,3 +21,74 @@
         }
     }
 }
+
+.attachment-list {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.attachment-row {
+    align-items: center;
+    background: rgba(var(--#{$prefix}light-rgb), 0.04);
+    border: 1px solid $input-border-color;
+    border-radius: 6px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 38px minmax(0, 1fr) auto auto;
+    padding: 8px 10px;
+}
+
+.attachment-icon {
+    align-items: center;
+    background: rgba(var(--#{$prefix}primary-rgb), 0.12);
+    border-radius: 6px;
+    color: var(--#{$prefix}primary);
+    display: inline-flex;
+    font-size: 20px;
+    height: 38px;
+    justify-content: center;
+    width: 38px;
+}
+
+.attachment-meta {
+    min-width: 0;
+}
+
+.attachment-name,
+.attachment-detail {
+    display: block;
+}
+
+.attachment-name {
+    color: $body-color;
+    font-weight: $font-weight-semibold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attachment-detail {
+    color: $text-muted;
+    font-size: 13px;
+}
+
+.attachment-download,
+.attachment-remove {
+    align-items: center;
+    display: inline-flex;
+    font-size: 20px;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+    text-decoration: none;
+    width: 34px;
+}
+
+.attachment-download {
+    color: var(--#{$prefix}primary);
+}
+
+.attachment-remove {
+    color: $danger;
+}

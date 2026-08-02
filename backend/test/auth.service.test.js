@@ -3,7 +3,9 @@ import { afterEach, test } from 'node:test';
 import { AuthSession } from '../src/models/auth-session.model.js';
 import { BlockedToken } from '../src/models/blocked-token.model.js';
 import { RateLimit } from '../src/models/rate-limit.model.js';
+import { User } from '../src/models/user.model.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
+import { login } from '../src/controllers/auth.controller.js';
 import { createAccessTokenPair, isAccessTokenBlocked, rotateSession } from '../src/services/auth-session.service.js';
 import { hashPassword, verifyPassword } from '../src/services/password.service.js';
 import { createAccessToken, hashRefreshToken, verifyAccessToken } from '../src/services/token.service.js';
@@ -17,6 +19,8 @@ const originals = {
   blockedUpdateOne: BlockedToken.updateOne,
   rateFindOne: RateLimit.findOne,
   rateFindOneAndUpdate: RateLimit.findOneAndUpdate,
+  userFindOne: User.findOne,
+  userUpdateOne: User.updateOne,
 };
 
 afterEach(() => {
@@ -28,6 +32,8 @@ afterEach(() => {
   BlockedToken.updateOne = originals.blockedUpdateOne;
   RateLimit.findOne = originals.rateFindOne;
   RateLimit.findOneAndUpdate = originals.rateFindOneAndUpdate;
+  User.findOne = originals.userFindOne;
+  User.updateOne = originals.userUpdateOne;
 });
 
 test('password hashing verifies only the original password', async () => {
@@ -35,6 +41,64 @@ test('password hashing verifies only the original password', async () => {
 
   assert.equal(await verifyPassword('secret-password', hash), true);
   assert.equal(await verifyPassword('wrong-password', hash), false);
+});
+
+test('login updates lastLoginAt without revalidating legacy user fields', async () => {
+  const passwordHash = await hashPassword('CodexAdmin123!');
+  const user = {
+    _id: 'user-1',
+    id: 'user-1',
+    email: 'codex.superadmin@example.com',
+    role: 'superadmin',
+    status: 'active',
+    passwordHash,
+  };
+  let lastLoginUpdate;
+
+  User.findOne = (filter) => {
+    assert.deepEqual(filter, { email: 'codex.superadmin@example.com' });
+    return {
+      select(field) {
+        assert.equal(field, '+passwordHash');
+        return Promise.resolve(user);
+      },
+    };
+  };
+  User.updateOne = async (filter, update) => {
+    assert.deepEqual(filter, { _id: 'user-1' });
+    lastLoginUpdate = update.$set.lastLoginAt;
+  };
+  AuthSession.create = async () => ({});
+
+  const response = {
+    statusCode: 200,
+    cookies: {},
+    cookie(name, value) {
+      this.cookies[name] = value;
+    },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
+  };
+
+  await login(
+    {
+      body: { email: 'codex.superadmin@example.com', password: 'CodexAdmin123!' },
+      ip: '127.0.0.1',
+      get: () => 'node-test',
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.data.user, user);
+  assert.ok(lastLoginUpdate instanceof Date);
+  assert.ok(response.cookies.sales_crm_refresh);
 });
 
 test('access token contains user id and role', () => {

@@ -1,13 +1,17 @@
 import { Suspense } from 'react'
 import { Col, Container, Row } from 'react-bootstrap'
+import { useLocation } from 'react-router-dom'
 
 import Preloader from '@/components/Preloader'
 import type { ChildrenType } from '@/types/component-props'
 
 const AuthLayout = ({ children }: ChildrenType) => {
+  const { pathname } = useLocation()
+  const isSignIn = pathname === '/auth/sign-in'
+
   return (
     <div className="authentication-bg">
-      <div className="account-pages pt-2 pt-sm-5 pb-4 pb-sm-5">
+      <div className={`account-pages ${isSignIn ? 'auth-sign-in-page' : 'pt-2 pt-sm-5 pb-4 pb-sm-5'}`}>
         <Container>
           <Row className="justify-content-center">
             <Col xl={12}>

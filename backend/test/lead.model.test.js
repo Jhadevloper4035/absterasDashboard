@@ -28,6 +28,21 @@ test('lead defaults to NEW status', () => {
   ]);
 });
 
+test('lead stores site address and google map url', async () => {
+  const lead = new Lead({
+    name: 'Acme',
+    source: 'manual',
+    phone: '9876543210',
+    siteAddress: 'BKC, Mumbai',
+    googleMapUrl: 'https://maps.google.com/?q=BKC+Mumbai',
+  });
+
+  await lead.validate();
+
+  assert.equal(lead.siteAddress, 'BKC, Mumbai');
+  assert.equal(lead.googleMapUrl, 'https://maps.google.com/?q=BKC+Mumbai');
+});
+
 test('lead notes support paragraph text and images', async () => {
   const lead = new Lead({
     name: 'Acme',

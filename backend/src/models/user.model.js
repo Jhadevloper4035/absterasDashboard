@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export const USER_ROLES = ['superadmin', 'admin', 'sales'];
+export const USER_ROLES = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers'];
 export const USER_STATUSES = ['active', 'inactive', 'invited', 'suspended'];
 
 function isTimezone(value) {

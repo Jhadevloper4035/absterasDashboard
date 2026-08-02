@@ -84,3 +84,11 @@
 
 // Custom React
 @import 'pages/custom-react';
+
+.account-pages .auth-card::before{
+    display: none;
+}
+
+.account-pages .auth-card::after{
+    display: none;
+}

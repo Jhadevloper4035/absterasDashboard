@@ -4,6 +4,28 @@ import { Architect } from './models/architect.model.js';
 import { Lead } from './models/lead.model.js';
 import { Task } from './models/task.model.js';
 import { User } from './models/user.model.js';
+import { hashPassword } from './services/password.service.js';
+
+const demoUsers = [
+  {
+    name: 'Codex Superadmin',
+    email: 'codex.superadmin@example.com',
+    phone: '+971500000000',
+    password: 'CodexAdmin123!',
+    role: 'superadmin',
+    status: 'active',
+    timezone: 'Asia/Dubai',
+  },
+  {
+    name: 'Codex Admin',
+    email: 'codex.admin@example.com',
+    phone: '+971500000001',
+    password: 'CodexAdmin123!',
+    role: 'admin',
+    status: 'active',
+    timezone: 'Asia/Dubai',
+  },
+];
 
 const demoLeads = [
   ['Urban Nest Interiors', 'manual', 'Website enquiry', 'urban@example.com', '+971501110001', 'PVC HPL'],
@@ -37,6 +59,9 @@ const demoArchitects = [
   ['Priya Menon', 'Canvas Architecture', 'Sharjah', 'Luxury Apartments', 'priya.arch@example.com', '+971502220008'],
   ['Sameer Khan', 'Khan Build Studio', 'Dubai', 'Facade Design', 'sameer.arch@example.com', '+971502220009'],
   ['Leena Thomas', 'ArchiCraft Studio', 'Ras Al Khaimah', 'Educational Spaces', 'leena.arch@example.com', '+971502220010'],
+  ['Arjun Deshpande', 'FacadeWorks Studio', 'Mumbai', 'Metal facade event - Zak Doors & Windows Expo India', 'arjun.deshpande@example.in', '+919820000101'],
+  ['Kavya Nair', 'Envelope Design Collective', 'Bengaluru', 'Metal facade event - ACETECH Bengaluru', 'kavya.nair@example.in', '+919820000102'],
+  ['Devika Suri', 'Suri Architects', 'New Delhi', 'Metal facade event - India Facade Summit', 'devika.suri@example.in', '+919820000103'],
 ].map(([name, company, city, specialty, email, phone]) => ({
   name,
   company,
@@ -76,6 +101,16 @@ const demoTasks = [
 async function seed() {
   await connectDatabase();
 
+  let userCount = 0;
+  for (const { password, ...user } of demoUsers) {
+    const result = await User.updateOne(
+      { email: user.email },
+      { $set: { ...user, passwordHash: await hashPassword(password) } },
+      { upsert: true, runValidators: true },
+    );
+    if (result.upsertedCount || result.modifiedCount) userCount += 1;
+  }
+
   for (const lead of demoLeads) {
     if (!(await Lead.exists({ email: lead.email }))) {
       await Lead.create(lead);
@@ -108,6 +143,7 @@ async function seed() {
     console.log('Skipped demo tasks; create one active admin/superadmin and one active non-superadmin user first');
   }
 
+  console.log(`Seeded ${userCount} demo users`);
   console.log(`Seeded ${demoLeads.length} demo leads`);
   console.log(`Seeded ${demoArchitects.length} demo architects`);
   console.log(`Seeded ${taskCount} demo tasks`);

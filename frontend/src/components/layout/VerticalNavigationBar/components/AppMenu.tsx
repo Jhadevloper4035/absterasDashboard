@@ -1,10 +1,12 @@
 import clsx from 'clsx'
-import { Fragment, useCallback, useEffect, useState, type MouseEvent } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { Collapse } from 'react-bootstrap'
 import { Link, useLocation } from 'react-router-dom'
 
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
+import { apiFetch } from '@/helpers/api'
 import { findAllParent, findMenuItem, getMenuItemFromURL } from '@/helpers/menu'
+import { useAuthStore } from '@/store/authStore'
 import type { MenuItemType, SubMenus } from '@/types/menu'
 
 const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName, activeMenuItems, toggleMenu }: SubMenus) => {
@@ -101,11 +103,40 @@ type AppMenuProps = {
 
 const AppMenu = ({ menuItems }: AppMenuProps) => {
   const { pathname } = useLocation()
+  const token = useAuthStore((state) => state.token)
 
   const [activeMenuItems, setActiveMenuItems] = useState<Array<string>>([])
+  const [notificationCount, setNotificationCount] = useState(0)
   const toggleMenu = (menuItem: MenuItemType, show: boolean) => {
     if (show) setActiveMenuItems([menuItem.key, ...findAllParent(menuItems, menuItem)])
   }
+
+  const loadNotificationCount = useCallback(async () => {
+    if (!token) return setNotificationCount(0)
+    const res = await apiFetch<{ data: Array<{ _id: string }> }>('/notifications/unread', { token })
+    setNotificationCount(res.data.length)
+  }, [token])
+
+  useEffect(() => {
+    loadNotificationCount().catch(() => setNotificationCount(0))
+    const onChange = () => loadNotificationCount().catch(() => setNotificationCount(0))
+    window.addEventListener('notifications:changed', onChange)
+    const timer = window.setInterval(onChange, 15000)
+    return () => {
+      window.removeEventListener('notifications:changed', onChange)
+      window.clearInterval(timer)
+    }
+  }, [loadNotificationCount])
+
+  const visibleMenuItems = useMemo(
+    () =>
+      menuItems.map((item) =>
+        item.key === 'notifications'
+          ? { ...item, badge: notificationCount ? { variant: 'danger', text: String(notificationCount) } : undefined }
+          : item,
+      ),
+    [menuItems, notificationCount],
+  )
 
   const getActiveClass = useCallback(
     (item: MenuItemType) => {
@@ -116,12 +147,12 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
 
   const activeMenu = useCallback(() => {
     const trimmedURL = pathname?.replaceAll('', '')
-    const matchingMenuItem = getMenuItemFromURL(menuItems, trimmedURL)
+    const matchingMenuItem = getMenuItemFromURL(visibleMenuItems, trimmedURL)
 
     if (matchingMenuItem) {
-      const activeMt = findMenuItem(menuItems, matchingMenuItem.key)
+      const activeMt = findMenuItem(visibleMenuItems, matchingMenuItem.key)
       if (activeMt) {
-        setActiveMenuItems([activeMt.key, ...findAllParent(menuItems, activeMt)])
+        setActiveMenuItems([activeMt.key, ...findAllParent(visibleMenuItems, activeMt)])
       }
 
       setTimeout(() => {
@@ -159,15 +190,15 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
         animateScroll()
       }
     }
-  }, [pathname, menuItems])
+  }, [pathname, visibleMenuItems])
 
   useEffect(() => {
-    if (menuItems && menuItems.length > 0) activeMenu()
-  }, [activeMenu, menuItems])
+    if (visibleMenuItems.length > 0) activeMenu()
+  }, [activeMenu, visibleMenuItems])
 
   return (
     <ul className="navbar-nav">
-      {(menuItems || []).map((item, idx) => {
+      {visibleMenuItems.map((item, idx) => {
         return (
           <Fragment key={item.key + idx}>
             {item.isTitle ? (

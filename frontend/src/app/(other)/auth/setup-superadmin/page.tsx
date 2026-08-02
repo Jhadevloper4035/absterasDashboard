@@ -46,7 +46,7 @@ const SetupSuperadmin = () => {
             <LogoBox textLogo={{ height: 24, width: 73 }} squareLogo={{ className: 'me-1' }} containerClassName="mx-auto mb-4 text-center auth-logo" />
           </div>
           <h2 className="fw-bold text-center fs-18">Setup Superadmin</h2>
-          <p className="text-muted text-center mt-1 mb-4">Create the first account.</p>
+          <p className="text-muted text-center mt-1 mb-4">Create the first Absteras Facade CRM account.</p>
           <Row className="justify-content-center">
             <Col xs={12} md={7}>
               <form onSubmit={createSuperadmin} className="authentication-form">

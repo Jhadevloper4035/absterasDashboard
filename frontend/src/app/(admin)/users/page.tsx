@@ -7,13 +7,17 @@ import type { UserType } from '@/types/auth'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Form, InputGroup, Modal, Table } from 'react-bootstrap'
 
-const roles = ['superadmin', 'admin', 'sales'] as const
+const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
+const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 const singleUserRoles = ['superadmin', 'admin'] as const
 
 const roleBadge = (role: UserType['role']) => {
   if (role === 'superadmin') return 'danger'
   if (role === 'admin') return 'primary'
+  if (role === 'operations') return 'info'
+  if (role === 'accounts') return 'warning'
+  if (role === 'designers') return 'secondary'
   return 'success'
 }
 
@@ -44,13 +48,14 @@ const UsersPage = () => {
   const updateUserInStore = useUserManagementStore((state) => state.updateUser)
   const [editingUser, setEditingUser] = useState<UserType | null>(null)
   const [editForm, setEditForm] = useState(emptyEditForm)
+  const [editError, setEditError] = useState('')
   const [visiblePassword, setVisiblePassword] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const canManageUsers = user?.role === 'superadmin' || user?.role === 'admin'
   const hasRole = (role: UserType['role'], exceptId = '') => users.some((item) => item.role === role && item._id !== exceptId)
   const editableRoles = (item: UserType) =>
-    user?.role === 'admin' ? ['sales'] : roles.filter((role) => role === item.role || role === 'sales' || !hasRole(role, item._id))
+    user?.role === 'admin' ? teamRoles : roles.filter((role) => role === item.role || teamRoles.includes(role) || !hasRole(role, item._id))
 
   useEffect(() => {
     if (canManageUsers) fetchUsers().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
@@ -74,6 +79,7 @@ const UsersPage = () => {
   const openEdit = (item: UserType) => {
     setEditingUser(item)
     setVisiblePassword(false)
+    setEditError('')
     setEditForm({
       name: item.name,
       email: item.email,
@@ -88,29 +94,31 @@ const UsersPage = () => {
   const closeEdit = () => {
     setEditingUser(null)
     setEditForm(emptyEditForm)
+    setEditError('')
     setVisiblePassword(false)
   }
 
   const saveEdit = async (event: FormEvent) => {
     event.preventDefault()
     if (!editingUser) return
+    setEditError('')
 
     const name = editForm.name.trim()
     const email = editForm.email.trim()
     const phone = editForm.phone.trim()
 
     if (!name) {
-      setError('Enter a user name')
+      setEditError('Enter a user name')
       return
     }
 
     if (!email) {
-      setError('Enter a user email')
+      setEditError('Enter a user email')
       return
     }
 
     if (!phone) {
-      setError('Enter a mobile number')
+      setEditError('Enter a mobile number')
       return
     }
 
@@ -118,15 +126,17 @@ const UsersPage = () => {
       name,
       email,
       phone,
-      role: editForm.role,
       status: editForm.status,
       timezone: editForm.timezone.trim() || 'UTC',
     }
 
+    if (!singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) patch.role = editForm.role
     if (editForm.password.trim()) patch.password = editForm.password.trim()
 
     if (await updateUser(editingUser._id, patch)) {
       closeEdit()
+    } else {
+      setEditError(useUserManagementStore.getState().error || 'Unable to update user')
     }
   }
 
@@ -223,6 +233,7 @@ const UsersPage = () => {
             <Modal.Title>Edit User Information</Modal.Title>
           </Modal.Header>
           <Modal.Body>
+            {editError && <Alert variant="danger">{editError}</Alert>}
             <Form.Group className="mb-3">
               <Form.Label>Name</Form.Label>
               <Form.Control required value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} />

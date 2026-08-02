@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
-import { addTaskNote, createTask, listTaskAssignees, listTasks, updateTask } from '../src/controllers/task.controller.js';
+import { addTaskNote, createTask, createTaskWorkType, deleteTaskWorkType, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from '../src/controllers/task.controller.js';
 import { Task } from '../src/models/task.model.js';
+import { TaskWorkType } from '../src/models/task-work-type.model.js';
 import { User } from '../src/models/user.model.js';
 import { createAttachmentToken } from '../src/services/upload.service.js';
 
 const originalTaskFind = Task.find;
 const originalTaskFindOne = Task.findOne;
+const originalTaskExists = Task.exists;
+const originalTaskWorkTypeFind = TaskWorkType.find;
+const originalTaskWorkTypeFindOneAndUpdate = TaskWorkType.findOneAndUpdate;
 const originalUserFind = User.find;
 const originalUserFindOne = User.findOne;
 
@@ -29,8 +33,115 @@ function res() {
 afterEach(() => {
   Task.find = originalTaskFind;
   Task.findOne = originalTaskFindOne;
+  Task.exists = originalTaskExists;
+  TaskWorkType.find = originalTaskWorkTypeFind;
+  TaskWorkType.findOneAndUpdate = originalTaskWorkTypeFindOneAndUpdate;
   User.find = originalUserFind;
   User.findOne = originalUserFindOne;
+});
+
+test('admin can add role work types and everyone can list configured work types', async () => {
+  const adminId = new mongoose.Types.ObjectId();
+  let upsertQuery;
+  let upsertPatch;
+  TaskWorkType.findOneAndUpdate = async (query, patch) => {
+    upsertQuery = query;
+    upsertPatch = patch;
+    return { _id: 'work-type-1', role: query.role, name: patch.$set.name };
+  };
+
+  const createResponse = res();
+  await createTaskWorkType(
+    {
+      user: { _id: adminId, role: 'admin' },
+      body: { role: 'sales', name: '  Site Visit   Follow Up  ' },
+    },
+    createResponse,
+  );
+
+  assert.equal(createResponse.statusCode, 201);
+  assert.deepEqual(upsertQuery, { role: 'sales', normalizedName: 'site visit follow up' });
+  assert.equal(upsertPatch.$set.name, 'Site Visit Follow Up');
+  assert.equal(upsertPatch.$setOnInsert.createdBy, adminId);
+
+  TaskWorkType.find = () => ({
+    sort() {
+      return Promise.resolve([{ role: 'sales', name: 'Site Visit Follow Up' }]);
+    },
+  });
+
+  const listResponse = res();
+  await listTaskWorkTypes({ user: { _id: 'sales-1', role: 'sales' } }, listResponse);
+
+  assert.equal(listResponse.statusCode, 200);
+  assert.ok(listResponse.body.data.sales.includes('Follow Up'));
+  assert.ok(listResponse.body.data.sales.includes('Site Visit Follow Up'));
+});
+
+test('admin can delete default role work types', async () => {
+  const adminId = new mongoose.Types.ObjectId();
+  let upsertQuery;
+  let upsertPatch;
+  TaskWorkType.findOneAndUpdate = async (query, patch) => {
+    upsertQuery = query;
+    upsertPatch = patch;
+    return { _id: 'work-type-1', role: query.role, name: patch.$set.name, deleted: true };
+  };
+
+  const deleteResponse = res();
+  await deleteTaskWorkType(
+    {
+      user: { _id: adminId, role: 'admin' },
+      params: { role: 'operations', name: 'Laser Cut' },
+    },
+    deleteResponse,
+  );
+
+  assert.equal(deleteResponse.statusCode, 200);
+  assert.deepEqual(upsertQuery, { role: 'operations', normalizedName: 'laser cut' });
+  assert.equal(upsertPatch.$set.deleted, true);
+  assert.equal(upsertPatch.$set.deletedBy, adminId);
+
+  TaskWorkType.find = () => ({
+    sort() {
+      return Promise.resolve([{ role: 'operations', name: 'Laser Cut', normalizedName: 'laser cut', deleted: true }]);
+    },
+  });
+
+  const listResponse = res();
+  await listTaskWorkTypes({ user: { _id: 'admin-1', role: 'admin' } }, listResponse);
+
+  assert.equal(listResponse.statusCode, 200);
+  assert.ok(!listResponse.body.data.operations.includes('Laser Cut'));
+  assert.ok(listResponse.body.data.operations.includes('Coating'));
+});
+
+test('assigned users cannot create role work types', async () => {
+  const response = res();
+  await createTaskWorkType(
+    {
+      user: { _id: 'sales-1', role: 'sales' },
+      body: { role: 'sales', name: 'New sales work' },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 403);
+});
+
+test('new tasks get random 6-digit ticket numbers', async () => {
+  const userId = new mongoose.Types.ObjectId();
+  let existsQuery;
+  Task.exists = async (query) => {
+    existsQuery = query;
+    return null;
+  };
+
+  const task = new Task({ title: 'Ticketed task', assignee: userId, createdBy: userId });
+  await task.validate();
+
+  assert.match(task.ticketNumber, /^T-\d{6}$/);
+  assert.deepEqual(existsQuery, { ticketNumber: task.ticketNumber });
 });
 
 test('admin can create rich task for active non-superadmin user', async () => {
@@ -150,6 +261,7 @@ test('assignees exclude superadmin profiles', async () => {
 
 test('assigned user only lists assigned tasks and can mark done', async () => {
   let query;
+  let limit;
   Task.find = (filter) => {
     query = filter;
     return {
@@ -159,14 +271,16 @@ test('assigned user only lists assigned tasks and can mark done', async () => {
       sort() {
         return this;
       },
-      limit() {
+      limit(value) {
+        limit = value;
         return Promise.resolve([]);
       },
     };
   };
 
-  await listTasks({ user: { _id: 'sales-1', role: 'sales' }, query: {} }, res());
+  await listTasks({ user: { _id: 'sales-1', role: 'sales' }, query: { limit: '5' } }, res());
   assert.deepEqual(query, { assignee: 'sales-1' });
+  assert.equal(limit, 5);
 
   const task = { _id: 'task-1', status: 'To Do', save: async () => {}, populate: async () => {} };
   Task.findOne = async (filter) => {
@@ -182,7 +296,78 @@ test('assigned user only lists assigned tasks and can mark done', async () => {
   assert.ok(task.completedAt instanceof Date);
 });
 
+test('deadline filter lists only open tasks before today', async () => {
+  let query;
+  Task.find = (filter) => {
+    query = filter;
+    return {
+      populate() {
+        return this;
+      },
+      sort() {
+        return this;
+      },
+      limit() {
+        return Promise.resolve([]);
+      },
+    };
+  };
+
+  await listTasks({ user: { _id: 'admin-1', role: 'admin' }, query: { deadline: 'exceeded' } }, res());
+
+  assert.deepEqual(query.status, { $ne: 'Done' });
+  assert.ok(query.dueDate.$lt instanceof Date);
+  assert.equal(query.dueDate.$lt.getHours(), 0);
+});
+
+test('admin update keeps trusted task attachments', async () => {
+  const attachment = {
+    key: 'uploads/document/update.pdf',
+    checksum: 'update123',
+    originalName: 'update.pdf',
+    size: 1200,
+  };
+  attachment.attachmentToken = createAttachmentToken(attachment);
+  const task = {
+    _id: 'task-1',
+    title: 'Task with attachment',
+    assignee: 'sales-1',
+    createdBy: 'admin-1',
+    attachments: [],
+    notes: [],
+    save: async () => {},
+    populate: async () => {},
+  };
+  let query;
+  Task.findOne = async (filter) => {
+    query = filter;
+    return task;
+  };
+
+  const response = res();
+  await updateTask(
+    {
+      user: { _id: 'admin-1', role: 'admin' },
+      params: { id: 'task-1' },
+      body: { attachments: [attachment] },
+    },
+    response,
+  );
+
+  assert.deepEqual(query, { _id: 'task-1' });
+  assert.equal(task.attachments.length, 1);
+  assert.equal(task.attachments[0].originalName, 'update.pdf');
+  assert.equal(response.body.data.attachments[0].originalName, 'update.pdf');
+  assert.ok(response.body.data.attachments[0].attachmentToken);
+});
+
 test('assigned user can add timestamped task note', async () => {
+  const attachment = {
+    key: 'uploads/document/note.pdf',
+    checksum: 'note123',
+    originalName: 'note.pdf',
+  };
+  attachment.attachmentToken = createAttachmentToken(attachment);
   const task = {
     _id: 'task-1',
     notes: [],
@@ -200,7 +385,11 @@ test('assigned user can add timestamped task note', async () => {
     {
       user: { _id: 'sales-1', role: 'sales' },
       params: { id: 'task-1' },
-      body: { title: 'Progress update', description: 'API work is ready for review.' },
+      body: {
+        title: 'Progress update',
+        description: 'API work is ready for review.',
+        attachments: [attachment, { key: 'uploads/document/fake.pdf', checksum: 'bad', attachmentToken: 'bad' }],
+      },
     },
     response,
   );
@@ -210,4 +399,7 @@ test('assigned user can add timestamped task note', async () => {
   assert.equal(task.notes[0].title, 'Progress update');
   assert.equal(task.notes[0].description, 'API work is ready for review.');
   assert.equal(task.notes[0].createdBy, 'sales-1');
+  assert.equal(response.body.data.notes[0].attachments.length, 1);
+  assert.equal(response.body.data.notes[0].attachments[0].originalName, 'note.pdf');
+  assert.ok(response.body.data.notes[0].attachments[0].attachmentToken);
 });

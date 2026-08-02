@@ -19,7 +19,7 @@ test('user defaults to sales role', () => {
 });
 
 test('user role is limited to current roles', async () => {
-  assert.deepEqual(USER_ROLES, ['superadmin', 'admin', 'sales']);
+  assert.deepEqual(USER_ROLES, ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']);
   assert.deepEqual(USER_STATUSES, ['active', 'inactive', 'invited', 'suspended']);
   await assert.rejects(
     () => new User({

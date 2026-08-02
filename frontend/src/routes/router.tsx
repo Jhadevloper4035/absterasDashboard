@@ -5,7 +5,7 @@ import { useAuthContext } from '@/context/useAuthContext'
 import { appRoutes, authRoutes } from '@/routes/index'
 import AdminLayout from '@/layouts/AdminLayout'
 
-const dashboardPath = (role?: string) => (role === 'sales' ? '/dashboard/sales' : '/dashboard/analytics')
+const dashboardPath = (role?: string) => (['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics')
 const publicPaths = ['/auth/sign-in', '/auth/setup-superadmin']
 
 const AppRouter = (props: RouteProps) => {

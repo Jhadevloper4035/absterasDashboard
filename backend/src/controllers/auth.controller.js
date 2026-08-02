@@ -67,8 +67,9 @@ export async function login(req, res) {
     return res.status(401).json({ error: { message: 'Invalid email or password' } });
   }
 
-  user.lastLoginAt = new Date();
-  await user.save();
+  const lastLoginAt = new Date();
+  await User.updateOne({ _id: user._id }, { $set: { lastLoginAt } });
+  user.lastLoginAt = lastLoginAt;
 
   const session = await createSession(user, req);
   setRefreshCookie(res, session.refreshToken, session.refreshTokenExpiresAt);

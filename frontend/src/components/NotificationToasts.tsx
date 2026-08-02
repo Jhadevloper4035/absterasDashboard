@@ -23,20 +23,11 @@ const NotificationToasts = () => {
         const res = await apiFetch<{ data: AppNotification[] }>('/notifications/unread', { token })
         if (stopped) return
 
-        const ids = res.data.map((item) => item._id)
         res.data.forEach((item) => {
           if (shown.current.has(item._id)) return
           shown.current.add(item._id)
           toast.info(`${item.title || 'Update'}${item.body ? `: ${item.body}` : ''}`, { toastId: item._id })
         })
-
-        if (ids.length) {
-          await apiFetch('/notifications/read', {
-            method: 'POST',
-            token,
-            body: JSON.stringify({ ids }),
-          })
-        }
       } catch {
         // Notification polling should never interrupt the current page.
       }

@@ -30,7 +30,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const [users, setUsers] = useState<UserType[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [filters, setFilters] = useState({ name: '', phone: '', email: '' })
+  const [filters, setFilters] = useState({ name: '', phone: '', email: '', owner: '', createdFrom: '', createdTo: '', meeting: '' })
   const [meetingLead, setMeetingLead] = useState<LeadType>()
   const [deleteTarget, setDeleteTarget] = useState<LeadType>()
   const [meeting, setMeeting] = useState({ owner: '', startsAt: '', title: '', notes: '' })
@@ -42,12 +42,19 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
     const name = filters.name.toLowerCase().trim()
     const phone = filters.phone.toLowerCase().trim()
     const email = filters.email.toLowerCase().trim()
+    const createdFrom = filters.createdFrom ? new Date(`${filters.createdFrom}T00:00:00`) : undefined
+    const createdTo = filters.createdTo ? new Date(`${filters.createdTo}T23:59:59.999`) : undefined
 
     return (architectOnly ? leads.filter(isArchitectLead) : leads).filter((lead) => {
+      const createdAt = lead.createdAt ? new Date(lead.createdAt) : undefined
       const matchesName = !name || lead.name.toLowerCase().includes(name)
       const matchesPhone = !phone || (lead.phone || '').toLowerCase().includes(phone)
       const matchesEmail = !email || (lead.email || '').toLowerCase().includes(email)
-      return matchesName && matchesPhone && matchesEmail
+      const matchesOwner = !filters.owner || (filters.owner === 'unassigned' ? !ownerId(lead.owner) : ownerId(lead.owner) === filters.owner)
+      const matchesCreatedFrom = !createdFrom || (createdAt && createdAt >= createdFrom)
+      const matchesCreatedTo = !createdTo || (createdAt && createdAt <= createdTo)
+      const matchesMeeting = !filters.meeting || (filters.meeting === 'scheduled' ? !!lead.nextMeeting?.startsAt : !lead.nextMeeting?.startsAt)
+      return matchesName && matchesPhone && matchesEmail && matchesOwner && matchesCreatedFrom && matchesCreatedTo && matchesMeeting
     })
   }, [architectOnly, filters, leads])
   const assignLead = async (leadId: string, owner: string) => {
@@ -166,6 +173,11 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         cell: ({ row: { original } }) => original.company || '-',
       },
       {
+        header: 'Site Address',
+        accessorKey: 'siteAddress',
+        cell: ({ row: { original } }) => original.siteAddress || '-',
+      },
+      {
         header: 'Status',
         cell: ({ row: { original } }) => (
           <Badge bg={original.assignmentException ? 'warning' : 'success'} text={original.assignmentException ? 'dark' : undefined}>
@@ -267,6 +279,30 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
             </Col>
             <Col md={4}>
               <Form.Control placeholder="Filter by email" value={filters.email} onChange={(event) => setFilters({ ...filters, email: event.target.value })} />
+            </Col>
+            <Col md={3}>
+              <Form.Select value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })}>
+                <option value="">All assigned users</option>
+                <option value="unassigned">Unassigned</option>
+                {salespeople.map((salesperson) => (
+                  <option key={salesperson._id} value={salesperson._id}>
+                    {salesperson.name}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+            <Col md={3}>
+              <Form.Control type="date" aria-label="Lead from date" value={filters.createdFrom} onChange={(event) => setFilters({ ...filters, createdFrom: event.target.value })} />
+            </Col>
+            <Col md={3}>
+              <Form.Control type="date" aria-label="Lead to date" value={filters.createdTo} onChange={(event) => setFilters({ ...filters, createdTo: event.target.value })} />
+            </Col>
+            <Col md={3}>
+              <Form.Select value={filters.meeting} onChange={(event) => setFilters({ ...filters, meeting: event.target.value })}>
+                <option value="">All meetings</option>
+                <option value="scheduled">Meeting scheduled</option>
+                <option value="none">No meeting</option>
+              </Form.Select>
             </Col>
           </Row>
           {!visibleLeads.length && !loading ? <Alert variant="info">No leads found</Alert> : null}

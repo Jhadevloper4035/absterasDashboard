@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Badge, Button, Card, CardBody, Col, Row, Table } from 'react-bootstrap'
+import { Alert, Badge, Button, Card, CardBody, Col, Row } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb'
@@ -14,11 +14,50 @@ const ownerName = (owner?: string | LeadOwner) => (typeof owner === 'object' ? o
 const dayKey = (value: string | Date, timezone: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
 const timeText = (value: string, timezone: string) => new Intl.DateTimeFormat(undefined, { timeZone: timezone, hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+const dateText = (value: string, timezone: string) => new Intl.DateTimeFormat(undefined, { timeZone: timezone, month: 'short', day: 'numeric' }).format(new Date(value))
+const statusVariant = (status: string) => (status === 'WON' ? 'success' : status === 'MEETING_SCHEDULED' ? 'info' : 'secondary')
+const dashboardTitles = {
+  sales: 'My Sales Dashboard',
+  operations: 'My Operations Dashboard',
+  accounts: 'My Accounts Dashboard',
+  designers: 'My Designers Dashboard',
+}
+
+const MeetingCard = ({ lead, timezone, showDate, actionLabel }: { lead: LeadType; timezone: string; showDate?: boolean; actionLabel: string }) => {
+  const startsAt = lead.nextMeeting?.startsAt
+
+  return (
+    <div className="border rounded p-3 h-100 d-flex flex-column">
+      <div className="d-flex align-items-start justify-content-between gap-3 mb-3">
+        <div>
+          <div className="fw-semibold text-break">{lead.nextMeeting?.title || lead.name}</div>
+          <div className="text-muted fs-13 text-break">{lead.company || lead.name}</div>
+        </div>
+        <Badge bg={showDate ? 'info' : 'warning'} text={showDate ? undefined : 'dark'} className="text-nowrap">
+          {startsAt ? (showDate ? dateText(startsAt, timezone) : timeText(startsAt, timezone)) : '-'}
+        </Badge>
+      </div>
+      <div className="text-muted fs-13 mb-3 flex-grow-1">
+        {startsAt && showDate ? `${timeText(startsAt, timezone)} - ` : ''}
+        {lead.nextMeeting?.notes || 'No agenda added'}
+      </div>
+      <div className="d-flex align-items-center justify-content-between gap-2">
+        <Badge bg={statusVariant(lead.status)}>{lead.status}</Badge>
+        <Link to={`/leads/${lead._id}`}>
+          <Button size="sm" variant="outline-primary" className="text-nowrap">
+            {actionLabel}
+          </Button>
+        </Link>
+      </div>
+    </div>
+  )
+}
 
 const Profile = () => {
   const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
   const [leads, setLeads] = useState<LeadType[]>([])
+  const [meetingLeads, setMeetingLeads] = useState<LeadType[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const timezone = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -28,23 +67,40 @@ const Profile = () => {
 
     setLoading(true)
     setError('')
-    apiFetch<{ data: LeadType[] }>('/leads?limit=50', { token })
-      .then((res) => setLeads(res.data))
+    Promise.all([
+      apiFetch<{ data: LeadType[] }>('/leads?limit=50', { token }),
+      apiFetch<{ data: LeadType[] }>('/leads?limit=50&upcomingMeeting=true', { token }),
+    ])
+      .then(([leadRes, meetingRes]) => {
+        setLeads(leadRes.data)
+        setMeetingLeads(meetingRes.data)
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Unable to load dashboard data'))
       .finally(() => setLoading(false))
   }, [token])
 
   const todayMeetings = useMemo(
     () =>
-      leads
+      meetingLeads
         .filter((lead) => lead.nextMeeting?.startsAt && dayKey(lead.nextMeeting.startsAt, timezone) === dayKey(new Date(), timezone))
         .sort((a, b) => new Date(a.nextMeeting!.startsAt!).getTime() - new Date(b.nextMeeting!.startsAt!).getTime()),
-    [leads, timezone],
+    [meetingLeads, timezone],
+  )
+  const upcomingMeetings = useMemo(
+    () =>
+      meetingLeads
+        .filter((lead) => {
+          const startsAt = lead.nextMeeting?.startsAt
+          return startsAt && new Date(startsAt).getTime() > Date.now() && dayKey(startsAt, timezone) !== dayKey(new Date(), timezone)
+        })
+        .sort((a, b) => new Date(a.nextMeeting!.startsAt!).getTime() - new Date(b.nextMeeting!.startsAt!).getTime())
+        .slice(0, 5),
+    [meetingLeads, timezone],
   )
   const activeLeads = leads.filter((lead) => !['WON', 'LOST', 'ON_HOLD'].includes(lead.status))
   const wonLeads = leads.filter((lead) => lead.status === 'WON')
   const recentLeads = [...leads].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 8)
-  const title = user?.role === 'sales' ? 'My Sales Dashboard' : 'Team Dashboard'
+  const title = dashboardTitles[user?.role as keyof typeof dashboardTitles] || 'Team Dashboard'
   const stats = [
     { label: 'Total Leads', value: leads.length, variant: 'primary' },
     { label: 'Active Leads', value: activeLeads.length, variant: 'info' },
@@ -57,15 +113,27 @@ const Profile = () => {
       <PageBreadcrumb subName="Dashboards" title={title} />
       <PageMetaData title={title} />
 
-      <Row>
+      <Card className="mb-4">
+        <CardBody className="d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div>
+            <h4 className="mb-1">Hi {user?.name || 'Salesperson'}</h4>
+            <div className="text-muted">Here are your leads, meetings, and next actions for today.</div>
+          </div>
+          <Badge bg="light" text="dark">
+            {timezone}
+          </Badge>
+        </CardBody>
+      </Card>
+
+      <Row className="g-3 mb-4">
         {stats.map((item) => (
           <Col md={6} xl={3} key={item.label}>
-            <Card>
+            <Card className="h-100">
               <CardBody>
                 <div className="text-muted fs-13">{item.label}</div>
                 <div className="d-flex align-items-center justify-content-between mt-2">
                   <h3 className="mb-0">{item.value}</h3>
-                  <Badge bg={item.variant}>{user?.role === 'sales' ? 'Mine' : 'Allowed'}</Badge>
+                  <Badge bg={item.variant}>{dashboardTitles[user?.role as keyof typeof dashboardTitles] ? 'Mine' : 'Allowed'}</Badge>
                 </div>
               </CardBody>
             </Card>
@@ -73,7 +141,7 @@ const Profile = () => {
         ))}
       </Row>
 
-      <Card>
+      <Card className="mb-4">
         <CardBody>
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div>
@@ -95,52 +163,46 @@ const Profile = () => {
           {error && <Alert variant="danger">{error}</Alert>}
           {!todayMeetings.length && !error && !loading ? <Alert variant="info">No meetings scheduled for today</Alert> : null}
           {todayMeetings.length ? (
-            <div className="table-responsive">
-              <Table hover className="table-nowrap align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Meeting</th>
-                    <th>Lead</th>
-                    <th>Company</th>
-                    <th>Assigned</th>
-                    <th>Status</th>
-                    <th className="text-end">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {todayMeetings.map((lead) => (
-                    <tr key={lead._id}>
-                      <td>{lead.nextMeeting?.startsAt ? timeText(lead.nextMeeting.startsAt, timezone) : '-'}</td>
-                      <td>
-                        <div className="fw-medium">{lead.nextMeeting?.title || lead.name}</div>
-                        <div className="text-muted fs-13">{lead.nextMeeting?.notes || '-'}</div>
-                      </td>
-                      <td>{lead.name}</td>
-                      <td>{lead.company || '-'}</td>
-                      <td>{ownerName(lead.owner) || user?.name || '-'}</td>
-                      <td>
-                        <Badge bg="success">{lead.status}</Badge>
-                      </td>
-                      <td className="text-end">
-                        <Link to={`/leads/${lead._id}`}>
-                          <Button size="sm" variant="outline-primary" className="text-nowrap">
-                            Update Detail
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
+            <Row className="g-3">
+              {todayMeetings.map((lead) => (
+                <Col md={6} xl={4} key={lead._id}>
+                  <MeetingCard lead={lead} timezone={timezone} actionLabel="Update Detail" />
+                </Col>
+              ))}
+            </Row>
           ) : null}
         </CardBody>
       </Card>
 
-      <TodoCompletedList />
+      <Card className="mb-4">
+        <CardBody>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h4 className="card-title mb-1">Upcoming Meetings</h4>
+              <div className="text-muted">Next scheduled meetings after today</div>
+            </div>
+            <Badge bg="light" text="dark">
+              {upcomingMeetings.length} upcoming
+            </Badge>
+          </div>
+          {!upcomingMeetings.length && !error && !loading ? <Alert variant="info" className="mb-0">No upcoming meetings scheduled</Alert> : null}
+          {upcomingMeetings.length ? (
+            <Row className="g-3">
+              {upcomingMeetings.map((lead) => (
+                <Col md={6} xl={4} key={lead._id}>
+                  <MeetingCard lead={lead} timezone={timezone} showDate actionLabel="View Lead" />
+                </Col>
+              ))}
+            </Row>
+          ) : null}
+        </CardBody>
+      </Card>
 
-      <Card>
+      <div className="mb-4">
+        <TodoCompletedList />
+      </div>
+
+      <Card className="mb-4">
         <CardBody>
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div>

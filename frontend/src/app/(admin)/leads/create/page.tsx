@@ -15,10 +15,14 @@ const emptyLeadForm = {
   name: '',
   source: 'Manual entry',
   sourceType: 'manual',
+  campaign: '',
   company: '',
+  siteAddress: '',
+  googleMapUrl: '',
   email: '',
   phone: '',
   productInterest: '',
+  territory: '',
 }
 
 const emptyArchitectForm = {
@@ -29,6 +33,30 @@ const emptyArchitectForm = {
   city: '',
   specialty: '',
   notes: '',
+}
+
+const dummyLeadForm = {
+  name: 'Rohan Malhotra',
+  source: 'India Facade Summit',
+  sourceType: 'manual',
+  campaign: 'Metal facade India architect event',
+  company: 'Malhotra Design Associates',
+  siteAddress: 'Bandra Kurla Complex, Mumbai',
+  googleMapUrl: 'https://maps.google.com/?q=Bandra+Kurla+Complex+Mumbai',
+  email: 'rohan.malhotra@example.in',
+  phone: '+919820000201',
+  productInterest: 'Metal facade cladding',
+  territory: 'India - Mumbai',
+}
+
+const dummyArchitectForm = {
+  name: 'Anika Rao',
+  phone: '+919820000202',
+  email: 'anika.rao@example.in',
+  company: 'Rao Facade Studio',
+  city: 'Mumbai',
+  specialty: 'Metal facade event - India Facade Summit',
+  notes: 'Dummy architect lead from India metal facade event.',
 }
 
 const normalizeHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -77,7 +105,11 @@ const leadFromCsv = (row: Record<string, string>) => ({
   phone: firstValue(row, ['phone', 'mobile', 'mobile number']),
   email: firstValue(row, ['email', 'email address']),
   company: firstValue(row, ['company', 'firm name', 'firm name and address']),
+  siteAddress: firstValue(row, ['site address', 'address', 'project address']),
+  googleMapUrl: firstValue(row, ['google map url', 'google maps url', 'map url', 'google map link']),
   productInterest: firstValue(row, ['product', 'product enquiry', 'product interest']),
+  campaign: firstValue(row, ['campaign', 'event']),
+  territory: firstValue(row, ['territory', 'city', 'region']),
   source: firstValue(row, ['source', 'lead source']) || 'CSV import',
   sourceType: firstValue(row, ['source type']) || 'csv',
 })
@@ -95,13 +127,13 @@ const architectFromCsv = (row: Record<string, string>) => ({
 const csvSample = (mode: FormMode) =>
   mode === 'architect'
     ? 'Full Name,Mobile Number,Email,Firm Name,City,Project Type,Notes\nAsha Mehta,9876543210,asha@example.com,Build Studio,Mumbai,Residential,Met at Bharat Build Con'
-    : 'Full Name,Mobile Number,Email,Company,Product Enquiry,Source\nRavi Kumar,9876543210,ravi@example.com,Prime Build,HPL Sheets,Website'
+    : 'Full Name,Mobile Number,Email,Company,Site Address,Google Map URL,Product Enquiry,Source,Campaign,Territory\nRavi Kumar,9876543210,ravi@example.com,Prime Build,"BKC, Mumbai",https://maps.google.com/?q=BKC+Mumbai,HPL Sheets,Website,Metal facade India architect event,India - Mumbai'
 
 const csvDownloadHref = (mode: FormMode) => `data:text/csv;charset=utf-8,${encodeURIComponent(csvSample(mode))}`
 const csvHeaders = (mode: FormMode) =>
   mode === 'architect'
     ? 'Full Name, Mobile Number, Email, Firm Name, City, Project Type, Notes'
-    : 'Full Name, Mobile Number, Email, Company, Product Enquiry, Source'
+    : 'Full Name, Mobile Number, Email, Company, Site Address, Google Map URL, Product Enquiry, Source, Campaign, Territory'
 
 const CreateLeadPage = () => {
   const user = useAuthStore((state) => state.user)
@@ -176,6 +208,7 @@ const CreateLeadPage = () => {
   }
 
   const selectCsv = (event: ChangeEvent<HTMLInputElement>) => setCsvFile(event.target.files?.[0])
+  const loadDummy = () => (isArchitect ? setArchitectForm(dummyArchitectForm) : setLeadForm(dummyLeadForm))
 
   if (!canCreate) {
     return (
@@ -308,8 +341,24 @@ const CreateLeadPage = () => {
                   <Form.Control value={leadForm.company} onChange={(event) => setLeadForm({ ...leadForm, company: event.target.value })} placeholder="Company or firm" />
                 </Form.Group>
                 <Form.Group as={Col} md={6}>
+                  <Form.Label>Site address</Form.Label>
+                  <Form.Control value={leadForm.siteAddress} onChange={(event) => setLeadForm({ ...leadForm, siteAddress: event.target.value })} placeholder="Project or site address" />
+                </Form.Group>
+                <Form.Group as={Col} md={6}>
+                  <Form.Label>Google Map URL</Form.Label>
+                  <Form.Control type="url" value={leadForm.googleMapUrl} onChange={(event) => setLeadForm({ ...leadForm, googleMapUrl: event.target.value })} placeholder="https://maps.google.com/..." />
+                </Form.Group>
+                <Form.Group as={Col} md={6}>
                   <Form.Label>Product enquiry</Form.Label>
                   <Form.Control value={leadForm.productInterest} onChange={(event) => setLeadForm({ ...leadForm, productInterest: event.target.value })} placeholder="Product or service required" />
+                </Form.Group>
+                <Form.Group as={Col} md={6}>
+                  <Form.Label>Campaign</Form.Label>
+                  <Form.Control value={leadForm.campaign} onChange={(event) => setLeadForm({ ...leadForm, campaign: event.target.value })} placeholder="Campaign or event name" />
+                </Form.Group>
+                <Form.Group as={Col} md={6}>
+                  <Form.Label>Territory</Form.Label>
+                  <Form.Control value={leadForm.territory} onChange={(event) => setLeadForm({ ...leadForm, territory: event.target.value })} placeholder="City, region, or territory" />
                 </Form.Group>
                 <Form.Group as={Col} md={3}>
                   <Form.Label>Lead source</Form.Label>
@@ -329,6 +378,9 @@ const CreateLeadPage = () => {
             )}
 
             <div className="d-flex justify-content-end mt-4">
+              <Button type="button" variant="outline-secondary" className="me-2" onClick={loadDummy}>
+                Use dummy
+              </Button>
               <Button type="submit" className="px-4" disabled={saving}>
                 <IconifyIcon icon="bx:plus" className="me-1" />
                 {saving ? 'Creating...' : isArchitect ? 'Create Architect Lead' : 'Create Lead'}

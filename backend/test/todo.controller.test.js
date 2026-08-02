@@ -32,6 +32,7 @@ afterEach(() => {
 
 test('salespeople only list their assigned todos', async () => {
   let query;
+  let limit;
   Todo.find = (filter) => {
     query = filter;
     return {
@@ -41,15 +42,17 @@ test('salespeople only list their assigned todos', async () => {
       sort() {
         return this;
       },
-      limit() {
+      limit(value) {
+        limit = value;
         return Promise.resolve([]);
       },
     };
   };
 
-  await listTodos({ user: { _id: 'sales-1', role: 'sales' } }, res());
+  await listTodos({ user: { _id: 'sales-1', role: 'sales' }, query: { limit: '5' } }, res());
 
   assert.deepEqual(query, { assignedTo: 'sales-1' });
+  assert.equal(limit, 5);
 });
 
 test('admin can assign todo to any active user', async () => {

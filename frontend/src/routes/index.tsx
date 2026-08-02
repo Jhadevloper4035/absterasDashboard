@@ -16,6 +16,7 @@ const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
 const WonLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
 const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
 const CreateTask = lazy(() => import('@/app/(admin)/tasks/create/page'))
+const WorkTypes = lazy(() => import('@/app/(admin)/tasks/work-types/page'))
 const TaskDetail = lazy(() => import('@/app/(admin)/tasks/[taskId]/page'))
 const UpdateTask = lazy(() => import('@/app/(admin)/tasks/[taskId]/edit/page'))
 
@@ -38,6 +39,7 @@ const Contacts = lazy(() => import('@/app/(admin)/apps/contacts/page'))
 const Invoices = lazy(() => import('@/app/(admin)/invoices/page'))
 const InvoiceDetails = lazy(() => import('@/app/(admin)/invoices/[invoiceId]/page'))
 const Todo = lazy(() => import('@/app/(admin)/apps/todo/page'))
+const NotificationsPage = lazy(() => import('@/app/(admin)/notifications/page'))
 
 // Pages Routes
 const Welcome = lazy(() => import('@/app/(admin)/pages/welcome/page'))
@@ -139,7 +141,7 @@ const ResetPassword2 = lazy(() => import('@/app/(other)/auth/reset-pass-2/page')
 const LockScreen = lazy(() => import('@/app/(other)/auth/lock-screen/page'))
 const LockScreen2 = lazy(() => import('@/app/(other)/auth/lock-screen-2/page'))
 
-const dashboardPath = (role?: string) => (role === 'sales' ? '/dashboard/sales' : '/dashboard/analytics')
+const dashboardPath = (role?: string) => (['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics')
 
 const DashboardRedirect = () => {
   const role = useAuthStore((state) => state.user?.role)
@@ -155,6 +157,7 @@ export type RoutesProps = {
 }
 
 const adminRoles: UserType['role'][] = ['superadmin', 'admin']
+const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
 const superadminRoles: UserType['role'][] = ['superadmin']
 const superadminOnly = (routes: RoutesProps[]) => routes.map((route) => ({ ...route, roles: route.roles ?? superadminRoles }))
 
@@ -186,9 +189,9 @@ const generalRoutes: RoutesProps[] = [
   },
   {
     path: '/dashboard/sales',
-    name: 'Sales',
+    name: 'Team Profile Dashboard',
     element: <Sales />,
-    roles: ['sales'],
+    roles: teamRoles,
   },
   {
     path: '/users',
@@ -360,26 +363,38 @@ const appsRoutes: RoutesProps[] = [
   {
     name: 'All Tasks',
     path: '/tasks/all',
-    element: <Schedule />,
-    roles: ['superadmin', 'admin'],
+    element: <Todo />,
+    roles: [...adminRoles, ...teamRoles],
   },
   {
     name: 'Pending Tasks',
     path: '/tasks/pending',
-    element: <Schedule />,
+    element: <Todo />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    name: 'Exceeded Deadline Tasks',
+    path: '/tasks/exceeded-deadline',
+    element: <Todo />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    name: 'Work Types',
+    path: '/tasks/work-types',
+    element: <WorkTypes />,
     roles: ['superadmin', 'admin'],
   },
   {
     name: 'Task Detail',
     path: '/tasks/:taskId',
     element: <TaskDetail />,
-    roles: ['superadmin', 'admin'],
+    roles: [...adminRoles, ...teamRoles],
   },
   {
     name: 'Update Task',
     path: '/tasks/:taskId/edit',
     element: <UpdateTask />,
-    roles: ['superadmin', 'admin'],
+    roles: [...adminRoles, ...teamRoles],
   },
   {
     name: 'Integration',
@@ -397,6 +412,12 @@ const appsRoutes: RoutesProps[] = [
     name: 'Todo',
     path: '/apps/todo',
     element: <Todo />,
+  },
+  {
+    name: 'Notifications',
+    path: '/notifications',
+    element: <NotificationsPage />,
+    roles: [...adminRoles, ...teamRoles],
   },
   {
     name: 'Social',

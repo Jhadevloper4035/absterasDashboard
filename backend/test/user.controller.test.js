@@ -105,7 +105,30 @@ test('cannot demote the only superadmin', async () => {
   assert.equal(response.body.error.message, 'One superadmin is required');
 });
 
-test('admin lists sales users only', async () => {
+test('updating a privileged user can keep the same role', async () => {
+  User.findById = async () => ({ _id: 'admin-1', role: 'admin' });
+  User.exists = async () => ({ _id: 'admin-2' });
+  User.findByIdAndUpdate = async (id, update) => {
+    assert.equal(id, 'admin-1');
+    assert.deepEqual(update, { name: 'Admin Updated', role: 'admin' });
+    return { _id: id, ...update };
+  };
+
+  const response = res();
+  await updateUser(
+    {
+      user: { role: 'superadmin' },
+      params: { id: 'admin-1' },
+      body: { name: 'Admin Updated', role: 'admin' },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.data.name, 'Admin Updated');
+});
+
+test('admin lists team users only', async () => {
   let filter;
   User.find = (value) => {
     filter = value;
@@ -122,8 +145,31 @@ test('admin lists sales users only', async () => {
   const response = res();
   await listUsers({ user: { role: 'admin' } }, response);
 
-  assert.deepEqual(filter, { role: 'sales' });
+  assert.deepEqual(filter, { role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
   assert.deepEqual(response.body.data, []);
+});
+
+test('admin can create operations users', async () => {
+  User.exists = async () => null;
+  User.create = async (user) => ({ _id: 'operations-1', role: user.role, email: user.email });
+
+  const response = res();
+  await createUser(
+    {
+      user: { role: 'admin' },
+      body: {
+        name: 'Operations User',
+        email: 'operations@example.com',
+        phone: '9876543210',
+        password: 'secret-password',
+        role: 'operations',
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.body.data.role, 'operations');
 });
 
 test('admin cannot create privileged users', async () => {
@@ -143,7 +189,7 @@ test('admin cannot create privileged users', async () => {
   );
 
   assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Admins can create sales users only');
+  assert.equal(response.body.error.message, 'Admins can create team users only');
 });
 
 test('admin cannot read another admin profile', async () => {
@@ -153,7 +199,7 @@ test('admin cannot read another admin profile', async () => {
   await getUser({ user: { role: 'admin' }, params: { id: 'admin-2' } }, response);
 
   assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Admins can manage sales users only');
+  assert.equal(response.body.error.message, 'Admins can manage team users only');
 });
 
 test('admin cannot promote a sales user', async () => {
@@ -170,7 +216,7 @@ test('admin cannot promote a sales user', async () => {
   );
 
   assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Admins can manage sales users only');
+  assert.equal(response.body.error.message, 'Admins can manage team users only');
 });
 
 test('updates user display name without changing assignment identity', async () => {
@@ -194,6 +240,45 @@ test('updates user display name without changing assignment identity', async () 
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.data._id, 'sales-1');
   assert.equal(response.body.data.name, 'Updated Name');
+});
+
+test('updates extended user profile fields from the User model', async () => {
+  User.findById = async () => ({ _id: 'sales-1', role: 'sales' });
+  User.findByIdAndUpdate = async (id, update, options) => {
+    assert.equal(id, 'sales-1');
+    assert.deepEqual(update, {
+      whatsappNumber: '+971500000001',
+      territories: ['Dubai', 'Abu Dhabi'],
+      notificationPreferences: {
+        inApp: true,
+        whatsapp: true,
+        morningSummary: { enabled: true, time: '08:30' },
+      },
+    });
+    assert.equal(options.runValidators, true);
+    return { _id: id, role: 'sales', ...update };
+  };
+
+  const response = res();
+  await updateUser(
+    {
+      user: { role: 'admin' },
+      params: { id: 'sales-1' },
+      body: {
+        whatsappNumber: '+971500000001',
+        territories: 'Dubai, Abu Dhabi, ',
+        notificationPreferences: {
+          inApp: true,
+          whatsapp: true,
+          morningSummary: { enabled: true, time: '08:30' },
+        },
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.data.territories, ['Dubai', 'Abu Dhabi']);
 });
 
 test('user updates ignore fields outside the editable profile allowlist', async () => {

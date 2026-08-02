@@ -30,6 +30,7 @@ const isToday = (value?: string) => Boolean(value && dayKey(value) === dayKey(ne
 const isOverdue = (value?: string) => Boolean(value && new Date(value).getTime() < Date.now() && !isToday(value))
 const taskStatusColor = (status: string) => (status === 'Done' ? 'success' : status === 'Blocked' ? 'danger' : ['In Progress', 'Review', 'Testing'].includes(status) ? 'warning' : 'primary')
 const leadStatusColor = (lead: LeadType) => (lead.status === 'WON' ? 'success' : lead.assignmentException ? 'warning' : closedLeadStatuses.includes(lead.status) ? 'secondary' : 'primary')
+const teamRoles = ['sales', 'operations', 'accounts', 'designers']
 
 const AdminDashboard = () => {
   const token = useAuthStore((state) => state.token)
@@ -77,7 +78,7 @@ const AdminDashboard = () => {
     [openTasks],
   )
   const recentLeads = [...leads].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 6)
-  const activeSalesUsers = users.filter((item) => item.role === 'sales' && item.status === 'active')
+  const activeTeamUsers = users.filter((item) => teamRoles.includes(item.role) && item.status === 'active')
 
   const stats = [
     { label: 'Active leads', value: activeLeads.length, note: 'Follow-up required', bg: 'primary' },
@@ -85,16 +86,16 @@ const AdminDashboard = () => {
     { label: "Today's meetings", value: todayMeetings.length, note: 'Scheduled', bg: 'info' },
     { label: 'Overdue tasks', value: overdueTasks.length, note: 'Action required', bg: overdueTasks.length ? 'danger' : 'success' },
     { label: 'Tasks due today', value: dueTodayTasks.length, note: 'Due today', bg: 'warning' },
-    { label: 'Sales users', value: activeSalesUsers.length, note: 'Active sales team', bg: 'secondary' },
+    { label: 'Team users', value: activeTeamUsers.length, note: 'Active team', bg: 'secondary' },
   ]
 
   return (
     <>
-      <PageBreadcrumb title="Admin Dashboard" subName="CRM" />
-      <PageMetaData title="Admin Dashboard" />
+      <PageBreadcrumb title="Absteras Facade Dashboard" subName="Facade CRM" />
+      <PageMetaData title="Absteras Facade Dashboard" />
 
       <div className="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-4">
-        <div className="text-muted">Operational CRM overview for leads, meetings, tasks, and sales workload.</div>
+        <div className="text-muted">Absteras Facade Company overview for leads, meetings, tasks, and sales workload.</div>
         <div className="d-flex gap-2 flex-wrap ms-auto">
           <Link to="/leads/create" className="btn btn-primary text-nowrap">Create Lead</Link>
           <Link to="/tasks/create" className="btn btn-outline-primary text-nowrap">Create Task</Link>

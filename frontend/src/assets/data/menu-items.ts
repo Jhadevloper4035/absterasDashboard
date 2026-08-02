@@ -1,5 +1,9 @@
 import type { MenuItemType } from '@/types/menu'
 
+const adminRoles = ['superadmin', 'admin']
+const teamRoles = ['sales', 'operations', 'accounts', 'designers']
+const allRoles = [...adminRoles, ...teamRoles]
+
 export const MENU_ITEMS: MenuItemType[] = [
   {
     key: 'general',
@@ -18,11 +22,11 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:home-duotone',
     label: 'Dashboard',
     url: '/dashboard/sales',
-    roles: ['sales'],
+    roles: teamRoles,
   },
   {
     key: 'crm',
-    label: 'CRM',
+    label: 'BASTERAS FACADE',
     isTitle: true,
   },
   {
@@ -30,7 +34,14 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:check-circle-1-duotone',
     label: 'Todo',
     url: '/apps/todo',
-    roles: ['superadmin', 'admin', 'sales'],
+    roles: allRoles,
+  },
+  {
+    key: 'notifications',
+    icon: 'iconamoon:notification-duotone',
+    label: 'Notifications',
+    url: '/notifications',
+    roles: allRoles,
   },
   {
     key: 'leads',
@@ -82,7 +93,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'tasks',
     icon: 'iconamoon:calendar-1-duotone',
     label: 'Task Management',
-    roles: ['superadmin', 'admin'],
+    roles: allRoles,
     children: [
       {
         key: 'tasks-create',
@@ -99,10 +110,32 @@ export const MENU_ITEMS: MenuItemType[] = [
         roles: ['superadmin', 'admin'],
       },
       {
+        key: 'tasks-mine',
+        label: 'My Tasks',
+        url: '/tasks/all',
+        parentKey: 'tasks',
+        roles: teamRoles,
+      },
+      {
         key: 'tasks-pending',
         label: 'Pending Tasks',
         url: '/tasks/pending',
         parentKey: 'tasks',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'tasks-exceeded-deadline',
+        label: 'Exceeded Deadline',
+        url: '/tasks/exceeded-deadline',
+        parentKey: 'tasks',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'tasks-work-types',
+        label: 'Work Types',
+        url: '/tasks/work-types',
+        parentKey: 'tasks',
+        roles: ['superadmin', 'admin'],
       },
     ],
   },

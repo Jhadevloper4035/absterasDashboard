@@ -2,7 +2,15 @@ import { User } from '../models/user.model.js';
 import { hashPassword } from '../services/password.service.js';
 
 const SINGLE_USER_ROLES = ['superadmin', 'admin'];
-const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'role', 'status', 'timezone'];
+const TEAM_USER_ROLES = ['sales', 'operations', 'accounts', 'designers'];
+const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'whatsappNumber', 'role', 'status', 'timezone', 'notificationPreferences'];
+
+function cleanTerritories(territories) {
+  return (Array.isArray(territories) ? territories : String(territories || '').split(','))
+    .map((territory) => String(territory).trim())
+    .filter(Boolean)
+    .slice(0, 50);
+}
 
 function stripPassword(body) {
   const { password, passwordHash, ...user } = body;
@@ -10,10 +18,12 @@ function stripPassword(body) {
 }
 
 function allowedUserUpdate(body) {
-  return USER_UPDATE_FIELDS.reduce((update, field) => {
-    if (body[field] !== undefined) update[field] = body[field];
-    return update;
+  const update = USER_UPDATE_FIELDS.reduce((fields, field) => {
+    if (body[field] !== undefined) fields[field] = body[field];
+    return fields;
   }, {});
+  if (body.territories !== undefined) update.territories = cleanTerritories(body.territories);
+  return update;
 }
 
 async function roleLimitError(role, currentUserId) {
@@ -26,7 +36,7 @@ async function roleLimitError(role, currentUserId) {
 }
 
 function adminCanManage(actor, targetUser) {
-  return actor?.role === 'admin' ? targetUser.role === 'sales' : true;
+  return actor?.role === 'admin' ? TEAM_USER_ROLES.includes(targetUser.role) : true;
 }
 
 export async function createUser(req, res) {
@@ -38,8 +48,8 @@ export async function createUser(req, res) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
 
-  if (req.user?.role === 'admin' && req.body.role !== 'sales') {
-    return res.status(403).json({ error: { message: 'Admins can create sales users only' } });
+  if (req.user?.role === 'admin' && !TEAM_USER_ROLES.includes(req.body.role)) {
+    return res.status(403).json({ error: { message: 'Admins can create team users only' } });
   }
 
   const roleError = await roleLimitError(req.body.role);
@@ -56,7 +66,7 @@ export async function createUser(req, res) {
 }
 
 export async function listUsers(req, res) {
-  const filter = req.user?.role === 'admin' ? { role: 'sales' } : {};
+  const filter = req.user?.role === 'admin' ? { role: { $in: TEAM_USER_ROLES } } : {};
   const users = await User.find(filter).sort({ createdAt: -1 }).limit(50);
   res.json({ data: users });
 }
@@ -69,7 +79,7 @@ export async function getUser(req, res) {
   }
 
   if (!adminCanManage(req.user, user)) {
-    return res.status(403).json({ error: { message: 'Admins can manage sales users only' } });
+    return res.status(403).json({ error: { message: 'Admins can manage team users only' } });
   }
 
   return res.json({ data: user });
@@ -83,15 +93,15 @@ export async function updateUser(req, res) {
     return res.status(404).json({ error: { message: 'User not found' } });
   }
 
-  if (!adminCanManage(req.user, currentUser) || (req.user?.role === 'admin' && update.role && update.role !== 'sales')) {
-    return res.status(403).json({ error: { message: 'Admins can manage sales users only' } });
+  if (!adminCanManage(req.user, currentUser) || (req.user?.role === 'admin' && update.role && !TEAM_USER_ROLES.includes(update.role))) {
+    return res.status(403).json({ error: { message: 'Admins can manage team users only' } });
   }
 
   if (update.phone !== undefined && !String(update.phone).trim()) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
 
-  if (update.role) {
+  if (update.role && update.role !== currentUser.role) {
     const roleError = await roleLimitError(update.role, currentUser._id);
     if (roleError) {
       return res.status(400).json({ error: { message: roleError } });

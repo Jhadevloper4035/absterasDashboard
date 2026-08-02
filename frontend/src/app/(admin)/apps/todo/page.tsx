@@ -17,9 +17,12 @@ import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
+import { defaultTaskWorkTypes, mergeTaskWorkTypes } from '@/helpers/taskWorkTypes'
+import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { UploadFileType } from '@/types/component-props'
 import type { UserType } from '@/types/auth'
+import { formatFileSize } from '@/utils/other'
 
 type TodoStatus = 'Pending' | 'In-Progress' | 'Completed'
 type TaskStatus = 'Backlog' | 'To Do' | 'In Progress' | 'Review' | 'Testing' | 'Blocked' | 'Done'
@@ -30,6 +33,7 @@ type TaskAttachment = { key: string; url?: string; contentType?: string; origina
 
 type SalesTodo = {
   _id: string
+  ticketNumber?: string
   title: string
   dueDate?: string
   status: TodoStatus | TaskStatus
@@ -40,31 +44,23 @@ type SalesTodo = {
   completedAt?: string
   createdAt?: string
   description?: string
-  acceptanceCriteria?: string
   projectEpic?: string
-  labels?: string[]
   dependenciesBlockers?: string
-  technicalNotes?: string
   attachments?: TaskAttachment[]
   estimate?: string
-  definitionOfDone?: string
 }
 
 const emptyForm = {
   title: '',
   description: '',
-  acceptanceCriteria: '',
   dueDate: '',
   status: 'Pending' as TodoStatus | TaskStatus,
   priority: 'Medium' as TodoPriority,
   assignedTo: '',
   projectEpic: '',
-  labels: '',
   dependenciesBlockers: '',
-  technicalNotes: '',
   attachments: [] as TaskAttachment[],
   estimate: '',
-  definitionOfDone: '',
 }
 const todoStatuses = ['Pending', 'In-Progress', 'Completed']
 const taskStatuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Testing', 'Blocked', 'Done']
@@ -73,6 +69,12 @@ const priorityColor = (priority: TodoPriority) => (priority === 'Critical' || pr
 const priorityBg = priorityColor
 const personName = (person?: string | TodoUser) => (typeof person === 'object' ? person.name : '')
 const personId = (person?: string | TodoUser) => (typeof person === 'object' ? person._id : person)
+const personRole = (person?: string | TodoUser) => (typeof person === 'object' ? person.role : '')
+const dayKey = (value: string | Date) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
+const isToday = (value?: string) => Boolean(value && dayKey(value) === dayKey(new Date()))
+const isOverdue = (todo: SalesTodo) => Boolean(todo.dueDate && todo.status !== 'Completed' && todo.status !== 'Done' && new Date(todo.dueDate).getTime() < Date.now() && !isToday(todo.dueDate))
+const attachmentName = (file: TaskAttachment) => (file.originalName || file.key).replace(/^\.?\//, '')
+const attachmentExtension = (file: TaskAttachment) => attachmentName(file).split('.').pop()?.toUpperCase() || 'FILE'
 
 const TODO = () => {
   const { pathname } = useLocation()
@@ -80,39 +82,63 @@ const TODO = () => {
   const user = useAuthStore((state) => state.user)
   const [todos, setTodos] = useState<SalesTodo[]>([])
   const [users, setUsers] = useState<UserType[]>([])
+  const [workTypesByRole, setWorkTypesByRole] = useState(defaultTaskWorkTypes)
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState('')
   const [search, setSearch] = useState('')
   const [assigneeFilter, setAssigneeFilter] = useState('')
+  const [groupFilter, setGroupFilter] = useState('')
+  const [workTypeFilter, setWorkTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
   const [fromDateFilter, setFromDateFilter] = useState('')
   const [toDateFilter, setToDateFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadFailed, setUploadFailed] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<SalesTodo>()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const isTodoPage = pathname.includes('/apps/todo')
   const canAssign = !isTodoPage && (user?.role === 'superadmin' || user?.role === 'admin')
   const isPendingPage = pathname.includes('/tasks/pending')
+  const isExceededDeadlinePage = pathname.includes('/tasks/exceeded-deadline')
   const isCreatePage = pathname.includes('/tasks/create')
   const itemName = isTodoPage ? 'Todo' : 'Task'
-  const pageTitle = isTodoPage ? 'Todo' : isCreatePage ? 'Create Task' : isPendingPage ? 'Pending Tasks' : 'All Tasks'
+  const pageTitle = isTodoPage ? 'Todo' : isCreatePage ? 'Create Task' : isExceededDeadlinePage ? 'Exceeded Deadline Tasks' : isPendingPage ? 'Pending Tasks' : canAssign ? 'All Tasks' : 'My Tasks'
   const apiPath = isTodoPage ? '/todos' : '/tasks'
-  const resetForm = () => setForm({ ...emptyForm, status: isTodoPage ? 'Pending' : 'To Do' })
+  const resetForm = () => {
+    setForm({ ...emptyForm, status: isTodoPage ? 'Pending' : 'To Do' })
+    setUploadFailed(false)
+    setUploadProgress(0)
+  }
+  const groups = useMemo(() => [...new Set([...Object.keys(workTypesByRole), ...users.map((person) => person.role).filter(Boolean)])].sort(), [users, workTypesByRole])
+  const workTypes = useMemo(() => {
+    const roleWorkTypes = groupFilter ? workTypesByRole[groupFilter] || [] : Object.values(workTypesByRole).flat()
+    const existingWorkTypes = todos
+      .filter((todo) => !groupFilter || personRole(todo.assignee || todo.assignedTo) === groupFilter)
+      .map((todo) => todo.projectEpic || '')
+      .filter(Boolean)
+
+    return [...new Set([...roleWorkTypes, ...existingWorkTypes])].sort()
+  }, [groupFilter, todos, workTypesByRole])
+  const selectedAssignee = users.find((person) => person._id === form.assignedTo)
+  const formWorkTypes = [...new Set([...(workTypesByRole[selectedAssignee?.role || user?.role || ''] || ['General']), form.projectEpic].filter(Boolean))]
 
   const load = async () => {
     if (!token) return
     setLoading(true)
     setError('')
     try {
-      const [todoRes, userRes] = await Promise.all([
-        apiFetch<{ data: SalesTodo[] }>(isPendingPage && !isTodoPage ? `${apiPath}?status=To%20Do` : apiPath, { token }),
+      const [todoRes, userRes, workTypeRes] = await Promise.all([
+        apiFetch<{ data: SalesTodo[] }>(isExceededDeadlinePage && !isTodoPage ? `${apiPath}?deadline=exceeded` : isPendingPage && !isTodoPage ? `${apiPath}?status=To%20Do` : apiPath, { token }),
         canAssign ? apiFetch<{ data: UserType[] }>('/tasks/assignees', { token }) : Promise.resolve({ data: [] }),
+        !isTodoPage ? apiFetch<{ data: Record<string, string[]> }>('/tasks/work-types', { token }) : Promise.resolve({ data: defaultTaskWorkTypes }),
       ])
       setTodos(todoRes.data)
       setUsers(userRes.data)
+      setWorkTypesByRole(mergeTaskWorkTypes(workTypeRes.data, false))
     } catch (e) {
       setError(e instanceof Error ? e.message : `Unable to load ${itemName.toLowerCase()}s`)
     } finally {
@@ -122,7 +148,7 @@ const TODO = () => {
 
   useEffect(() => {
     load()
-  }, [apiPath, canAssign, isPendingPage, isTodoPage, itemName, token])
+  }, [apiPath, canAssign, isExceededDeadlinePage, isPendingPage, isTodoPage, itemName, token])
 
   const visibleTodos = useMemo(() => {
     const query = search.toLowerCase().trim()
@@ -133,16 +159,19 @@ const TODO = () => {
         return (
           (!isTodoPage || personId(todo.assignedTo) === user?._id) &&
           (!isPendingPage || (isTodoPage ? todo.status === 'Pending' : todo.status === 'To Do')) &&
+          (!isExceededDeadlinePage || isOverdue(todo)) &&
           (!assigneeFilter || personId(todo.assignee || todo.assignedTo) === assigneeFilter) &&
+          (!groupFilter || personRole(todo.assignee || todo.assignedTo) === groupFilter) &&
+          (!workTypeFilter || todo.projectEpic === workTypeFilter) &&
           (!statusFilter || todo.status === statusFilter) &&
           (!priorityFilter || todo.priority === priorityFilter) &&
           (!fromDateFilter || (dueDate && dueDate >= fromDateFilter)) &&
           (!toDateFilter || (dueDate && dueDate <= toDateFilter)) &&
-          (!query || todo.title.toLowerCase().includes(query))
+          (!query || todo.title.toLowerCase().includes(query) || todo.ticketNumber?.toLowerCase().includes(query))
         )
       },
     )
-  }, [assigneeFilter, fromDateFilter, isPendingPage, isTodoPage, priorityFilter, search, statusFilter, toDateFilter, todos, user?._id])
+  }, [assigneeFilter, fromDateFilter, groupFilter, isExceededDeadlinePage, isPendingPage, isTodoPage, priorityFilter, search, statusFilter, toDateFilter, todos, user?._id, workTypeFilter])
   const completedTodos = visibleTodos.filter((todo) => todo.status === 'Completed' || todo.status === 'Done')
   const calendarEvents = visibleTodos
     .filter((todo) => todo.dueDate)
@@ -156,13 +185,14 @@ const TODO = () => {
   const uploadFiles = async (files: UploadFileType[]) => {
     if (!token || !files.length) return
     setUploading(true)
+    setUploadProgress(0)
+    setUploadFailed(false)
     setError('')
     try {
-      const body = new FormData()
-      files.forEach((file) => body.append('files', file))
-      const res = await apiFetch<{ data: TaskAttachment[] }>('/uploads/multipart', { method: 'POST', body, token })
-      setForm((value) => ({ ...value, attachments: [...value.attachments, ...res.data] }))
+      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setUploadProgress)
+      setForm((value) => ({ ...value, attachments: [...value.attachments, ...attachments] }))
     } catch (e) {
+      setUploadFailed(true)
       setError(e instanceof Error ? e.message : 'Unable to upload attachments')
     } finally {
       setUploading(false)
@@ -172,6 +202,14 @@ const TODO = () => {
   const saveTask = async (event: FormEvent) => {
     event.preventDefault()
     if (!token || !form.title.trim()) return
+    if (uploading) {
+      setError('Please wait until attachments finish uploading before saving the task.')
+      return
+    }
+    if (uploadFailed) {
+      setError('Attachment upload failed. Please upload the file again before saving the task.')
+      return
+    }
     setError('')
 
     try {
@@ -184,18 +222,14 @@ const TODO = () => {
       } : {
         title: form.title,
         description: form.description,
-        acceptanceCriteria: form.acceptanceCriteria,
         ...(canAssign ? { assignee: form.assignedTo } : {}),
         priority: form.priority,
         status: form.status,
         dueDate: form.dueDate || undefined,
         projectEpic: form.projectEpic,
-        labels: form.labels,
         dependenciesBlockers: form.dependenciesBlockers,
-        technicalNotes: form.technicalNotes,
         attachments: form.attachments,
         estimate: form.estimate,
-        definitionOfDone: form.definitionOfDone,
       }
       const res = await apiFetch<{ data: SalesTodo }>(editingId ? `${apiPath}/${editingId}` : apiPath, {
         method: editingId ? 'PATCH' : 'POST',
@@ -218,18 +252,14 @@ const TODO = () => {
     setForm({
       title: todo.title,
       description: todo.description || '',
-      acceptanceCriteria: todo.acceptanceCriteria || '',
       dueDate: todo.dueDate ? todo.dueDate.slice(0, 10) : '',
       status: todo.status,
       priority: todo.priority,
       assignedTo: personId(todo.assignee || todo.assignedTo) || '',
       projectEpic: todo.projectEpic || '',
-      labels: todo.labels?.join(', ') || '',
       dependenciesBlockers: todo.dependenciesBlockers || '',
-      technicalNotes: todo.technicalNotes || '',
       attachments: todo.attachments || [],
       estimate: todo.estimate || '',
-      definitionOfDone: todo.definitionOfDone || '',
     })
   }
 
@@ -323,7 +353,7 @@ const TODO = () => {
                       {canAssign && (
                         <Form.Group className="col-lg-6">
                           <Form.Label>Assign to</Form.Label>
-                          <Form.Select required value={form.assignedTo} onChange={(event) => setForm({ ...form, assignedTo: event.target.value })}>
+                          <Form.Select required value={form.assignedTo} onChange={(event) => setForm({ ...form, assignedTo: event.target.value, projectEpic: '' })}>
                             <option value="">Select assignee</option>
                             {users.map((person) => (
                               <option key={person._id} value={person._id}>
@@ -340,13 +370,18 @@ const TODO = () => {
                             <Form.Control as="textarea" rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                           </Form.Group>
                           <Form.Group className="col-lg-6">
-                            <Form.Label>Acceptance criteria</Form.Label>
-                            <Form.Control as="textarea" rows={3} value={form.acceptanceCriteria} onChange={(event) => setForm({ ...form, acceptanceCriteria: event.target.value })} />
+                            <Form.Label>Work type</Form.Label>
+                            <Form.Select value={form.projectEpic} onChange={(event) => setForm({ ...form, projectEpic: event.target.value })}>
+                              <option value="">Select work type</option>
+                              {formWorkTypes.map((workType) => (
+                                <option key={workType}>{workType}</option>
+                              ))}
+                            </Form.Select>
                           </Form.Group>
                         </>
                       )}
                       <Form.Group className={isTodoPage ? 'mb-2' : 'col-lg-3 col-md-6'}>
-                            <Form.Label>Due by</Form.Label>
+                            <Form.Label>Deadline</Form.Label>
                         <Form.Control type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} />
                       </Form.Group>
                       <Form.Group className={isTodoPage ? 'mb-2' : 'col-lg-3 col-md-6'}>
@@ -368,14 +403,6 @@ const TODO = () => {
                       </Form.Group>
                       {!isTodoPage && (
                         <>
-                          <Form.Group className="col-lg-3 col-md-6">
-                            <Form.Label>Project</Form.Label>
-                            <Form.Control value={form.projectEpic} onChange={(event) => setForm({ ...form, projectEpic: event.target.value })} />
-                          </Form.Group>
-                          <Form.Group className="col-lg-4">
-                            <Form.Label>Labels</Form.Label>
-                            <Form.Control value={form.labels} onChange={(event) => setForm({ ...form, labels: event.target.value })} placeholder="backend, bug, security" />
-                          </Form.Group>
                           <Form.Group className="col-lg-4">
                             <Form.Label>Time needed</Form.Label>
                             <Form.Control value={form.estimate} onChange={(event) => setForm({ ...form, estimate: event.target.value })} placeholder="5 points" />
@@ -384,14 +411,6 @@ const TODO = () => {
                             <Form.Label>Dependencies or blockers</Form.Label>
                             <Form.Control as="textarea" rows={2} value={form.dependenciesBlockers} onChange={(event) => setForm({ ...form, dependenciesBlockers: event.target.value })} />
                           </Form.Group>
-                          <Form.Group className="col-lg-4">
-                            <Form.Label>Work notes</Form.Label>
-                            <Form.Control as="textarea" rows={2} value={form.technicalNotes} onChange={(event) => setForm({ ...form, technicalNotes: event.target.value })} />
-                          </Form.Group>
-                          <Form.Group className="col-lg-4">
-                            <Form.Label>Definition of done</Form.Label>
-                            <Form.Control as="textarea" rows={2} value={form.definitionOfDone} onChange={(event) => setForm({ ...form, definitionOfDone: event.target.value })} />
-                          </Form.Group>
                           <Form.Group className="col-12">
                             <DropzoneFormInput
                               label="Attachments"
@@ -399,16 +418,38 @@ const TODO = () => {
                               iconProps={{ icon: 'bx:cloud-upload', height: 34, width: 34 }}
                               text="Drag & drop files here, or browse"
                               helpText={<span className="text-muted fs-13">PDF, Word, Excel, CSV, TXT, JPG, PNG, WebP. Up to 5 files.</span>}
-                              showPreview
+                              showPreview={false}
                               onFileUpload={uploadFiles}
                             />
-                            {uploading && <div className="text-muted fs-13 mt-1">Uploading...</div>}
+                            {uploading && (
+                              <div className="text-muted fs-13 mt-2">
+                                <div className="d-flex align-items-center gap-2 mb-1">
+                                  <Spinner className="spinner-border-sm" tag="span" />
+                                  <span>Uploading attachment... {uploadProgress}%</span>
+                                </div>
+                                <div className="progress" style={{ height: 6 }}>
+                                  <div className="progress-bar" style={{ width: `${uploadProgress}%` }} />
+                                </div>
+                              </div>
+                            )}
                             {form.attachments.length > 0 && (
-                              <div className="mt-2 d-flex gap-2 flex-wrap">
+                              <div className="attachment-list mt-3">
+                                <div className="text-muted fs-13 mb-2">Attached files</div>
                                 {form.attachments.map((file) => (
-                                  <Badge bg="light" text="dark" key={file.key}>
-                                    {file.originalName || file.key}
-                                  </Badge>
+                                  <div className="attachment-row" key={file.key}>
+                                    <span className="attachment-icon">
+                                      <IconifyIcon icon={file.contentType?.startsWith('image/') ? 'bx:image' : 'bx:paperclip'} />
+                                    </span>
+                                    <span className="attachment-meta">
+                                      <span className="attachment-name" title={attachmentName(file)}>{attachmentName(file)}</span>
+                                      <span className="attachment-detail">{attachmentExtension(file)}{file.size ? ` · ${formatFileSize(file.size)}` : ''}</span>
+                                    </span>
+                                    {file.url && (
+                                      <a className="attachment-download" href={file.url} target="_blank" rel="noreferrer" aria-label={`Download ${attachmentName(file)}`}>
+                                        <IconifyIcon icon="bx:download" />
+                                      </a>
+                                    )}
+                                  </div>
                                 ))}
                               </div>
                             )}
@@ -416,8 +457,8 @@ const TODO = () => {
                         </>
                       )}
                       <div className={isTodoPage ? 'd-flex gap-2' : 'col-12 d-flex gap-2'}>
-                        <Button type="submit" className="text-nowrap">
-                          {editingId ? `Update ${itemName}` : `Create ${itemName}`}
+                        <Button type="submit" className="text-nowrap" disabled={uploading}>
+                          {uploading ? 'Uploading...' : editingId ? `Update ${itemName}` : `Create ${itemName}`}
                         </Button>
                         {editingId && (
                           <Button type="button" variant="light" onClick={() => {
@@ -468,7 +509,7 @@ const TODO = () => {
           <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
             <div>
               <h4 className="card-title mb-1">{pageTitle}</h4>
-              <div className="text-muted">{isTodoPage ? `${user?.name || 'User'} task list` : 'Team tasks assigned across the CRM'}</div>
+              <div className="text-muted">{isTodoPage ? `${user?.name || 'User'} task list` : canAssign ? 'Team task ownership and deadlines' : 'Tasks assigned to you'}</div>
             </div>
             <Badge bg="light" text="dark">
               {visibleTodos.length} {itemName.toLowerCase()}s
@@ -491,6 +532,33 @@ const TODO = () => {
                   {users.map((person) => (
                     <option key={person._id} value={person._id}>
                       {person.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </div>
+            )}
+            {!isTodoPage && (
+              <div style={{ flex: '1 1 190px' }}>
+                <Form.Select value={groupFilter} onChange={(event) => {
+                  setGroupFilter(event.target.value)
+                  setWorkTypeFilter('')
+                }}>
+                  <option value="">All roles</option>
+                  {groups.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
+                </Form.Select>
+              </div>
+            )}
+            {!isTodoPage && (
+              <div style={{ flex: '1 1 190px' }}>
+                <Form.Select value={workTypeFilter} onChange={(event) => setWorkTypeFilter(event.target.value)}>
+                  <option value="">All work types</option>
+                  {workTypes.map((workType) => (
+                    <option key={workType} value={workType}>
+                      {workType}
                     </option>
                   ))}
                 </Form.Select>
@@ -528,10 +596,12 @@ const TODO = () => {
             <thead className="bg-light bg-opacity-50">
               <tr>
                 <th className="border-0 py-2 text-center" style={{ width: 48 }}>Done</th>
+                {!isTodoPage && <th className="border-0 py-2" style={{ width: 120 }}>Ticket</th>}
                 <th className="border-0 py-2" style={{ minWidth: 360 }}>{itemName}</th>
+                {!isTodoPage && <th className="border-0 py-2" style={{ width: 150 }}>Work Type</th>}
                 <th className="border-0 py-2" style={{ width: 170 }}>Assignee</th>
                 <th className="border-0 py-2" style={{ width: 180 }}>Created on</th>
-                <th className="border-0 py-2" style={{ width: 130 }}>Due date</th>
+                <th className="border-0 py-2" style={{ width: 160 }}>Deadline</th>
                 <th className="border-0 py-2" style={{ width: 130 }}>Status</th>
                 <th className="border-0 py-2" style={{ width: 130 }}>Priority</th>
                 <th className="border-0 py-2 text-center" style={{ width: 80 }}>View</th>
@@ -542,7 +612,7 @@ const TODO = () => {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="text-center py-5">
+                  <td colSpan={isTodoPage ? 10 : 12} className="text-center py-5">
                     <Spinner className="spinner-border-sm me-2" tag="span" />
                     <span className="text-muted">Loading {itemName.toLowerCase()}s...</span>
                   </td>
@@ -559,17 +629,16 @@ const TODO = () => {
                         onChange={(event) => updateStatus(todo, event.target.checked ? 'Completed' : 'Pending')}
                       />
                     </td>
+                    {!isTodoPage && (
+                      <td>
+                        <Badge bg="light" text="dark">{todo.ticketNumber || '-'}</Badge>
+                      </td>
+                    )}
                     <td style={{ whiteSpace: 'normal' }}>
                       <div className="fw-medium">{todo.title}</div>
                       {!isTodoPage && todo.description && <div className="text-muted fs-13">{todo.description}</div>}
-                      {!isTodoPage && !!todo.labels?.length && (
-                        <div className="d-flex gap-1 flex-wrap mt-1">
-                          {todo.labels.map((label) => (
-                            <Badge bg="light" text="dark" key={label}>{label}</Badge>
-                          ))}
-                        </div>
-                      )}
                     </td>
+                    {!isTodoPage && <td>{todo.projectEpic || '-'}</td>}
                     <td>
                       {canAssign && !isTodoPage ? (
                         <Form.Select size="sm" value={personId(todo.assignee) || ''} onChange={(event) => reassignTask(todo, event.target.value)}>
@@ -584,7 +653,10 @@ const TODO = () => {
                       )}
                     </td>
                     <td>{todo.createdAt ? new Date(todo.createdAt).toLocaleString() : '-'}</td>
-                    <td>{todo.dueDate ? new Date(todo.dueDate).toLocaleDateString() : '-'}</td>
+                    <td>
+                      {todo.dueDate ? new Date(todo.dueDate).toLocaleDateString() : '-'}
+                      {isOverdue(todo) && <Badge bg="danger" className="ms-2">Exceeded Deadline</Badge>}
+                    </td>
                     <td>
                       {!isTodoPage ? (
                         <Form.Select size="sm" value={todo.status} onChange={(event) => updateStatus(todo, event.target.value as TaskStatus)}>
@@ -633,9 +705,11 @@ const TODO = () => {
                       )}
                     </td>
                     <td className="text-center">
-                      <Button variant="soft-danger" size="sm" type="button" onClick={() => setDeleteTarget(todo)}>
-                        <IconifyIcon icon="bx:trash" className="fs-16" />
-                      </Button>
+                      {isTodoPage || canAssign ? (
+                        <Button variant="soft-danger" size="sm" type="button" onClick={() => setDeleteTarget(todo)}>
+                          <IconifyIcon icon="bx:trash" className="fs-16" />
+                        </Button>
+                      ) : '-'}
                     </td>
                   </tr>
                 ))}

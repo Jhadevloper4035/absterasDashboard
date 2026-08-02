@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import * as yup from 'yup'
 
 import PasswordFormInput from '@/components/form/PasswordFormInput'
@@ -26,9 +25,6 @@ const LoginForm = () => {
         id="password-id"
         label={
           <>
-            <Link to="/auth/reset-pass" className="float-end text-muted text-unline-dashed ms-1">
-              Reset password
-            </Link>
             <label className="form-label" htmlFor="example-password">
               Password
             </label>

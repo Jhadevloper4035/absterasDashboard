@@ -1,9 +1,10 @@
 import { Lead, LEAD_STATUSES } from '../models/lead.model.js';
 import { User } from '../models/user.model.js';
 import { notifyUsers } from '../services/notification.service.js';
+import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
-const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'territory'];
+const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory'];
 
 function canManageLeads(user) {
   return ADMIN_ROLES.includes(user.role);
@@ -25,6 +26,25 @@ function withCurrentMeeting(lead) {
   return data;
 }
 
+async function leadData(lead) {
+  const data = { ...withCurrentMeeting(lead) };
+  data.notes = await Promise.all(
+    (data.notes || []).map(async (note) => ({
+      ...note,
+      attachments: await signAttachmentUrls(note.attachments || []),
+    })),
+  );
+  return data;
+}
+
+function cleanAttachments(attachments) {
+  return (Array.isArray(attachments) ? attachments : [])
+    .map(trustedAttachment)
+    .filter(Boolean)
+    .slice(0, 10)
+    .map(({ key, contentType, originalName, size, checksum }) => ({ key, contentType, originalName, size, checksum }));
+}
+
 function applyLeadPatch(lead, patch) {
   for (const field of LEAD_UPDATE_FIELDS) {
     if (patch[field] !== undefined) lead[field] = patch[field];
@@ -32,6 +52,15 @@ function applyLeadPatch(lead, patch) {
 
   if (patch.email !== undefined) lead.normalizedEmail = undefined;
   if (patch.phone !== undefined) lead.normalizedPhone = undefined;
+}
+
+function notificationMetadata(user, type, leadId) {
+  return {
+    type,
+    leadId,
+    fromName: user.name || user.email || 'User',
+    fromRole: user.role || 'user',
+  };
 }
 
 export async function createLead(req, res) {
@@ -90,7 +119,7 @@ export async function getLead(req, res) {
     return res.status(404).json({ error: { message: 'Lead not found' } });
   }
 
-  return res.json({ data: withCurrentMeeting(lead) });
+  return res.json({ data: await leadData(lead) });
 }
 
 export async function updateLead(req, res) {
@@ -143,9 +172,11 @@ export async function updateLead(req, res) {
     });
   }
 
-  if (patch.noteText) {
+  if (patch.noteText || patch.noteAttachments !== undefined || patch.specialSampleRequired !== undefined) {
     lead.notes.push({
-      text: patch.noteText,
+      text: String(patch.noteText || '').trim(),
+      attachments: cleanAttachments(patch.noteAttachments),
+      specialSampleRequired: Boolean(patch.specialSampleRequired),
       createdBy: req.user._id,
     });
     notifications.push({
@@ -242,11 +273,11 @@ export async function updateLead(req, res) {
     await notifyUsers(notification.users.filter((id) => String(id || '') !== String(req.user._id)), {
       title: notification.title,
       body: notification.body,
-      metadata: { type: notification.type, leadId: lead._id },
+      metadata: notificationMetadata(req.user, notification.type, lead._id),
     });
   }
 
-  return res.json({ data: withCurrentMeeting(lead) });
+  return res.json({ data: await leadData(lead) });
 }
 
 export async function deleteLead(req, res) {

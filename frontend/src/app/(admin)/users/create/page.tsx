@@ -6,7 +6,8 @@ import type { UserType } from '@/types/auth'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, CardBody, Form } from 'react-bootstrap'
 
-const roles = ['superadmin', 'admin', 'sales'] as const
+const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
+const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 
 const emptyForm: CreateUserPayload = {
@@ -32,7 +33,7 @@ const CreateUserPage = () => {
   const [error, setError] = useState('')
   const canManageUsers = user?.role === 'superadmin' || user?.role === 'admin'
   const createRoles = useMemo(
-    () => (user?.role === 'admin' ? ['sales'] : roles.filter((role) => role === 'sales' || !users.some((item) => item.role === role))),
+    () => (user?.role === 'admin' ? teamRoles : roles.filter((role) => teamRoles.includes(role) || !users.some((item) => item.role === role))),
     [users, user?.role],
   )
 

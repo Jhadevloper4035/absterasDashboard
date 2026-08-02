@@ -35,6 +35,9 @@ const fallbackValues = (user: UserType, index: number) => {
     superadmin: 'Executive Office',
     admin: 'CRM Administration',
     sales: 'Sales Team',
+    operations: 'Operations Team',
+    accounts: 'Accounts Team',
+    designers: 'Design Team',
   }
 
   return {

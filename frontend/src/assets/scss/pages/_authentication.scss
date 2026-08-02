@@ -3,7 +3,7 @@
 //
 
 .authentication-bg {
-        background: url('@/assets/images/bg-overlay.svg') $primary;
+       background-color: #282f36;
         padding-bottom: 0;
 
         .account-pages {
@@ -11,6 +11,26 @@
             display: flex;
             min-height: 100vh;
         }
+}
+
+.auth-sign-in-page {
+    min-height: 100dvh;
+    overflow: hidden;
+    padding: 1rem 0;
+
+    .auth-sign-in-card {
+        max-height: calc(100dvh - 2rem);
+        overflow: hidden;
+    }
+
+    .auth-page-sidebar {
+        padding: 2rem;
+
+        img {
+            max-height: calc(100dvh - 6rem);
+            object-fit: contain;
+        }
+    }
 }
 
 .auth-logo {

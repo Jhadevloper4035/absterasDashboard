@@ -2,9 +2,21 @@ import type { UserType } from './auth'
 
 export type LeadOwner = Pick<UserType, '_id' | 'name' | 'email' | 'role' | 'status'>
 
+export type LeadAttachment = {
+  key: string
+  url?: string
+  originalName?: string
+  contentType?: string
+  size?: number
+  checksum?: string
+  attachmentToken?: string
+}
+
 export type LeadNote = {
   _id?: string
   text?: string
+  attachments?: LeadAttachment[]
+  specialSampleRequired?: boolean
   createdAt?: string
   createdBy?: string | LeadOwner
 }
@@ -31,10 +43,14 @@ export type LeadType = {
   name: string
   source: string
   sourceType?: string
+  campaign?: string
   productInterest?: string
   email?: string
   phone: string
   company?: string
+  siteAddress?: string
+  googleMapUrl?: string
+  territory?: string
   status: string
   owner?: string | LeadOwner
   assignmentException?: boolean

@@ -31,12 +31,13 @@ function patchTodo(todo, patch, actorId) {
 }
 
 export async function listTodos(req, res) {
+  const limit = Math.min(Math.max(Number(req.query?.limit || 100), 1), 100);
   const todos = await Todo.find(todoQueryFor(req.user))
     .populate('assignedTo', 'name email role status')
     .populate('createdBy', 'name email role status')
     .populate('completedBy', 'name email role status')
     .sort({ dueDate: 1, createdAt: -1 })
-    .limit(100);
+    .limit(limit);
 
   res.json({ data: todos });
 }

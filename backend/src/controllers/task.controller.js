@@ -1,4 +1,5 @@
 import { Task, TASK_PRIORITIES, TASK_STATUSES } from '../models/task.model.js';
+import { DEFAULT_TASK_WORK_TYPES, TASK_WORK_TYPE_ROLES, TaskWorkType, normalizeTaskWorkType } from '../models/task-work-type.model.js';
 import { User } from '../models/user.model.js';
 import { notifyUsers } from '../services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
@@ -60,11 +61,26 @@ function populateTask(task) {
 async function taskData(task) {
   const data = typeof task.toObject === 'function' ? task.toObject() : task;
   data.attachments = await signAttachmentUrls(data.attachments || []);
+  data.notes = await Promise.all(
+    (data.notes || []).map(async (note) => ({
+      ...note,
+      attachments: await signAttachmentUrls(note.attachments || []),
+    })),
+  );
   return data;
 }
 
 async function findAssignee(id) {
   return User.findOne({ _id: id, status: 'active', role: { $ne: 'superadmin' } });
+}
+
+function notificationMetadata(type, taskId, actor) {
+  return {
+    type,
+    taskId,
+    fromName: actor.name || actor.email || 'User',
+    fromRole: actor.role,
+  };
 }
 
 export async function listTaskAssignees(req, res) {
@@ -76,14 +92,93 @@ export async function listTaskAssignees(req, res) {
   return res.json({ data: users });
 }
 
+export async function listTaskWorkTypes(req, res) {
+  const workTypes = Object.fromEntries(Object.entries(DEFAULT_TASK_WORK_TYPES).map(([role, names]) => [role, [...names]]));
+  const customWorkTypes = await TaskWorkType.find({}).sort({ role: 1, name: 1 });
+
+  customWorkTypes.forEach((item) => {
+    const normalizedName = item.normalizedName || item.name.toLowerCase();
+    if (item.deleted) {
+      workTypes[item.role] = (workTypes[item.role] || []).filter((name) => name.toLowerCase() !== normalizedName);
+      return;
+    }
+    workTypes[item.role] = [...new Set([...(workTypes[item.role] || []), item.name])].sort();
+  });
+
+  return res.json({ data: workTypes });
+}
+
+export async function createTaskWorkType(req, res) {
+  if (!canManageTasks(req.user)) {
+    return res.status(403).json({ error: { message: 'Forbidden' } });
+  }
+
+  const role = String(req.body.role || '').trim();
+  const name = normalizeTaskWorkType(req.body.name);
+
+  if (!TASK_WORK_TYPE_ROLES.includes(role)) {
+    return res.status(400).json({ error: { message: 'Select a valid role' } });
+  }
+  if (!name) {
+    return res.status(400).json({ error: { message: 'Work type name is required' } });
+  }
+  if (name.length > 60) {
+    return res.status(400).json({ error: { message: 'Work type name must be 60 characters or less' } });
+  }
+
+  const workType = await TaskWorkType.findOneAndUpdate(
+    { role, normalizedName: name.toLowerCase() },
+    { $setOnInsert: { role, normalizedName: name.toLowerCase(), createdBy: req.user._id }, $set: { name, deleted: false }, $unset: { deletedBy: 1 } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+
+  return res.status(201).json({ data: workType });
+}
+
+export async function deleteTaskWorkType(req, res) {
+  if (!canManageTasks(req.user)) {
+    return res.status(403).json({ error: { message: 'Forbidden' } });
+  }
+
+  const role = String(req.params.role || '').trim();
+  const name = normalizeTaskWorkType(req.params.name);
+
+  if (!TASK_WORK_TYPE_ROLES.includes(role)) {
+    return res.status(400).json({ error: { message: 'Select a valid role' } });
+  }
+  if (!name) {
+    return res.status(400).json({ error: { message: 'Work type name is required' } });
+  }
+
+  await TaskWorkType.findOneAndUpdate(
+    { role, normalizedName: name.toLowerCase() },
+    { $setOnInsert: { role, normalizedName: name.toLowerCase(), createdBy: req.user._id }, $set: { name, deleted: true, deletedBy: req.user._id } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+
+  return res.json({ data: { role, name } });
+}
+
 export async function listTasks(req, res) {
+  const limit = Math.min(Math.max(Number(req.query?.limit || 100), 1), 100);
   const extra = req.query.status ? { status: req.query.status } : {};
+  if (req.query.deadline === 'exceeded') {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    extra.status = { $ne: 'Done' };
+    extra.dueDate = { $lt: today };
+  }
+  if (canManageTasks(req.user) && req.query.group) {
+    const users = await User.find({ status: 'active', role: req.query.group }).select('_id').limit(1000);
+    extra.assignee = { $in: users.map((user) => user._id) };
+  }
+
   const tasks = await Task.find(taskQueryFor(req.user, extra))
     .populate('assignee', 'name email role status')
     .populate('createdBy', 'name email role status')
     .populate('completedBy', 'name email role status')
     .sort({ dueDate: 1, createdAt: -1 })
-    .limit(100);
+    .limit(limit);
 
   return res.json({ data: await Promise.all(tasks.map(taskData)) });
 }
@@ -117,9 +212,9 @@ export async function createTask(req, res) {
   await task.save();
   await populateTask(task);
   await notifyUsers([task.assignee], {
-    title: 'Task assigned',
+    title: `Task assigned: ${task.ticketNumber}`,
     body: task.title,
-    metadata: { type: 'task.created', taskId: task._id },
+    metadata: notificationMetadata('task.created', task._id, req.user),
   });
   return res.status(201).json({ data: await taskData(task) });
 }
@@ -146,9 +241,9 @@ export async function updateTask(req, res) {
   await task.save();
   await populateTask(task);
   await notifyUsers([task.assignee, task.createdBy].filter((id) => String(id || '') !== String(req.user._id)), {
-    title: task.status === 'Done' ? 'Task completed' : 'Task updated',
+    title: `${task.status === 'Done' ? 'Task completed' : 'Task updated'}: ${task.ticketNumber}`,
     body: task.title,
-    metadata: { type: 'task.updated', taskId: task._id },
+    metadata: notificationMetadata('task.updated', task._id, req.user),
   });
   return res.json({ data: await taskData(task) });
 }
@@ -166,14 +261,15 @@ export async function addTaskNote(req, res) {
   task.notes.push({
     title: req.body.title,
     description: req.body.description,
+    attachments: cleanAttachments(req.body.attachments),
     createdBy: req.user._id,
   });
   await task.save();
   await populateTask(task);
   await notifyUsers([task.assignee, task.createdBy].filter((id) => String(id || '') !== String(req.user._id)), {
-    title: 'Task note added',
+    title: `Task note added: ${task.ticketNumber}`,
     body: task.title,
-    metadata: { type: 'task.note', taskId: task._id },
+    metadata: notificationMetadata('task.note', task._id, req.user),
   });
   return res.status(201).json({ data: await taskData(task) });
 }

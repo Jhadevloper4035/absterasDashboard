@@ -3,7 +3,7 @@ export type UserType = {
   email: string
   name: string
   phone?: string
-  role: 'superadmin' | 'admin' | 'sales'
+  role: 'superadmin' | 'admin' | 'sales' | 'operations' | 'accounts' | 'designers'
   status: 'active' | 'inactive' | 'invited' | 'suspended'
   timezone?: string
   createdAt?: string

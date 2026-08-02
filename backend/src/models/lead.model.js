@@ -40,6 +40,17 @@ const attachmentSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const noteAttachmentSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true },
+    contentType: String,
+    originalName: String,
+    size: Number,
+    checksum: String,
+  },
+  { _id: false },
+);
+
 const noteSchema = new mongoose.Schema(
   {
     text: {
@@ -47,6 +58,11 @@ const noteSchema = new mongoose.Schema(
       trim: true,
     },
     images: [attachmentSchema],
+    attachments: [noteAttachmentSchema],
+    specialSampleRequired: {
+      type: Boolean,
+      default: false,
+    },
     isInternal: {
       type: Boolean,
       default: false,
@@ -170,6 +186,14 @@ const leadSchema = new mongoose.Schema(
       index: true,
     },
     company: {
+      type: String,
+      trim: true,
+    },
+    siteAddress: {
+      type: String,
+      trim: true,
+    },
+    googleMapUrl: {
       type: String,
       trim: true,
     },

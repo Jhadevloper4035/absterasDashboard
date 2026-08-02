@@ -3,6 +3,7 @@ import { afterEach, test } from 'node:test';
 import { createLead, deleteLead, getLead, listLeads, updateLead } from '../src/controllers/lead.controller.js';
 import { Lead } from '../src/models/lead.model.js';
 import { User } from '../src/models/user.model.js';
+import { createAttachmentToken } from '../src/services/upload.service.js';
 
 const originalLeadCreate = Lead.create;
 const originalLeadFind = Lead.find;
@@ -272,6 +273,43 @@ test('admin and assigned salespeople can add lead notes', async () => {
       ['Sales called customer', 'sales-1'],
     ],
   );
+});
+
+test('lead notes store trusted attachments and special sample flag', async () => {
+  const attachment = {
+    key: 'uploads/documents/2026-08/sample.pdf',
+    contentType: 'application/pdf',
+    originalName: 'sample.pdf',
+    size: 1024,
+    checksum: 'abc123',
+  };
+  const lead = {
+    _id: 'lead-1',
+    owner: 'sales-1',
+    notes: [],
+    save: async () => {},
+    populate: async () => {},
+  };
+  Lead.findOne = async () => lead;
+
+  await updateLead(
+    {
+      user: { _id: 'sales-1', role: 'sales' },
+      params: { id: 'lead-1' },
+      body: {
+        noteText: 'Client requested PDF sample.',
+        specialSampleRequired: true,
+        noteAttachments: [
+          { ...attachment, attachmentToken: createAttachmentToken(attachment) },
+          { key: 'uploads/documents/2026-08/unsafe.pdf', attachmentToken: 'bad' },
+        ],
+      },
+    },
+    res(),
+  );
+
+  assert.equal(lead.notes[0].specialSampleRequired, true);
+  assert.deepEqual(lead.notes[0].attachments, [attachment]);
 });
 
 test('meeting scheduling requires an assigned lead', async () => {

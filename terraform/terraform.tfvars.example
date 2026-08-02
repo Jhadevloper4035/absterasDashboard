@@ -1,0 +1,8 @@
+aws_region   = "us-east-1"
+project_name = "sales-crm"
+environment  = "production"
+
+# Optional. Leave commented to let AWS generate a globally unique bucket name.
+# bucket_name = "your-company-sales-crm-uploads"
+
+upload_prefix = "uploads"
