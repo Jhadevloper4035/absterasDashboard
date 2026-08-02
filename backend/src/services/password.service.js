@@ -2,6 +2,12 @@ import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const scryptAsync = promisify(scrypt);
+const PASSWORD_MESSAGE = 'Password must be at least 8 characters and include letters and numbers';
+
+export function passwordPolicyError(password) {
+  const value = String(password || '');
+  return value.length >= 8 && /[a-z]/i.test(value) && /\d/.test(value) ? '' : PASSWORD_MESSAGE;
+}
 
 export async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');

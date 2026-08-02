@@ -47,7 +47,6 @@ type SalesTodo = {
   projectEpic?: string
   dependenciesBlockers?: string
   attachments?: TaskAttachment[]
-  estimate?: string
 }
 
 const emptyForm = {
@@ -60,7 +59,6 @@ const emptyForm = {
   projectEpic: '',
   dependenciesBlockers: '',
   attachments: [] as TaskAttachment[],
-  estimate: '',
 }
 const todoStatuses = ['Pending', 'In-Progress', 'Completed']
 const taskStatuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Testing', 'Blocked', 'Done']
@@ -229,7 +227,6 @@ const TODO = () => {
         projectEpic: form.projectEpic,
         dependenciesBlockers: form.dependenciesBlockers,
         attachments: form.attachments,
-        estimate: form.estimate,
       }
       const res = await apiFetch<{ data: SalesTodo }>(editingId ? `${apiPath}/${editingId}` : apiPath, {
         method: editingId ? 'PATCH' : 'POST',
@@ -259,7 +256,6 @@ const TODO = () => {
       projectEpic: todo.projectEpic || '',
       dependenciesBlockers: todo.dependenciesBlockers || '',
       attachments: todo.attachments || [],
-      estimate: todo.estimate || '',
     })
   }
 
@@ -403,11 +399,7 @@ const TODO = () => {
                       </Form.Group>
                       {!isTodoPage && (
                         <>
-                          <Form.Group className="col-lg-4">
-                            <Form.Label>Time needed</Form.Label>
-                            <Form.Control value={form.estimate} onChange={(event) => setForm({ ...form, estimate: event.target.value })} placeholder="5 points" />
-                          </Form.Group>
-                          <Form.Group className="col-lg-4">
+                          <Form.Group className="col-lg-6">
                             <Form.Label>Dependencies or blockers</Form.Label>
                             <Form.Control as="textarea" rows={2} value={form.dependenciesBlockers} onChange={(event) => setForm({ ...form, dependenciesBlockers: event.target.value })} />
                           </Form.Group>
@@ -417,7 +409,7 @@ const TODO = () => {
                               labelClassName="form-label"
                               iconProps={{ icon: 'bx:cloud-upload', height: 34, width: 34 }}
                               text="Drag & drop files here, or browse"
-                              helpText={<span className="text-muted fs-13">PDF, Word, Excel, CSV, TXT, JPG, PNG, WebP. Up to 5 files.</span>}
+                              helpText={<span className="text-muted fs-13">PDF, CSV, TXT, JPG, PNG, WebP. Up to 5 files.</span>}
                               showPreview={false}
                               onFileUpload={uploadFiles}
                             />

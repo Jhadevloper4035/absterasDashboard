@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
-import ReactQuill from 'react-quill-new'
-import { Button, ButtonGroup, Col, Offcanvas, OffcanvasHeader, OffcanvasTitle, Row } from 'react-bootstrap'
+import { Button, ButtonGroup, Col, Form, Offcanvas, OffcanvasHeader, OffcanvasTitle, Row } from 'react-bootstrap'
 
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import SimplebarReactClient from '@/components/wrappers/SimplebarReactClient'
 import { useEmailContext } from '@/context/useEmailContext'
 import { getEmailDetails } from '@/helpers/data'
 import type { EmailType, FileType } from '@/types/data'
-
-import 'react-quill-new/dist/quill.snow.css'
 
 const FilePreview = ({ file }: { file: FileType }) => {
   return (
@@ -31,16 +28,7 @@ const FilePreview = ({ file }: { file: FileType }) => {
 
 const EmailViewOffcanvas = () => {
   const [mail, setMail] = useState<EmailType>()
-  const [quillEditorContent, setQuillEditorContent] = useState(`
-<h3>This is an Air-mode editable area.</h3>
-<p><br /></p>
-<ul>
-  <li>Select a text to reveal the toolbar.</li>
-  <li>Edit rich document on-the-fly, so elastic!</li>
-</ul>
-<p><br /></p>
-<p>End of air-mode area</p>
-  `)
+  const [quillEditorContent, setQuillEditorContent] = useState('')
 
   const {
     emailDetails: { open, toggle },
@@ -135,7 +123,7 @@ const EmailViewOffcanvas = () => {
           {mail?.to?.avatar && <img className="me-2 rounded-circle avatar-sm" src={mail.to.avatar} alt={mail.to.name + 'avatar'} />}
           <div className="flex-grow-1">
             <div className="mb-5">
-              <ReactQuill className="pb-2 pb-sm-0" theme="snow" style={{ height: 150 }} value={quillEditorContent} onChange={setQuillEditorContent} />
+              <Form.Control as="textarea" rows={5} value={quillEditorContent} onChange={(event) => setQuillEditorContent(event.target.value)} />
             </div>
           </div>
         </div>

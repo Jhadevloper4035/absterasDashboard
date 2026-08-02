@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+import { env } from '../config/env.js';
 import { User } from '../models/user.model.js';
 import { isAccessTokenBlocked } from '../services/auth-session.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
@@ -37,6 +39,13 @@ export function authorizeRoles(...roles) {
   };
 }
 
+function setupTokenMatches(value) {
+  if (!env.setupToken) return false;
+  const given = Buffer.from(String(value || ''));
+  const expected = Buffer.from(env.setupToken);
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
 export async function allowFirstSuperadminOrUserManager(req, res, next) {
   if (await User.exists()) {
     return authenticate(req, res, (error) => {
@@ -47,6 +56,10 @@ export async function allowFirstSuperadminOrUserManager(req, res, next) {
 
   if (req.body?.role !== 'superadmin') {
     return next(authError(403, 'First user must be superadmin'));
+  }
+
+  if (env.isProduction && !setupTokenMatches(req.get('x-setup-token') || req.body?.setupToken)) {
+    return next(authError(403, 'Valid setup token is required'));
   }
 
   return next();

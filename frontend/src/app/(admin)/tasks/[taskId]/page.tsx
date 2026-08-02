@@ -32,7 +32,6 @@ type Task = {
   projectEpic?: string
   dependenciesBlockers?: string
   attachments?: TaskAttachment[]
-  estimate?: string
   completedAt?: string
   createdAt?: string
   updatedAt?: string
@@ -209,19 +208,15 @@ const TaskDetail = () => {
                   </div>
 
                   <Row className="g-3 mb-4">
-                    <Col md={6} lg={3}>
+                    <Col md={6} lg={4}>
                       <div className="small text-muted">Assignee</div>
                       <div className="fw-semibold">{personName(task.assignee)}</div>
                     </Col>
-                    <Col md={6} lg={3}>
+                    <Col md={6} lg={4}>
                       <div className="small text-muted">Deadline</div>
                       <div className="fw-semibold text-nowrap">{dateText(task.dueDate)}</div>
                     </Col>
-                    <Col md={6} lg={3}>
-                      <div className="small text-muted">Estimated effort</div>
-                      <div className="fw-semibold">{text(task.estimate)}</div>
-                    </Col>
-                    <Col md={6} lg={3}>
+                    <Col md={6} lg={4}>
                       <div className="small text-muted">Work type</div>
                       <div className="fw-semibold">{text(task.projectEpic)}</div>
                     </Col>
@@ -270,7 +265,7 @@ const TaskDetail = () => {
                         iconProps={{ icon: 'bx:cloud-upload', height: 28, width: 28 }}
                         text="Attach files"
                         textClassName="fs-5"
-                        helpText={<span className="text-muted fs-13">Images, PDF, Word, Excel, PowerPoint, CSV, TXT. Up to 5 files.</span>}
+                        helpText={<span className="text-muted fs-13">Images, PDF, CSV, TXT. Up to 5 files.</span>}
                         showPreview={false}
                         onFileUpload={uploadNoteFiles}
                       />

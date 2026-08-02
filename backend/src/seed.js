@@ -81,7 +81,7 @@ const demoTasks = [
   ['Reassign stale leads', 'Move overdue uncontacted leads to the manager exception queue.', 'Blocked', 'High', 'Assignment'],
   ['Audit pending follow-ups', 'Find follow-ups due today and mark missed items for escalation.', 'Testing', 'Medium', 'Follow Ups'],
   ['Create pipeline export sample', 'Generate a manager-friendly pipeline CSV sample.', 'Backlog', 'Low', 'Reports'],
-  ['Verify upload attachment rules', 'Test PDF, image, spreadsheet, and rejected file uploads.', 'In Progress', 'Medium', 'Files'],
+  ['Verify upload attachment rules', 'Test PDF, image, CSV, and rejected file uploads.', 'In Progress', 'Medium', 'Files'],
   ['Document lost reason options', 'List approved lost/on-hold reasons for configuration.', 'To Do', 'Low', 'Configuration'],
   ['Close won demo lead', 'Convert one qualified lead into a customer/deal test record.', 'Done', 'High', 'Conversion'],
 ].map(([title, description, status, priority, projectEpic], index) => ({
@@ -93,7 +93,6 @@ const demoTasks = [
   projectEpic,
   labels: ['demo', projectEpic.toLowerCase().replaceAll(' ', '-')],
   dueDate: new Date(Date.UTC(2026, 7, index + 1)),
-  estimate: index % 3 === 0 ? '1 day' : '2 days',
   definitionOfDone: 'This task appears correctly in the CRM task list.',
   completedAt: status === 'Done' ? new Date(Date.UTC(2026, 6, 29)) : undefined,
 }));

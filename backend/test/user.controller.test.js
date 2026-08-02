@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createUser, getUser, listUsers, updateUser } from '../src/controllers/user.controller.js';
+import { createUser, getUser, listLoginHistory, listUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
+import { AuthSession } from '../src/models/auth-session.model.js';
+import { BlockedToken } from '../src/models/blocked-token.model.js';
+import { LoginHistory } from '../src/models/login-history.model.js';
 import { User } from '../src/models/user.model.js';
 
+const originalAuthSessionFind = AuthSession.find;
+const originalAuthSessionUpdateMany = AuthSession.updateMany;
+const originalBlockedTokenUpdateOne = BlockedToken.updateOne;
 const originalExists = User.exists;
 const originalFind = User.find;
 const originalFindById = User.findById;
 const originalFindByIdAndUpdate = User.findByIdAndUpdate;
 const originalCreate = User.create;
+const originalLoginHistoryFind = LoginHistory.find;
+const originalLoginHistoryUpdateMany = LoginHistory.updateMany;
 
 function res() {
   return {
@@ -30,7 +38,29 @@ afterEach(() => {
   User.findById = originalFindById;
   User.findByIdAndUpdate = originalFindByIdAndUpdate;
   User.create = originalCreate;
+  AuthSession.find = originalAuthSessionFind;
+  AuthSession.updateMany = originalAuthSessionUpdateMany;
+  BlockedToken.updateOne = originalBlockedTokenUpdateOne;
+  LoginHistory.find = originalLoginHistoryFind;
+  LoginHistory.updateMany = originalLoginHistoryUpdateMany;
 });
+
+function emptyActiveSessions() {
+  AuthSession.find = () => ({
+    sort() {
+      return this;
+    },
+    limit() {
+      return this;
+    },
+    populate() {
+      return this;
+    },
+    lean() {
+      return Promise.resolve([]);
+    },
+  });
+}
 
 test('cannot create a second admin user', async () => {
   User.exists = async () => ({ _id: 'admin-1' });
@@ -42,7 +72,7 @@ test('cannot create a second admin user', async () => {
         name: 'Second Admin',
         email: 'admin2@example.com',
         phone: '9876543210',
-        password: 'secret-password',
+        password: 'Secret123',
         role: 'admin',
       },
     },
@@ -60,7 +90,7 @@ test('user creation requires mobile number', async () => {
       body: {
         name: 'Sales User',
         email: 'sales@example.com',
-        password: 'secret-password',
+        password: 'Secret123',
         role: 'sales',
       },
     },
@@ -69,6 +99,25 @@ test('user creation requires mobile number', async () => {
 
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.error.message, 'Mobile number is required');
+});
+
+test('user creation rejects weak passwords', async () => {
+  const response = res();
+  await createUser(
+    {
+      body: {
+        name: 'Sales User',
+        email: 'sales@example.com',
+        phone: '9876543210',
+        password: 'password',
+        role: 'sales',
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.error.message, /letters and numbers/);
 });
 
 test('cannot promote a user into a second superadmin', async () => {
@@ -149,6 +198,177 @@ test('admin lists team users only', async () => {
   assert.deepEqual(response.body.data, []);
 });
 
+test('admin login history can include every user role', async () => {
+  let filter;
+  emptyActiveSessions();
+  LoginHistory.find = (value) => {
+    filter = value;
+    return {
+      sort() {
+        return this;
+      },
+      limit(value) {
+        assert.equal(value, 100);
+        return this;
+      },
+      populate() {
+        return this;
+      },
+      lean() {
+        return Promise.resolve([]);
+      },
+    };
+  };
+
+  const response = res();
+  await listLoginHistory({ user: { role: 'admin' }, query: {} }, response);
+
+  assert.deepEqual(filter, {});
+  assert.deepEqual(response.body.data, []);
+});
+
+test('admin can filter privileged user login history', async () => {
+  let filter;
+  let sessionFilter;
+  User.findById = () => ({
+    select() {
+      return Promise.resolve({ _id: '507f1f77bcf86cd799439011', role: 'admin' });
+    },
+  });
+  LoginHistory.find = (value) => {
+    filter = value;
+    return {
+      sort() {
+        return this;
+      },
+      limit() {
+        return this;
+      },
+      populate() {
+        return this;
+      },
+      lean() {
+        return Promise.resolve([]);
+      },
+    };
+  };
+  AuthSession.find = (value) => {
+    sessionFilter = value;
+    return {
+      sort() {
+        return this;
+      },
+      limit() {
+        return this;
+      },
+      populate() {
+        return this;
+      },
+      lean() {
+        return Promise.resolve([]);
+      },
+    };
+  };
+
+  const response = res();
+  await listLoginHistory({ user: { role: 'admin' }, query: { userId: '507f1f77bcf86cd799439011' } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(filter, { user: '507f1f77bcf86cd799439011' });
+  assert.equal(String(sessionFilter.user), '507f1f77bcf86cd799439011');
+});
+
+test('login history closes duplicate current rows for the same user', async () => {
+  const user = { _id: 'user-1', name: 'Harpreet', email: 'harpreet@absteras.com', role: 'sales', status: 'active' };
+  const newestLogin = new Date('2026-08-02T14:49:38.000Z');
+  const oldLogin = new Date('2026-08-01T12:59:07.000Z');
+  let closedHistoryFilter;
+
+  AuthSession.find = () => ({
+    sort() {
+      return this;
+    },
+    limit() {
+      return this;
+    },
+    populate() {
+      return this;
+    },
+    lean() {
+      return Promise.resolve([{ _id: 'session-1', user, createdAt: newestLogin, ipAddress: '127.0.0.1', userAgent: 'Chrome' }]);
+    },
+  });
+  AuthSession.updateMany = async () => {};
+  LoginHistory.find = () => ({
+    sort() {
+      return this;
+    },
+    limit() {
+      return this;
+    },
+    populate() {
+      return this;
+    },
+    lean() {
+      return Promise.resolve([
+        { _id: 'history-new', user, email: user.email, role: user.role, loggedInAt: newestLogin, ipAddress: '127.0.0.1', userAgent: 'Chrome' },
+        { _id: 'history-old', user, email: user.email, role: user.role, loggedInAt: oldLogin, ipAddress: '127.0.0.1', userAgent: 'Chrome' },
+      ]);
+    },
+  });
+  LoginHistory.updateMany = async (filter) => {
+    closedHistoryFilter = filter;
+  };
+
+  const response = res();
+  await listLoginHistory({ user: { role: 'admin' }, query: {} }, response);
+
+  assert.deepEqual(closedHistoryFilter, { _id: { $in: ['history-old'] } });
+  assert.equal(response.body.data.filter((item) => !item.logoutAt).length, 1);
+  assert.equal(response.body.data.find((item) => item._id === 'history-old').logoutReason, 'new_login');
+});
+
+test('admin can logout an active user from login history', async () => {
+  let sessionUpdate;
+  let historyUpdate;
+  const userId = '507f1f77bcf86cd799439011';
+
+  User.findById = (id) => ({
+    select(field) {
+      assert.equal(id, userId);
+      assert.equal(field, 'role status');
+      return Promise.resolve({ _id: userId, role: 'sales', status: 'active' });
+    },
+  });
+  AuthSession.find = (filter) => {
+    assert.equal(filter.user, userId);
+    return {
+      select() {
+        return this;
+      },
+      lean() {
+        return Promise.resolve([{ accessTokenJti: 'access-1' }]);
+      },
+    };
+  };
+  AuthSession.updateMany = async (filter, update) => {
+    sessionUpdate = { filter, update };
+  };
+  BlockedToken.updateOne = async () => {};
+  LoginHistory.updateMany = async (filter, update) => {
+    historyUpdate = { filter, update };
+  };
+
+  const response = res();
+  await logoutUser({ user: { _id: 'admin-1', role: 'admin' }, params: { id: userId }, get: () => '', ip: '127.0.0.1' }, response);
+
+  assert.equal(response.body.data.ok, true);
+  assert.deepEqual(sessionUpdate.filter, { user: userId, revokedAt: null });
+  assert.deepEqual(historyUpdate.filter, { user: userId, logoutAt: null });
+  assert.ok(historyUpdate.update.$set.logoutAt instanceof Date);
+  assert.equal(historyUpdate.update.$set.logoutReason, 'logout');
+});
+
 test('admin can create operations users', async () => {
   User.exists = async () => null;
   User.create = async (user) => ({ _id: 'operations-1', role: user.role, email: user.email });
@@ -161,7 +381,7 @@ test('admin can create operations users', async () => {
         name: 'Operations User',
         email: 'operations@example.com',
         phone: '9876543210',
-        password: 'secret-password',
+        password: 'Secret123',
         role: 'operations',
       },
     },
@@ -181,7 +401,7 @@ test('admin cannot create privileged users', async () => {
         name: 'New Admin',
         email: 'admin@example.com',
         phone: '9876543210',
-        password: 'secret-password',
+        password: 'Secret123',
         role: 'admin',
       },
     },

@@ -14,7 +14,8 @@ const setupSchema = yup.object({
   name: yup.string().required('Please enter your name'),
   email: yup.string().email('Please enter a valid email').required('Please enter your email'),
   phone: yup.string().required('Please enter your mobile number'),
-  password: yup.string().min(8, 'Use at least 8 characters').required('Please enter a password'),
+  password: yup.string().min(8, 'Use at least 8 characters').matches(/[a-z]/i, 'Use at least one letter').matches(/\d/, 'Use at least one number').required('Please enter a password'),
+  setupToken: yup.string().optional(),
 })
 
 const SetupSuperadmin = () => {
@@ -24,7 +25,7 @@ const SetupSuperadmin = () => {
   const navigate = useNavigate()
   const { control, handleSubmit } = useForm({
     resolver: yupResolver(setupSchema),
-    defaultValues: { name: '', email: '', phone: '', password: '' },
+    defaultValues: { name: '', email: '', phone: '', password: '', setupToken: '' },
   })
 
   const createSuperadmin = handleSubmit(async (values) => {
@@ -46,7 +47,7 @@ const SetupSuperadmin = () => {
             <LogoBox textLogo={{ height: 24, width: 73 }} squareLogo={{ className: 'me-1' }} containerClassName="mx-auto mb-4 text-center auth-logo" />
           </div>
           <h2 className="fw-bold text-center fs-18">Setup Superadmin</h2>
-          <p className="text-muted text-center mt-1 mb-4">Create the first Absteras Facade CRM account.</p>
+          <p className="text-muted text-center mt-1 mb-4">Create the first Absteras CRM account.</p>
           <Row className="justify-content-center">
             <Col xs={12} md={7}>
               <form onSubmit={createSuperadmin} className="authentication-form">
@@ -54,6 +55,7 @@ const SetupSuperadmin = () => {
                 <TextFormInput control={control} name="email" containerClassName="mb-3" label="Email" type="email" placeholder="Enter your email" />
                 <TextFormInput control={control} name="phone" containerClassName="mb-3" label="Mobile Number" type="tel" placeholder="10-digit mobile number" />
                 <PasswordFormInput control={control} name="password" containerClassName="mb-3" label="Password" placeholder="Enter a password" />
+                <PasswordFormInput control={control} name="setupToken" containerClassName="mb-3" label="Setup Token" placeholder="Required in production" />
                 <div className="mb-1 text-center d-grid">
                   <Button variant="primary" type="submit" disabled={loading}>
                     Create Superadmin

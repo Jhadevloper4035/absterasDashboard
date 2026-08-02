@@ -181,7 +181,6 @@ test('admin can create rich task for active non-superadmin user', async () => {
           status: 'To Do',
           labels: 'backend, authentication, security',
           attachments: [attachment],
-          estimate: '5 points',
         },
       },
       response,

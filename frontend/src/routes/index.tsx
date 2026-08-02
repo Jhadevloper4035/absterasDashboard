@@ -8,8 +8,10 @@ const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'))
 const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'))
 const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
+const LoginHistory = lazy(() => import('@/app/(admin)/users/login-history/page'))
 const Leads = lazy(() => import('@/app/(admin)/leads/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
+const SalesCreateLead = lazy(() => import('@/app/(admin)/leads/sales-create/page'))
 const PendingLeads = lazy(() => import('@/app/(admin)/leads/pending/page'))
 const ArchitectLeads = lazy(() => import('@/app/(admin)/leads/architect/page'))
 const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
@@ -203,6 +205,12 @@ const generalRoutes: RoutesProps[] = [
     path: '/users/create',
     name: 'Create User',
     element: <CreateUser />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/users/login-history',
+    name: 'User Login History',
+    element: <LoginHistory />,
     roles: ['superadmin', 'admin'],
   },
   {
@@ -412,12 +420,19 @@ const appsRoutes: RoutesProps[] = [
     name: 'Todo',
     path: '/apps/todo',
     element: <Todo />,
+    roles: adminRoles,
   },
   {
     name: 'Notifications',
     path: '/notifications',
     element: <NotificationsPage />,
     roles: [...adminRoles, ...teamRoles],
+  },
+  {
+    name: 'Create Lead',
+    path: '/leads/sales-create',
+    element: <SalesCreateLead />,
+    roles: ['sales'],
   },
   {
     name: 'Social',

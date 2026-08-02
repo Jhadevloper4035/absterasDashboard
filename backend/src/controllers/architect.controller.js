@@ -1,4 +1,5 @@
 import { Architect } from '../models/architect.model.js';
+import { auditEvent } from '../services/audit.service.js';
 
 const ARCHITECT_CREATE_FIELDS = ['name', 'phone', 'email', 'company', 'city', 'specialty', 'notes'];
 
@@ -39,5 +40,6 @@ export async function deleteArchitect(req, res) {
     return res.status(404).json({ error: { message: 'Architect lead not found' } });
   }
 
+  await auditEvent(req, { action: 'architect.delete', entity: 'architect', entityId: architect._id });
   return res.json({ data: { id: req.params.id } });
 }

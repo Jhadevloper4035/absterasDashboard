@@ -53,6 +53,7 @@ test('created leads always enter the admin assignment queue', async () => {
         owner: 'sales-1',
         status: 'ASSIGNED',
       },
+      user: { _id: 'sales-1', role: 'sales' },
     },
     response,
   );
@@ -67,6 +68,7 @@ test('lead creation requires mobile number', async () => {
   const response = res();
   await createLead(
     {
+      user: { _id: 'sales-1', role: 'sales' },
       body: {
         name: 'Acme',
         source: 'website',
@@ -77,6 +79,23 @@ test('lead creation requires mobile number', async () => {
 
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.error.message, 'Mobile number is required');
+});
+
+test('non-sales team roles cannot create leads directly', async () => {
+  const response = res();
+  await createLead(
+    {
+      user: { _id: 'operations-1', role: 'operations' },
+      body: {
+        name: 'Acme',
+        source: 'website',
+        phone: '9876543210',
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 403);
 });
 
 test('salespeople only list their assigned leads', async () => {

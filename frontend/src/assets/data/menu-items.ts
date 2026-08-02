@@ -26,7 +26,7 @@ export const MENU_ITEMS: MenuItemType[] = [
   },
   {
     key: 'crm',
-    label: 'BASTERAS FACADE',
+    label: 'CRM',
     isTitle: true,
   },
   {
@@ -34,7 +34,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:check-circle-1-duotone',
     label: 'Todo',
     url: '/apps/todo',
-    roles: allRoles,
+    roles: adminRoles,
   },
   {
     key: 'notifications',
@@ -42,6 +42,13 @@ export const MENU_ITEMS: MenuItemType[] = [
     label: 'Notifications',
     url: '/notifications',
     roles: allRoles,
+  },
+  {
+    key: 'sales-create-lead',
+    icon: 'iconamoon:send-duotone',
+    label: 'Create Lead',
+    url: '/leads/sales-create',
+    roles: ['sales'],
   },
   {
     key: 'leads',
@@ -899,6 +906,13 @@ export const MENU_ITEMS: MenuItemType[] = [
         key: 'users-list',
         label: 'Profiles & Access',
         url: '/users',
+        parentKey: 'user-management',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'users-login-history',
+        label: 'Login History',
+        url: '/users/login-history',
         parentKey: 'user-management',
         roles: ['superadmin', 'admin'],
       },

@@ -2,7 +2,9 @@ import { Router } from 'express';
 import {
   createUser,
   getUser,
+  listLoginHistory,
   listUsers,
+  logoutUser,
   updateUser,
 } from '../controllers/user.controller.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -15,6 +17,8 @@ import {
 export const userRouter = Router();
 
 userRouter.get('/', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listUsers));
+userRouter.get('/login-history', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listLoginHistory));
 userRouter.post('/', asyncHandler(allowFirstSuperadminOrUserManager), asyncHandler(createUser));
+userRouter.post('/:id/logout', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(logoutUser));
 userRouter.get('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(getUser));
 userRouter.patch('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(updateUser));

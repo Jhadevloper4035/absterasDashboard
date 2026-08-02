@@ -1,0 +1,78 @@
+# EC2 Deployment
+
+This deployment uses one EC2 instance, Docker Compose, and Nginx reverse proxy.
+
+## EC2 Setup
+
+Install Docker and allow the deploy user to run it:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc >/dev/null
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo usermod -aG docker ubuntu
+```
+
+Open inbound ports `22` and `80` in the EC2 security group.
+
+## GitHub Secrets
+
+Add these repository secrets:
+
+```text
+DOCKERHUB_USERNAME=your-dockerhub-username
+DOCKERHUB_TOKEN=your-dockerhub-access-token
+DOCKER_IMAGE_NAMESPACE=your-dockerhub-username-or-org
+EC2_HOST=your-ec2-public-ip-or-dns
+EC2_USER=ubuntu
+EC2_SSH_KEY=private-key-for-ec2-user
+EC2_APP_DIR=/opt/absteras-crm
+BACKEND_ENV=full contents of backend/.env.production
+```
+
+`BACKEND_ENV` must include real production values for:
+
+```text
+NODE_ENV=production
+APP_NAME=Sales CRM API
+PORT=4000
+AUTH_SECRET=
+SETUP_TOKEN=
+MONGODB_URI=
+CORS_ORIGIN=https://your-domain.com
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=us-east-1
+S3_BUCKET=
+S3_UPLOAD_PREFIX=uploads
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=
+SMTP_TIMEOUT_MS=5000
+TRUST_PROXY=1
+```
+
+Pipeline flow:
+
+1. Run backend tests and syntax checks.
+2. Build frontend.
+3. Build Docker images for backend and frontend.
+4. Push images to Docker Hub.
+5. SSH to EC2.
+6. Clean stale app source files on EC2.
+7. Pull the new images.
+8. Stop old containers.
+9. Start fresh containers with the pulled images.
+10. Clean old Docker images and build cache.
+
+Push to `main` or run the `Deploy EC2` workflow manually.
+
+The deploy cleanup does not remove Docker volumes, so database or uploaded data stored in volumes is not deleted accidentally.

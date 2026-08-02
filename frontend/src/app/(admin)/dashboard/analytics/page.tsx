@@ -91,11 +91,11 @@ const AdminDashboard = () => {
 
   return (
     <>
-      <PageBreadcrumb title="Absteras Facade Dashboard" subName="Facade CRM" />
-      <PageMetaData title="Absteras Facade Dashboard" />
+      <PageBreadcrumb title="Absteras Dashboard" subName="Facade CRM" />
+      <PageMetaData title="Absteras Dashboard" />
 
       <div className="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-4">
-        <div className="text-muted">Absteras Facade Company overview for leads, meetings, tasks, and sales workload.</div>
+        <div className="text-muted">Absteras Company overview for leads, meetings, tasks, and sales workload.</div>
         <div className="d-flex gap-2 flex-wrap ms-auto">
           <Link to="/leads/create" className="btn btn-primary text-nowrap">Create Lead</Link>
           <Link to="/tasks/create" className="btn btn-outline-primary text-nowrap">Create Task</Link>

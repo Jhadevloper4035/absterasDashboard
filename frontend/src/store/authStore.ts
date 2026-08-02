@@ -8,6 +8,7 @@ type SetupSuperadminPayload = {
   email: string
   phone: string
   password: string
+  setupToken?: string
 }
 
 type AuthStore = {
@@ -91,7 +92,10 @@ export const useAuthStore = create<AuthStore>()(
           const response = await fetch(buildApiUrl('/users'), {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(payload.setupToken ? { 'x-setup-token': payload.setupToken } : {}),
+            },
             body: JSON.stringify({ ...payload, role: 'superadmin' }),
           })
           const res = await response.json().catch(() => ({}))

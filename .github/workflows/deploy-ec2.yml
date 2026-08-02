@@ -1,0 +1,144 @@
+name: Deploy EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Backend checks
+        working-directory: backend
+        run: |
+          npm ci
+          npm test
+          npm run check
+      - name: Frontend build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  build-and-push:
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    outputs:
+      backend-image: ${{ steps.images.outputs.backend-image }}
+      frontend-image: ${{ steps.images.outputs.frontend-image }}
+    env:
+      DOCKER_NAMESPACE: ${{ secrets.DOCKER_IMAGE_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Docker secrets
+        run: |
+          test -n "${{ secrets.DOCKERHUB_USERNAME }}"
+          test -n "${{ secrets.DOCKERHUB_TOKEN }}"
+          test -n "$DOCKER_NAMESPACE"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Image names
+        id: images
+        run: |
+          echo "backend-image=$DOCKER_NAMESPACE/absteras-crm-backend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "frontend-image=$DOCKER_NAMESPACE/absteras-crm-frontend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          target: prod
+          push: true
+          tags: |
+            ${{ steps.images.outputs.backend-image }}
+            ${{ env.DOCKER_NAMESPACE }}/absteras-crm-backend:latest
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          target: prod
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=/api
+          tags: |
+            ${{ steps.images.outputs.frontend-image }}
+            ${{ env.DOCKER_NAMESPACE }}/absteras-crm-frontend:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    env:
+      APP_DIR: ${{ secrets.EC2_APP_DIR || '/opt/absteras-crm' }}
+      BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
+      BACKEND_IMAGE: ${{ needs.build-and-push.outputs.backend-image }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      FRONTEND_IMAGE: ${{ needs.build-and-push.outputs.frontend-image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare SSH
+        run: |
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$EC2_SSH_KEY"
+          test -n "$BACKEND_ENV"
+          test -n "$BACKEND_IMAGE"
+          test -n "$FRONTEND_IMAGE"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+      - name: Package deploy files
+        run: |
+          tar -czf /tmp/absteras-crm-deploy.tar.gz docker-compose.prod.yml deploy/nginx.conf
+      - name: Copy deploy files to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "mkdir -p '$APP_DIR'"
+          scp -i ~/.ssh/ec2_key /tmp/absteras-crm-deploy.tar.gz "$EC2_USER@$EC2_HOST:/tmp/absteras-crm-deploy.tar.gz"
+          printf '%s\n' "$BACKEND_ENV" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "cat > '$APP_DIR/backend.env.production'"
+      - name: Login to Docker Hub on EC2
+        run: |
+          printf '%s\n' "$DOCKERHUB_TOKEN" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "docker login -u '$DOCKERHUB_USERNAME' --password-stdin"
+      - name: Pull images and restart app
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "
+            set -e
+            echo 'Cleaning stale app files'
+            find '$APP_DIR' -mindepth 1 -maxdepth 1 ! -name backend.env.production -exec rm -rf {} +
+            tar -xzf /tmp/absteras-crm-deploy.tar.gz -C '$APP_DIR'
+            mkdir -p '$APP_DIR/backend'
+            mv '$APP_DIR/backend.env.production' '$APP_DIR/backend/.env.production'
+            cat > '$APP_DIR/.env' <<EOF
+BACKEND_IMAGE=$BACKEND_IMAGE
+FRONTEND_IMAGE=$FRONTEND_IMAGE
+EOF
+            cd '$APP_DIR'
+            echo 'Pulling new images'
+            docker compose -f docker-compose.prod.yml pull
+            echo 'Stopping old containers'
+            docker compose -f docker-compose.prod.yml down --remove-orphans
+            echo 'Starting new containers'
+            docker compose -f docker-compose.prod.yml up -d --force-recreate
+            echo 'Cleaning old docker images and build cache'
+            docker image prune -af
+            docker builder prune -af
+          "

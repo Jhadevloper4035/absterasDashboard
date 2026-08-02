@@ -1,6 +1,6 @@
-# Absteras Facade Company CRM Backend
+# Absteras Company CRM Backend
 
-Small Express + Mongoose API foundation for the Absteras Facade Company CRM. The repo is ready to add facade sales modules without splitting into services before there is a real boundary.
+Small Express + Mongoose API foundation for the Absteras Company CRM. The repo is ready to add facade sales modules without splitting into services before there is a real boundary.
 
 ## Run Locally
 
@@ -26,6 +26,13 @@ cd ..
 docker compose up --build
 ```
 
+Docker development starts local MongoDB and Mailpit. After backend package changes, sync the dependency volume once:
+
+```sh
+cd ..
+docker compose run --rm backend npm install
+```
+
 Production-shaped compose uses the production env file and a separate Mongo volume/database:
 
 ```sh
@@ -40,6 +47,44 @@ curl http://localhost:4000/health
 ```
 
 The health route returns `200` when MongoDB is connected and `503` when the API is alive but the database is unavailable.
+
+## Email Notifications
+
+Dashboard notifications are also sent by email when SMTP is configured:
+
+```sh
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=crm@example.com
+SMTP_PASS=your-smtp-password
+SMTP_FROM=crm@example.com
+SMTP_TIMEOUT_MS=5000
+```
+
+If SMTP is not configured, in-app notifications still work and email sending is skipped.
+
+For Docker development, Mailpit is already configured:
+
+```sh
+cd ..
+docker compose up --build
+```
+
+Open `http://localhost:8025` to view captured emails. The backend sends to Mailpit on `mailpit:1025`.
+
+Configured email template scenarios:
+
+```text
+lead.assigned
+lead.note
+lead.meeting
+lead.meeting.cancelled
+task.created
+task.updated
+task.note
+default
+```
 
 ## User API
 

@@ -15,11 +15,8 @@ const Editors = () => {
             <CardBody>
               <CardTitle as={'h5'} className="mb-1 anchor" id="overview">
                 Overview
-                <a className="btn btn-sm btn-outline-success rounded-2 float-end" href="https://quilljs.com/" target="_blank">
-                  Official Website
-                </a>
               </CardTitle>
-              <p className="text-muted mb-3">Quilljs is a lightweight and powerful datetime picker.</p>
+              <p className="text-muted mb-3">Basic text editing fields for internal CRM notes.</p>
             </CardBody>
           </Card>
           <AllEditors />

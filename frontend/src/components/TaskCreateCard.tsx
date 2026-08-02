@@ -28,7 +28,6 @@ type Task = {
   projectEpic?: string
   dependenciesBlockers?: string
   attachments?: TaskAttachment[]
-  estimate?: string
 }
 
 const emptyForm = {
@@ -41,7 +40,6 @@ const emptyForm = {
   projectEpic: '',
   dependenciesBlockers: '',
   attachments: [] as TaskAttachment[],
-  estimate: '',
 }
 
 function attachmentName(file: TaskAttachment) {
@@ -101,7 +99,6 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
             projectEpic: task.projectEpic || '',
             dependenciesBlockers: task.dependenciesBlockers || '',
             attachments: task.attachments || [],
-            estimate: task.estimate || '',
           })
         }
       })
@@ -199,7 +196,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                   required
                   value={form.title}
                   onChange={(event) => setForm({ ...form, title: event.target.value })}
-                  placeholder="e.g. Prepare coating estimate"
+                  placeholder="e.g. Prepare coating checklist"
                 />
               </Form.Group>
               {canAssign && (
@@ -238,11 +235,11 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                 />
               </Form.Group>
 
-              <Form.Group as={Col} lg={3} md={6}>
+              <Form.Group as={Col} lg={4} md={6}>
                 <Form.Label className="fs-14 mb-1">Due date</Form.Label>
                 <Form.Control required type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} />
               </Form.Group>
-              <Form.Group as={Col} lg={3} md={6}>
+              <Form.Group as={Col} lg={4} md={6}>
                 <Form.Label className="fs-14 mb-1">Status</Form.Label>
                 <Form.Select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
                   <option>Backlog</option>
@@ -254,7 +251,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                   <option>Done</option>
                 </Form.Select>
               </Form.Group>
-              <Form.Group as={Col} lg={3} md={6}>
+              <Form.Group as={Col} lg={4} md={6}>
                 <Form.Label className="fs-14 mb-1">Priority</Form.Label>
                 <Form.Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
                   <option>Critical</option>
@@ -262,10 +259,6 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                   <option>Medium</option>
                   <option>Low</option>
                 </Form.Select>
-              </Form.Group>
-              <Form.Group as={Col} lg={3} md={6}>
-                <Form.Label className="fs-14 mb-1">Estimated effort</Form.Label>
-                <Form.Control value={form.estimate} onChange={(event) => setForm({ ...form, estimate: event.target.value })} placeholder="e.g. 5 points" />
               </Form.Group>
 
               <Form.Group as={Col} lg={4}>
@@ -284,7 +277,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                   labelClassName="fs-14 mb-1"
                   iconProps={{ icon: 'bx:cloud-upload', height: 34, width: 34 }}
                   text="Drag & drop files here, or browse"
-                  helpText={<span className="text-muted fs-13">PDF, Word, Excel, CSV, TXT, JPG, PNG, WebP. Up to 5 files.</span>}
+                  helpText={<span className="text-muted fs-13">PDF, CSV, TXT, JPG, PNG, WebP. Up to 5 files.</span>}
                   showPreview={false}
                   onFileUpload={uploadFiles}
                 />

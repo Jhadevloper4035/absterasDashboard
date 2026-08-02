@@ -1,6 +1,7 @@
 import { Task, TASK_PRIORITIES, TASK_STATUSES } from '../models/task.model.js';
 import { DEFAULT_TASK_WORK_TYPES, TASK_WORK_TYPE_ROLES, TaskWorkType, normalizeTaskWorkType } from '../models/task-work-type.model.js';
 import { User } from '../models/user.model.js';
+import { auditEvent } from '../services/audit.service.js';
 import { notifyUsers } from '../services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
 
@@ -45,7 +46,6 @@ function patchTask(task, body, actorId) {
   if (body.dependenciesBlockers !== undefined) task.dependenciesBlockers = body.dependenciesBlockers;
   if (body.technicalNotes !== undefined) task.technicalNotes = body.technicalNotes;
   if (body.attachments !== undefined) task.attachments = cleanAttachments(body.attachments);
-  if (body.estimate !== undefined) task.estimate = body.estimate;
   if (body.definitionOfDone !== undefined) task.definitionOfDone = body.definitionOfDone;
 }
 
@@ -78,6 +78,7 @@ function notificationMetadata(type, taskId, actor) {
   return {
     type,
     taskId,
+    fromUserId: actor._id,
     fromName: actor.name || actor.email || 'User',
     fromRole: actor.role,
   };
@@ -132,6 +133,7 @@ export async function createTaskWorkType(req, res) {
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
 
+  await auditEvent(req, { action: 'task_work_type.create', entity: 'task_work_type', entityId: `${role}:${name}`, after: { role, name } });
   return res.status(201).json({ data: workType });
 }
 
@@ -156,6 +158,7 @@ export async function deleteTaskWorkType(req, res) {
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
 
+  await auditEvent(req, { action: 'task_work_type.delete', entity: 'task_work_type', entityId: `${role}:${name}`, before: { role, name } });
   return res.json({ data: { role, name } });
 }
 
@@ -221,6 +224,8 @@ export async function createTask(req, res) {
 
 export async function updateTask(req, res) {
   const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
+  const previousStatus = task?.status;
+  const previousAssignee = task?.assignee;
   if (!task) {
     return res.status(404).json({ error: { message: 'Task not found' } });
   }
@@ -239,6 +244,12 @@ export async function updateTask(req, res) {
 
   patchTask(task, req.body, req.user._id);
   await task.save();
+  if (previousStatus !== task.status) {
+    await auditEvent(req, { action: 'task.status', entity: 'task', entityId: task._id, before: { status: previousStatus }, after: { status: task.status } });
+  }
+  if (String(previousAssignee || '') !== String(task.assignee || '')) {
+    await auditEvent(req, { action: 'task.assign', entity: 'task', entityId: task._id, before: { assignee: previousAssignee }, after: { assignee: task.assignee } });
+  }
   await populateTask(task);
   await notifyUsers([task.assignee, task.createdBy].filter((id) => String(id || '') !== String(req.user._id)), {
     title: `${task.status === 'Done' ? 'Task completed' : 'Task updated'}: ${task.ticketNumber}`,
@@ -284,5 +295,6 @@ export async function deleteTask(req, res) {
     return res.status(404).json({ error: { message: 'Task not found' } });
   }
 
+  await auditEvent(req, { action: 'task.delete', entity: 'task', entityId: task._id, before: { assignee: task.assignee, status: task.status } });
   return res.json({ data: { id: req.params.id } });
 }

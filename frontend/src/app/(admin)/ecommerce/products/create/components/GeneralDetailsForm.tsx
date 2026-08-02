@@ -2,7 +2,6 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import { Col, Row } from 'react-bootstrap'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import ReactQuill from 'react-quill-new'
 import * as yup from 'yup'
 
 import SelectFormInput from '@/components/form/SelectFormInput'
@@ -11,8 +10,6 @@ import TextFormInput from '@/components/form/TextFormInput'
 import { getAllProductCategories } from '@/helpers/data'
 import type { SelectFormInputOptionType } from '@/types/component-props'
 import { renameKeys } from '@/utils/rename-object-keys'
-
-import 'react-quill-new/dist/quill.snow.css'
 
 const generalFormSchema = yup.object({
   name: yup.string().required(),
@@ -25,7 +22,7 @@ const generalFormSchema = yup.object({
 })
 
 const GeneralDetailsForm = () => {
-  const [productDescriptionContent, setProductDescriptionContent] = useState(`<h2>Describe Your Product...</h2>`)
+  const [productDescriptionContent, setProductDescriptionContent] = useState('Describe your product...')
   const [productCategories, setProductCategories] = useState<SelectFormInputOptionType[]>()
 
   const { control } = useForm({
@@ -66,25 +63,11 @@ const GeneralDetailsForm = () => {
         <Col lg={12}>
           <div className="mb-5">
             <label className="form-label">Product Description</label>
-            <ReactQuill
-              theme="snow"
-              style={{ height: 195 }}
-              className="pb-sm-3 pb-5 pb-xl-0"
-              modules={{
-                toolbar: [
-                  [{ font: [] }, { size: [] }],
-                  ['bold', 'italic', 'underline', 'strike'],
-                  [{ color: [] }, { background: [] }],
-                  [{ script: 'super' }, { script: 'sub' }],
-                  [{ header: [false, 1, 2, 3, 4, 5, 6] }, 'blockquote', 'code-block'],
-                  [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
-                  ['direction', { align: [] }],
-                  ['link', 'image', 'video'],
-                  ['clean'],
-                ],
-              }}
+            <textarea
+              className="form-control"
+              rows={8}
               value={productDescriptionContent}
-              onChange={setProductDescriptionContent}
+              onChange={(event) => setProductDescriptionContent(event.target.value)}
             />
           </div>
         </Col>

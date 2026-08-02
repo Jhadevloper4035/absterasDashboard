@@ -62,42 +62,6 @@ const TYPES = [
     matches: isSafeText,
   },
   {
-    key: 'doc',
-    kind: 'document',
-    extensions: ['.doc'],
-    mimes: ['application/msword'],
-    contentType: 'application/msword',
-    outputExtension: 'doc',
-    matches: isOleDocument,
-  },
-  {
-    key: 'docx',
-    kind: 'document',
-    extensions: ['.docx'],
-    mimes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    outputExtension: 'docx',
-    matches: isZipDocument,
-  },
-  {
-    key: 'xls',
-    kind: 'document',
-    extensions: ['.xls'],
-    mimes: ['application/vnd.ms-excel'],
-    contentType: 'application/vnd.ms-excel',
-    outputExtension: 'xls',
-    matches: isOleDocument,
-  },
-  {
-    key: 'xlsx',
-    kind: 'document',
-    extensions: ['.xlsx'],
-    mimes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    outputExtension: 'xlsx',
-    matches: isZipDocument,
-  },
-  {
     key: 'text',
     kind: 'text',
     extensions: ['.txt'],
@@ -122,14 +86,6 @@ function isSafeText(buffer) {
   } catch {
     return false;
   }
-}
-
-function isOleDocument(buffer) {
-  return buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
-}
-
-function isZipDocument(buffer) {
-  return buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
 }
 
 function cleanMetadata(value) {

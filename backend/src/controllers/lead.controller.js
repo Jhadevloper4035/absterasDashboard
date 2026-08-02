@@ -1,9 +1,11 @@
 import { Lead, LEAD_STATUSES } from '../models/lead.model.js';
 import { User } from '../models/user.model.js';
+import { auditEvent } from '../services/audit.service.js';
 import { notifyUsers } from '../services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
+const LEAD_CREATE_ROLES = [...ADMIN_ROLES, 'sales'];
 const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory'];
 
 function canManageLeads(user) {
@@ -58,12 +60,17 @@ function notificationMetadata(user, type, leadId) {
   return {
     type,
     leadId,
+    fromUserId: user._id,
     fromName: user.name || user.email || 'User',
     fromRole: user.role || 'user',
   };
 }
 
 export async function createLead(req, res) {
+  if (!LEAD_CREATE_ROLES.includes(req.user?.role)) {
+    return forbidden(res);
+  }
+
   const {
     owner,
     sharedWith,
@@ -126,6 +133,8 @@ export async function updateLead(req, res) {
   const { owner, ...patch } = req.body;
   const lead = await Lead.findOne(leadQueryFor(req.user, { _id: req.params.id }));
   const notifications = [];
+  const previousStatus = lead?.status;
+  const previousOwner = lead?.owner;
 
   if (!lead) {
     return res.status(404).json({ error: { message: 'Lead not found' } });
@@ -261,6 +270,12 @@ export async function updateLead(req, res) {
   applyLeadPatch(lead, patch);
 
   await lead.save();
+  if (String(previousOwner || '') !== String(lead.owner || '')) {
+    await auditEvent(req, { action: 'lead.assign', entity: 'lead', entityId: lead._id, before: { owner: previousOwner }, after: { owner: lead.owner } });
+  }
+  if (previousStatus !== lead.status) {
+    await auditEvent(req, { action: 'lead.status', entity: 'lead', entityId: lead._id, before: { status: previousStatus }, after: { status: lead.status } });
+  }
   await lead.populate([
     { path: 'owner', select: 'name email role status' },
     { path: 'meetingHistory.scheduledBy', select: 'name email role status' },
@@ -290,5 +305,6 @@ export async function deleteLead(req, res) {
     return res.status(404).json({ error: { message: 'Lead not found' } });
   }
 
+  await auditEvent(req, { action: 'lead.delete', entity: 'lead', entityId: lead._id, before: { owner: lead.owner, status: lead.status } });
   return res.json({ data: { id: req.params.id } });
 }

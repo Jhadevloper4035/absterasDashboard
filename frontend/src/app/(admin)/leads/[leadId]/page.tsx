@@ -306,7 +306,7 @@ const LeadDetailPage = () => {
                   iconProps={{ icon: 'bx:cloud-upload', height: 28, width: 28 }}
                   text="Attach files"
                   textClassName="fs-5"
-                  helpText={<span className="text-muted fs-13">PDF, Excel, Word, images, CSV, TXT. Up to 5 files.</span>}
+                  helpText={<span className="text-muted fs-13">PDF, images, CSV, TXT. Up to 5 files.</span>}
                   showPreview={false}
                   onFileUpload={uploadNoteFiles}
                 />

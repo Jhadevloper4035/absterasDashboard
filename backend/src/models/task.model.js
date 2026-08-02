@@ -67,7 +67,6 @@ const taskSchema = new mongoose.Schema(
     technicalNotes: { type: String, trim: true },
     attachments: [attachmentSchema],
     notes: [noteSchema],
-    estimate: { type: String, trim: true },
     definitionOfDone: { type: String, trim: true },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

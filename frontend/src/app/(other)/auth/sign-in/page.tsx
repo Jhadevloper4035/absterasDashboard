@@ -32,7 +32,7 @@ const SignIn = () => {
                   />
                 </div>
                 <h2 className="fw-bold text-center fs-18">Sign In</h2>
-                <p className="text-muted text-center mt-1 mb-4">Enter your email address and password to access the Absteras Facade CRM.</p>
+                <p className="text-muted text-center mt-1 mb-4">Enter your email address and password to access the Absteras CRM.</p>
                 <Row className="justify-content-center">
                   <Col xs={12} md={8}>
                     <LoginForm />

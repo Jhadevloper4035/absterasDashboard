@@ -1,11 +1,8 @@
 import { useState } from 'react'
-import { Button, Dropdown, DropdownDivider, DropdownMenu, DropdownToggle, Modal, ModalBody, ModalHeader, ModalTitle } from 'react-bootstrap'
-import ReactQuill from 'react-quill-new'
+import { Button, Dropdown, DropdownDivider, DropdownMenu, DropdownToggle, Form, Modal, ModalBody, ModalHeader, ModalTitle } from 'react-bootstrap'
 
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useEmailContext } from '@/context/useEmailContext'
-
-import 'react-quill-new/dist/quill.snow.css'
 
 const ComposeEmailModal = () => {
   const [quillEditorContent, setQuillEditorContent] = useState('')
@@ -30,7 +27,7 @@ const ComposeEmailModal = () => {
             <input type="text" className="form-control" placeholder="Subject " />
           </div>
           <div className="mt-2 mb-5">
-            <ReactQuill value={quillEditorContent} onChange={setQuillEditorContent} style={{ height: 200 }} />
+            <Form.Control as="textarea" rows={8} value={quillEditorContent} onChange={(event) => setQuillEditorContent(event.target.value)} />
           </div>
           <div className="d-flex float-end">
             <Dropdown className="dropdown me-1">

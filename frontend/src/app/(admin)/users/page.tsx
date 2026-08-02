@@ -131,7 +131,13 @@ const UsersPage = () => {
     }
 
     if (!singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) patch.role = editForm.role
-    if (editForm.password.trim()) patch.password = editForm.password.trim()
+    if (editForm.password.trim()) {
+      if (editForm.password.length < 8 || !/[a-z]/i.test(editForm.password) || !/\d/.test(editForm.password)) {
+        setEditError('Password must be at least 8 characters and include letters and numbers')
+        return
+      }
+      patch.password = editForm.password.trim()
+    }
 
     if (await updateUser(editingUser._id, patch)) {
       closeEdit()
@@ -278,6 +284,7 @@ const UsersPage = () => {
               <InputGroup>
                 <Form.Control
                   type={visiblePassword ? 'text' : 'password'}
+                  minLength={8}
                   value={editForm.password}
                   onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
                   placeholder="Leave blank to keep current password"
@@ -286,6 +293,7 @@ const UsersPage = () => {
                   <IconifyIcon icon={visiblePassword ? 'bx:hide' : 'bx:show'} />
                 </Button>
               </InputGroup>
+              <Form.Text>Use at least 8 characters with letters and numbers.</Form.Text>
             </Form.Group>
           </Modal.Body>
           <Modal.Footer>
