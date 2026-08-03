@@ -133,7 +133,7 @@ jobs:
             echo 'Cleaning stale app files'
             find '$APP_DIR' -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +
             tar -xzf /tmp/absteras-crm-deploy.tar.gz -C '$APP_DIR'
-            cat >> '$APP_DIR/.env' <<EOF
+            cat > '$APP_DIR/.env' <<'EOF'
 BACKEND_IMAGE=$BACKEND_IMAGE
 FRONTEND_IMAGE=$FRONTEND_IMAGE
 EOF
