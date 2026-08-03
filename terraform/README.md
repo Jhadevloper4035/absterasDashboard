@@ -10,6 +10,6 @@ terraform apply
 terraform output -raw backend_env
 ```
 
-Add the printed values to `backend/.env.production` or your deployment secrets. For local uploads, add them to `backend/.env.development`.
+Add the printed values to root `.env` or your deployment secrets. For local uploads, add them to root `.env.development`.
 
 Keep Terraform state private; the generated IAM secret is stored there.

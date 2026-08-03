@@ -44,6 +44,10 @@ function adminCanManage(actor, targetUser) {
   return actor?.role === 'admin' ? TEAM_USER_ROLES.includes(targetUser.role) : true;
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function createUser(req, res) {
   if (!req.body.password) {
     return res.status(400).json({ error: { message: 'Password is required' } });
@@ -77,16 +81,29 @@ export async function createUser(req, res) {
 }
 
 export async function listUsers(req, res) {
+  const page = Math.max(Number(req.query.page || 1), 1);
+  const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
   const filter = req.user?.role === 'admin' ? { role: { $in: TEAM_USER_ROLES } } : {};
-  const users = await User.find(filter).sort({ createdAt: -1 }).limit(50);
-  res.json({ data: users });
+  if (req.query.role) filter.role = req.user?.role === 'admin' ? { $in: TEAM_USER_ROLES.filter((role) => role === req.query.role) } : req.query.role;
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.q) {
+    const search = { $regex: escapeRegex(req.query.q), $options: 'i' };
+    filter.$or = [{ name: search }, { email: search }, { phone: search }];
+  }
+
+  const [users, total] = await Promise.all([
+    User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    User.countDocuments(filter),
+  ]);
+  res.json({ data: users, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function listLoginHistory(req, res) {
   const filter = {};
   const sessionFilter = { revokedAt: null, expiresAt: { $gt: new Date() } };
   const cleanupAt = new Date();
-  const limit = Math.min(Number(req.query.limit) || 100, 200);
+  const page = Math.max(Number(req.query.page || 1), 1);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 50);
 
   if (req.query.userId) {
     const selectedUser = await User.findById(req.query.userId).select('role');
@@ -95,7 +112,7 @@ export async function listLoginHistory(req, res) {
     sessionFilter.user = selectedUser._id;
   }
 
-  const activeSessions = await AuthSession.find(sessionFilter).sort({ createdAt: -1 }).limit(limit).populate('user', 'name email role status').lean();
+  const activeSessions = await AuthSession.find(sessionFilter).sort({ createdAt: -1 }).limit(50).populate('user', 'name email role status').lean();
   const activeSessionUsers = new Set();
   const staleSessionIds = [];
   const currentSessions = [];
@@ -112,7 +129,10 @@ export async function listLoginHistory(req, res) {
     await AuthSession.updateMany({ _id: { $in: staleSessionIds } }, { $set: { revokedAt: cleanupAt } });
   }
 
-  const history = await LoginHistory.find(filter).sort({ loggedInAt: -1 }).limit(limit).populate('user', 'name email role status').lean();
+  const historyLimit = page === 1 ? limit : limit + currentSessions.length;
+  const historySkip = Math.max((page - 1) * limit - currentSessions.length, 0);
+  const history = await LoginHistory.find(filter).sort({ loggedInAt: -1 }).skip(historySkip).limit(historyLimit).populate('user', 'name email role status').lean();
+  const totalHistory = await LoginHistory.countDocuments(filter);
   const newestOpenByUser = new Map();
   const staleLoggedOutHistoryIds = [];
   const staleNewLoginHistoryIds = [];
@@ -157,7 +177,8 @@ export async function listLoginHistory(req, res) {
     .map((item) => ({ ...item, ipAddress: cleanIpAddress(item.ipAddress) }))
     .sort((a, b) => new Date(b.loggedInAt) - new Date(a.loggedInAt))
     .slice(0, limit);
-  res.json({ data });
+  const total = totalHistory + (page === 1 ? activeRows.length : 0);
+  res.json({ data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function logoutUser(req, res) {

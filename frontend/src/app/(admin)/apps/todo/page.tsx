@@ -30,6 +30,7 @@ type TodoPriority = 'Low' | 'Medium' | 'High' | 'Critical'
 
 type TodoUser = Pick<UserType, '_id' | 'name' | 'email' | 'role' | 'status'>
 type TaskAttachment = { key: string; url?: string; contentType?: string; originalName?: string; size?: number; checksum?: string; attachmentToken?: string }
+type PageMeta = { page: number; limit: number; total: number; totalPages: number }
 
 type SalesTodo = {
   _id: string
@@ -81,6 +82,8 @@ const TODO = () => {
   const [todos, setTodos] = useState<SalesTodo[]>([])
   const [users, setUsers] = useState<UserType[]>([])
   const [workTypesByRole, setWorkTypesByRole] = useState(defaultTaskWorkTypes)
+  const [meta, setMeta] = useState<PageMeta>({ page: 1, limit: 25, total: 0, totalPages: 1 })
+  const [page, setPage] = useState(1)
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState('')
   const [search, setSearch] = useState('')
@@ -129,12 +132,24 @@ const TODO = () => {
     setLoading(true)
     setError('')
     try {
+      const query = new URLSearchParams({ page: String(page), limit: '25' })
+      if (!isTodoPage && isExceededDeadlinePage) query.set('deadline', 'exceeded')
+      if (!isTodoPage && isPendingPage) query.set('status', 'To Do')
+      if (search.trim()) query.set('q', search.trim())
+      if (!isTodoPage && assigneeFilter) query.set('assignee', assigneeFilter)
+      if (!isTodoPage && groupFilter) query.set('group', groupFilter)
+      if (!isTodoPage && workTypeFilter) query.set('workType', workTypeFilter)
+      if (statusFilter) query.set('status', statusFilter)
+      if (priorityFilter) query.set('priority', priorityFilter)
+      if (fromDateFilter) query.set('fromDate', fromDateFilter)
+      if (toDateFilter) query.set('toDate', toDateFilter)
       const [todoRes, userRes, workTypeRes] = await Promise.all([
-        apiFetch<{ data: SalesTodo[] }>(isExceededDeadlinePage && !isTodoPage ? `${apiPath}?deadline=exceeded` : isPendingPage && !isTodoPage ? `${apiPath}?status=To%20Do` : apiPath, { token }),
+        apiFetch<{ data: SalesTodo[]; meta?: PageMeta }>(`${apiPath}?${query}`, { token }),
         canAssign ? apiFetch<{ data: UserType[] }>('/tasks/assignees', { token }) : Promise.resolve({ data: [] }),
         !isTodoPage ? apiFetch<{ data: Record<string, string[]> }>('/tasks/work-types', { token }) : Promise.resolve({ data: defaultTaskWorkTypes }),
       ])
       setTodos(todoRes.data)
+      setMeta(todoRes.meta || { page, limit: todoRes.data.length, total: todoRes.data.length, totalPages: 1 })
       setUsers(userRes.data)
       setWorkTypesByRole(mergeTaskWorkTypes(workTypeRes.data, false))
     } catch (e) {
@@ -146,9 +161,14 @@ const TODO = () => {
 
   useEffect(() => {
     load()
-  }, [apiPath, canAssign, isExceededDeadlinePage, isPendingPage, isTodoPage, itemName, token])
+  }, [apiPath, assigneeFilter, canAssign, fromDateFilter, groupFilter, isExceededDeadlinePage, isPendingPage, isTodoPage, itemName, page, priorityFilter, search, statusFilter, toDateFilter, token, workTypeFilter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [assigneeFilter, fromDateFilter, groupFilter, priorityFilter, search, statusFilter, toDateFilter, workTypeFilter])
 
   const visibleTodos = useMemo(() => {
+    if (!isTodoPage) return todos
     const query = search.toLowerCase().trim()
     return todos.filter(
       (todo) => {
@@ -156,11 +176,6 @@ const TODO = () => {
 
         return (
           (!isTodoPage || personId(todo.assignedTo) === user?._id) &&
-          (!isPendingPage || (isTodoPage ? todo.status === 'Pending' : todo.status === 'To Do')) &&
-          (!isExceededDeadlinePage || isOverdue(todo)) &&
-          (!assigneeFilter || personId(todo.assignee || todo.assignedTo) === assigneeFilter) &&
-          (!groupFilter || personRole(todo.assignee || todo.assignedTo) === groupFilter) &&
-          (!workTypeFilter || todo.projectEpic === workTypeFilter) &&
           (!statusFilter || todo.status === statusFilter) &&
           (!priorityFilter || todo.priority === priorityFilter) &&
           (!fromDateFilter || (dueDate && dueDate >= fromDateFilter)) &&
@@ -169,7 +184,7 @@ const TODO = () => {
         )
       },
     )
-  }, [assigneeFilter, fromDateFilter, groupFilter, isExceededDeadlinePage, isPendingPage, isTodoPage, priorityFilter, search, statusFilter, toDateFilter, todos, user?._id, workTypeFilter])
+  }, [fromDateFilter, isTodoPage, priorityFilter, search, statusFilter, toDateFilter, todos, user?._id])
   const completedTodos = visibleTodos.filter((todo) => todo.status === 'Completed' || todo.status === 'Done')
   const calendarEvents = visibleTodos
     .filter((todo) => todo.dueDate)
@@ -504,7 +519,7 @@ const TODO = () => {
               <div className="text-muted">{isTodoPage ? `${user?.name || 'User'} task list` : canAssign ? 'Team task ownership and deadlines' : 'Tasks assigned to you'}</div>
             </div>
             <Badge bg="light" text="dark">
-              {visibleTodos.length} {itemName.toLowerCase()}s
+              {meta.total} {itemName.toLowerCase()}s
             </Badge>
           </div>
           {error && <Alert variant="danger">{error}</Alert>}
@@ -715,6 +730,19 @@ const TODO = () => {
             </Alert>
           </div>
         )}
+        <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap p-3">
+          <span className="text-muted fs-13">
+            Showing page {meta.page} of {meta.totalPages}
+          </span>
+          <div className="d-flex gap-2">
+            <Button size="sm" variant="outline-secondary" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))}>
+              Previous
+            </Button>
+            <Button size="sm" variant="outline-secondary" disabled={loading || page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
       </Card>
       <DeleteConfirmModal
         show={!!deleteTarget}

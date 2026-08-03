@@ -41,6 +41,7 @@ const emptyEditForm = {
 const UsersPage = () => {
   const { user } = useAuthContext()
   const users = useUserManagementStore((state) => state.users)
+  const meta = useUserManagementStore((state) => state.meta)
   const loading = useUserManagementStore((state) => state.loading)
   const storeError = useUserManagementStore((state) => state.error)
   const clearUsers = useUserManagementStore((state) => state.clearUsers)
@@ -52,15 +53,26 @@ const UsersPage = () => {
   const [visiblePassword, setVisiblePassword] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState({ q: '', role: '', status: '' })
   const canManageUsers = user?.role === 'superadmin' || user?.role === 'admin'
   const hasRole = (role: UserType['role'], exceptId = '') => users.some((item) => item.role === role && item._id !== exceptId)
   const editableRoles = (item: UserType) =>
     user?.role === 'admin' ? teamRoles : roles.filter((role) => role === item.role || teamRoles.includes(role) || !hasRole(role, item._id))
 
   useEffect(() => {
-    if (canManageUsers) fetchUsers().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
+    const query = new URLSearchParams({ page: String(page), limit: '25' })
+    if (filters.q.trim()) query.set('q', filters.q.trim())
+    if (filters.role) query.set('role', filters.role)
+    if (filters.status) query.set('status', filters.status)
+
+    if (canManageUsers) fetchUsers(`?${query}`).catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
     else clearUsers()
-  }, [canManageUsers, clearUsers, fetchUsers])
+  }, [canManageUsers, clearUsers, fetchUsers, filters.q, filters.role, filters.status, page])
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters.q, filters.role, filters.status])
 
   const updateUser = async (id: string, patch: Partial<UserType> & { password?: string }) => {
     setError('')
@@ -163,6 +175,21 @@ const UsersPage = () => {
           <h4 className="card-title mb-3">User Profiles & Access</h4>
           {(error || storeError) && <Alert variant="danger">{error || storeError}</Alert>}
           {message && <Alert variant="success">{message}</Alert>}
+          <div className="d-flex gap-2 flex-wrap mb-3">
+            <Form.Control style={{ flex: '1 1 260px' }} placeholder="Search name, email, mobile" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} />
+            <Form.Select style={{ flex: '0 1 180px' }} value={filters.role} onChange={(event) => setFilters({ ...filters, role: event.target.value })}>
+              <option value="">All roles</option>
+              {(user?.role === 'admin' ? teamRoles : roles).map((role) => (
+                <option key={role}>{role}</option>
+              ))}
+            </Form.Select>
+            <Form.Select style={{ flex: '0 1 180px' }} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+              <option value="">All status</option>
+              {statuses.map((status) => (
+                <option key={status}>{status}</option>
+              ))}
+            </Form.Select>
+          </div>
           <div className="table-responsive">
             <Table className="align-middle mb-0" style={{ minWidth: 880 }}>
               <thead>
@@ -229,6 +256,19 @@ const UsersPage = () => {
                 )}
               </tbody>
             </Table>
+          </div>
+          <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
+            <span className="text-muted fs-13">
+              Showing page {meta.page} of {meta.totalPages} · {meta.total} users
+            </span>
+            <div className="d-flex gap-2">
+              <Button size="sm" variant="outline-secondary" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))}>
+                Previous
+              </Button>
+              <Button size="sm" variant="outline-secondary" disabled={loading || page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>
+                Next
+              </Button>
+            </div>
           </div>
         </CardBody>
       </Card>

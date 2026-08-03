@@ -93,4 +93,10 @@ taskSchema.pre('validate', async function assignTicketNumber() {
   }
 });
 
+taskSchema.index({ assignee: 1, status: 1, dueDate: 1, createdAt: -1 });
+taskSchema.index({ status: 1, dueDate: 1, createdAt: -1 });
+taskSchema.index({ projectEpic: 1, dueDate: 1 });
+taskSchema.index({ priority: 1, dueDate: 1 });
+taskSchema.index({ createdAt: -1 });
+
 export const Task = mongoose.model('Task', taskSchema);

@@ -32,7 +32,7 @@ EC2_HOST=your-ec2-public-ip-or-dns
 EC2_USER=ubuntu
 EC2_SSH_KEY=private-key-for-ec2-user
 EC2_APP_DIR=/opt/absteras-crm
-BACKEND_ENV=full contents of backend/.env.production
+BACKEND_ENV=full production app env contents for root .env
 ```
 
 `BACKEND_ENV` must include real production values for:
@@ -60,6 +60,8 @@ SMTP_TIMEOUT_MS=5000
 TRUST_PROXY=1
 ```
 
+The workflow appends `BACKEND_IMAGE` and `FRONTEND_IMAGE` automatically during deploy.
+
 Pipeline flow:
 
 1. Run backend tests and syntax checks.
@@ -76,3 +78,44 @@ Pipeline flow:
 Push to `main` or run the `Deploy EC2` workflow manually.
 
 The deploy cleanup does not remove Docker volumes, so database or uploaded data stored in volumes is not deleted accidentally.
+
+## Backup And Restore
+
+Install MongoDB database tools on the EC2 host, then run:
+
+```sh
+scripts/backup-mongodb.sh
+```
+
+It reads `MONGODB_URI` from the environment or root `.env` and writes a gzip archive under `backups/`.
+
+Restore only after confirming the target database:
+
+```sh
+scripts/restore-mongodb.sh backups/mongodb-YYYYMMDD-HHMMSS.archive.gz
+```
+
+## Health Monitoring
+
+Use the healthcheck script from cron, systemd, or your EC2 monitoring agent:
+
+```sh
+CRM_HEALTH_URL=https://your-domain.com/health deploy/healthcheck.sh
+```
+
+It exits non-zero if the API or MongoDB health check is not OK.
+
+## Smoke Test
+
+After deploy:
+
+```sh
+CRM_BASE_URL=https://your-domain.com npm --prefix backend run smoke
+```
+
+For authenticated dashboard verification, also set:
+
+```sh
+CRM_SMOKE_EMAIL=admin@example.com
+CRM_SMOKE_PASSWORD=your-password
+```

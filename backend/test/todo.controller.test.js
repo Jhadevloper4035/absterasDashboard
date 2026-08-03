@@ -7,6 +7,7 @@ import { User } from '../src/models/user.model.js';
 
 const originalTodoFind = Todo.find;
 const originalTodoFindOne = Todo.findOne;
+const originalTodoCountDocuments = Todo.countDocuments;
 const originalUserFindOne = User.findOne;
 
 function res() {
@@ -27,6 +28,7 @@ function res() {
 afterEach(() => {
   Todo.find = originalTodoFind;
   Todo.findOne = originalTodoFindOne;
+  Todo.countDocuments = originalTodoCountDocuments;
   User.findOne = originalUserFindOne;
 });
 
@@ -42,12 +44,16 @@ test('salespeople only list their assigned todos', async () => {
       sort() {
         return this;
       },
+      skip() {
+        return this;
+      },
       limit(value) {
         limit = value;
         return Promise.resolve([]);
       },
     };
   };
+  Todo.countDocuments = async () => 0;
 
   await listTodos({ user: { _id: 'sales-1', role: 'sales' }, query: { limit: '5' } }, res());
 

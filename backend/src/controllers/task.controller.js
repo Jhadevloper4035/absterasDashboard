@@ -15,6 +15,10 @@ function taskQueryFor(user, extra = {}) {
   return canManageTasks(user) ? extra : { ...extra, assignee: user._id };
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function cleanLabels(labels) {
   return (Array.isArray(labels) ? labels : String(labels || '').split(','))
     .map((label) => String(label).trim())
@@ -163,7 +167,8 @@ export async function deleteTaskWorkType(req, res) {
 }
 
 export async function listTasks(req, res) {
-  const limit = Math.min(Math.max(Number(req.query?.limit || 100), 1), 100);
+  const page = Math.max(Number(req.query.page || 1), 1);
+  const limit = Math.min(Math.max(Number(req.query?.limit || 25), 1), 50);
   const extra = req.query.status ? { status: req.query.status } : {};
   if (req.query.deadline === 'exceeded') {
     const today = new Date();
@@ -175,15 +180,32 @@ export async function listTasks(req, res) {
     const users = await User.find({ status: 'active', role: req.query.group }).select('_id').limit(1000);
     extra.assignee = { $in: users.map((user) => user._id) };
   }
+  if (canManageTasks(req.user) && req.query.assignee) extra.assignee = req.query.assignee;
+  if (req.query.workType) extra.projectEpic = req.query.workType;
+  if (req.query.priority) extra.priority = req.query.priority;
+  if (req.query.q) {
+    const search = { $regex: escapeRegex(req.query.q), $options: 'i' };
+    extra.$or = [{ title: search }, { ticketNumber: search }];
+  }
+  if (req.query.fromDate || req.query.toDate) {
+    extra.dueDate = { ...(extra.dueDate || {}) };
+    if (req.query.fromDate) extra.dueDate.$gte = new Date(`${req.query.fromDate}T00:00:00.000Z`);
+    if (req.query.toDate) extra.dueDate.$lte = new Date(`${req.query.toDate}T23:59:59.999Z`);
+  }
 
-  const tasks = await Task.find(taskQueryFor(req.user, extra))
-    .populate('assignee', 'name email role status')
-    .populate('createdBy', 'name email role status')
-    .populate('completedBy', 'name email role status')
-    .sort({ dueDate: 1, createdAt: -1 })
-    .limit(limit);
+  const query = taskQueryFor(req.user, extra);
+  const [tasks, total] = await Promise.all([
+    Task.find(query)
+      .populate('assignee', 'name email role status')
+      .populate('createdBy', 'name email role status')
+      .populate('completedBy', 'name email role status')
+      .sort({ dueDate: 1, createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    Task.countDocuments(query),
+  ]);
 
-  return res.json({ data: await Promise.all(tasks.map(taskData)) });
+  return res.json({ data: await Promise.all(tasks.map(taskData)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function getTask(req, res) {

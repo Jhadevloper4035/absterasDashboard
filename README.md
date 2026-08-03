@@ -1,7 +1,8 @@
 
 # Demo Users
 
-Run `npm run db:seed` in `backend/` to create or refresh these local demo users.
+Use `.env.development` for development and `.env` for production.
+Run `npm run db:seed` in `backend/` to create or refresh these demo users.
 
 | Role | Email | Password |
 | --- | --- | --- |

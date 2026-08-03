@@ -11,6 +11,10 @@ function todoQueryFor(user, extra = {}) {
   return canManageTodos(user) ? extra : { ...extra, assignedTo: user._id };
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function populateTodo(todo) {
   return todo.populate([
     { path: 'assignedTo', select: 'name email role status' },
@@ -31,15 +35,31 @@ function patchTodo(todo, patch, actorId) {
 }
 
 export async function listTodos(req, res) {
-  const limit = Math.min(Math.max(Number(req.query?.limit || 100), 1), 100);
-  const todos = await Todo.find(todoQueryFor(req.user))
-    .populate('assignedTo', 'name email role status')
-    .populate('createdBy', 'name email role status')
-    .populate('completedBy', 'name email role status')
-    .sort({ dueDate: 1, createdAt: -1 })
-    .limit(limit);
+  const page = Math.max(Number(req.query.page || 1), 1);
+  const limit = Math.min(Math.max(Number(req.query?.limit || 25), 1), 50);
+  const extra = {};
+  if (TODO_STATUSES.includes(req.query.status)) extra.status = req.query.status;
+  if (TODO_PRIORITIES.includes(req.query.priority)) extra.priority = req.query.priority;
+  if (req.query.q) extra.title = { $regex: escapeRegex(req.query.q), $options: 'i' };
+  if (req.query.fromDate || req.query.toDate) {
+    extra.dueDate = {};
+    if (req.query.fromDate) extra.dueDate.$gte = new Date(`${req.query.fromDate}T00:00:00.000Z`);
+    if (req.query.toDate) extra.dueDate.$lte = new Date(`${req.query.toDate}T23:59:59.999Z`);
+  }
 
-  res.json({ data: todos });
+  const query = todoQueryFor(req.user, extra);
+  const [todos, total] = await Promise.all([
+    Todo.find(query)
+      .populate('assignedTo', 'name email role status')
+      .populate('createdBy', 'name email role status')
+      .populate('completedBy', 'name email role status')
+      .sort({ dueDate: 1, createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    Todo.countDocuments(query),
+  ]);
+
+  res.json({ data: todos, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function listTodoAssignees(req, res) {

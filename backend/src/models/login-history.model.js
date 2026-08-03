@@ -37,4 +37,8 @@ const loginHistorySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+loginHistorySchema.index({ user: 1, loggedInAt: -1 });
+loginHistorySchema.index({ role: 1, loggedInAt: -1 });
+loginHistorySchema.index({ logoutAt: 1, loggedInAt: -1 });
+
 export const LoginHistory = mongoose.models.LoginHistory || mongoose.model('LoginHistory', loginHistorySchema);

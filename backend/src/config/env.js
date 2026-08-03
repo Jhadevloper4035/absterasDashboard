@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 
-dotenv.config({ path: `.env.${process.env.NODE_ENV || 'development'}` });
+const envFile = process.env.NODE_ENV === 'production' ? '.env' : `.env.${process.env.NODE_ENV || 'development'}`;
+
+dotenv.config({ path: `../${envFile}` });
+dotenv.config({ path: envFile });
 
 const required = ['AUTH_SECRET', 'MONGODB_URI'];
 const missing = required.filter((key) => !process.env[key]);

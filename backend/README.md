@@ -5,6 +5,9 @@ Small Express + Mongoose API foundation for the Absteras Company CRM. The repo i
 ## Run Locally
 
 ```sh
+cd ..
+# create or edit .env.development with your development MongoDB Atlas URI
+cd backend
 npm install
 npm run db:seed
 npm run dev
@@ -26,7 +29,7 @@ cd ..
 docker compose up --build
 ```
 
-Docker development starts local MongoDB and Mailpit. After backend package changes, sync the dependency volume once:
+Docker development starts the API, frontend and Mailpit. MongoDB comes from the root `.env` Atlas URI. After backend package changes, sync the dependency volume once:
 
 ```sh
 cd ..

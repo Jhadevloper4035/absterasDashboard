@@ -21,6 +21,8 @@ type LeadsPageProps = {
   apiPath?: string
 }
 
+type PageMeta = { page: number; limit: number; total: number; totalPages: number }
+
 const isArchitectLead = (lead: LeadType) => [lead.name, lead.source, lead.sourceType, lead.productInterest, lead.company].some((value) => value?.toLowerCase().includes('architect'))
 
 const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }: LeadsPageProps) => {
@@ -28,6 +30,8 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const token = useAuthStore((state) => state.token)
   const [leads, setLeads] = useState<LeadType[]>([])
   const [users, setUsers] = useState<UserType[]>([])
+  const [meta, setMeta] = useState<PageMeta>({ page: 1, limit: 25, total: 0, totalPages: 1 })
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ name: '', phone: '', email: '', owner: '', createdFrom: '', createdTo: '', meeting: '' })
@@ -38,25 +42,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
 
   const salespeople = useMemo(() => users.filter((item) => item.role === 'sales' && item.status === 'active'), [users])
-  const visibleLeads = useMemo(() => {
-    const name = filters.name.toLowerCase().trim()
-    const phone = filters.phone.toLowerCase().trim()
-    const email = filters.email.toLowerCase().trim()
-    const createdFrom = filters.createdFrom ? new Date(`${filters.createdFrom}T00:00:00`) : undefined
-    const createdTo = filters.createdTo ? new Date(`${filters.createdTo}T23:59:59.999`) : undefined
-
-    return (architectOnly ? leads.filter(isArchitectLead) : leads).filter((lead) => {
-      const createdAt = lead.createdAt ? new Date(lead.createdAt) : undefined
-      const matchesName = !name || lead.name.toLowerCase().includes(name)
-      const matchesPhone = !phone || (lead.phone || '').toLowerCase().includes(phone)
-      const matchesEmail = !email || (lead.email || '').toLowerCase().includes(email)
-      const matchesOwner = !filters.owner || (filters.owner === 'unassigned' ? !ownerId(lead.owner) : ownerId(lead.owner) === filters.owner)
-      const matchesCreatedFrom = !createdFrom || (createdAt && createdAt >= createdFrom)
-      const matchesCreatedTo = !createdTo || (createdAt && createdAt <= createdTo)
-      const matchesMeeting = !filters.meeting || (filters.meeting === 'scheduled' ? !!lead.nextMeeting?.startsAt : !lead.nextMeeting?.startsAt)
-      return matchesName && matchesPhone && matchesEmail && matchesOwner && matchesCreatedFrom && matchesCreatedTo && matchesMeeting
-    })
-  }, [architectOnly, filters, leads])
+  const visibleLeads = useMemo(() => (architectOnly ? leads.filter(isArchitectLead) : leads), [architectOnly, leads])
   const assignLead = async (leadId: string, owner: string) => {
     if (!token || !owner) return
     setError('')
@@ -242,11 +228,20 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
       setLoading(true)
       setError('')
       try {
+        const [path, existingQuery = ''] = apiPath.split('?')
+        const query = new URLSearchParams(existingQuery)
+        query.set('page', String(page))
+        query.set('limit', '25')
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) query.set(key, value)
+          else query.delete(key)
+        })
         const [leadRes, userRes] = await Promise.all([
-          apiFetch<{ data: LeadType[] }>(apiPath, { token }),
-          canAssign ? apiFetch<{ data: UserType[] }>('/users', { token }) : Promise.resolve({ data: [] }),
+          apiFetch<{ data: LeadType[]; meta?: PageMeta }>(`${path}?${query}`, { token }),
+          canAssign ? apiFetch<{ data: UserType[] }>('/users?limit=100&role=sales&status=active', { token }) : Promise.resolve({ data: [] }),
         ])
         setLeads(leadRes.data)
+        setMeta(leadRes.meta || { page, limit: leadRes.data.length, total: leadRes.data.length, totalPages: 1 })
         setUsers(userRes.data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Unable to load leads')
@@ -256,7 +251,11 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
     }
 
     load()
-  }, [apiPath, canAssign, token])
+  }, [apiPath, canAssign, filters, page, token])
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters])
 
   return (
     <>
@@ -266,7 +265,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
           <div className="d-flex align-items-center justify-content-between mb-3">
             <h4 className="card-title mb-0">{title || (architectOnly ? 'Architect Leads' : canAssign ? 'Lead Assignment' : 'My Leads')}</h4>
             <Badge bg="light" text="dark">
-              {loading ? 'Loading' : `${visibleLeads.length} leads`}
+              {loading ? 'Loading' : `${meta.total} leads`}
             </Badge>
           </div>
           {error && <Alert variant="danger">{error}</Alert>}
@@ -312,8 +311,21 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
               <span className="text-muted">Loading leads...</span>
             </div>
           ) : (
-            <ReactTable<LeadType> columns={columns} data={visibleLeads} rowsPerPageList={[10, 25, 50]} pageSize={10} tableClass="text-nowrap mb-0" theadClass="bg-light bg-opacity-50" showPagination />
+            <ReactTable<LeadType> columns={columns} data={visibleLeads} pageSize={25} tableClass="text-nowrap mb-0" theadClass="bg-light bg-opacity-50" />
           )}
+          <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
+            <span className="text-muted fs-13">
+              Showing page {meta.page} of {meta.totalPages}
+            </span>
+            <div className="d-flex gap-2">
+              <Button size="sm" variant="outline-secondary" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))}>
+                Previous
+              </Button>
+              <Button size="sm" variant="outline-secondary" disabled={loading || page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>
+                Next
+              </Button>
+            </div>
+          </div>
         </CardBody>
       </Card>
       <Modal show={!!meetingLead} onHide={() => setMeetingLead(undefined)} centered>

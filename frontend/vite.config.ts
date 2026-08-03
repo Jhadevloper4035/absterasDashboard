@@ -20,4 +20,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ['apexcharts', 'react-apexcharts'],
+          calendar: ['@fullcalendar/core', '@fullcalendar/react', '@fullcalendar/daygrid', '@fullcalendar/timegrid', '@fullcalendar/list', '@fullcalendar/interaction'],
+          forms: ['react-hook-form', 'yup', 'react-select'],
+          maps: ['@react-google-maps/api', '@vis.gl/react-google-maps'],
+          ui: ['react-bootstrap', '@tanstack/react-table'],
+        },
+      },
+    },
+  },
 })

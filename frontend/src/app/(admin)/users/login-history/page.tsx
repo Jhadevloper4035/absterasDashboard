@@ -19,6 +19,8 @@ type LoginHistoryItem = {
   logoutReason?: 'logout' | 'new_login'
 }
 
+type PageMeta = { page: number; limit: number; total: number; totalPages: number }
+
 const roleVariant = (role: UserType['role']) => {
   if (role === 'superadmin') return 'danger'
   if (role === 'admin') return 'primary'
@@ -85,6 +87,8 @@ const UserLoginHistoryPage = () => {
   const fetchUsers = useUserManagementStore((state) => state.fetchUsers)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [history, setHistory] = useState<LoginHistoryItem[]>([])
+  const [meta, setMeta] = useState<PageMeta>({ page: 1, limit: 25, total: 0, totalPages: 1 })
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [loggingOutUserId, setLoggingOutUserId] = useState('')
   const [error, setError] = useState('')
@@ -94,16 +98,18 @@ const UserLoginHistoryPage = () => {
   const selectedUserName = selectedUserId ? userOptions.find((item) => item._id === selectedUserId)?.name || 'Selected user' : 'All users'
 
   useEffect(() => {
-    fetchUsers().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
+    fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
   }, [fetchUsers])
 
   const loadHistory = async () => {
     setLoading(true)
     setError('')
     try {
-      const query = selectedUserId ? `?userId=${encodeURIComponent(selectedUserId)}` : ''
-      const res = await apiFetch<{ data: LoginHistoryItem[] }>(`/users/login-history${query}`)
+      const query = new URLSearchParams({ page: String(page), limit: '25' })
+      if (selectedUserId) query.set('userId', selectedUserId)
+      const res = await apiFetch<{ data: LoginHistoryItem[]; meta?: PageMeta }>(`/users/login-history?${query}`)
       setHistory(res.data)
+      setMeta(res.meta || { page, limit: res.data.length, total: res.data.length, totalPages: 1 })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load login history')
     } finally {
@@ -113,6 +119,10 @@ const UserLoginHistoryPage = () => {
 
   useEffect(() => {
     loadHistory()
+  }, [page, selectedUserId])
+
+  useEffect(() => {
+    setPage(1)
   }, [selectedUserId])
 
   const logoutUser = async (item: LoginHistoryItem) => {
@@ -150,7 +160,7 @@ const UserLoginHistoryPage = () => {
                   {currentCount} currently online
                 </Badge>
                 <Badge bg="primary-subtle" text="primary" className="border border-primary-subtle px-3 py-2">
-                  {history.length} records
+                  {meta.total} records
                 </Badge>
                 <Badge bg="secondary-subtle" text="body" className="border px-3 py-2">
                   {selectedUserName}
@@ -250,6 +260,19 @@ const UserLoginHistoryPage = () => {
                 )}
               </tbody>
             </Table>
+          </div>
+          <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
+            <span className="text-muted fs-13">
+              Showing page {meta.page} of {meta.totalPages}
+            </span>
+            <div className="d-flex gap-2">
+              <Button size="sm" variant="outline-secondary" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))}>
+                Previous
+              </Button>
+              <Button size="sm" variant="outline-secondary" disabled={loading || page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>
+                Next
+              </Button>
+            </div>
           </div>
         </CardBody>
       </Card>

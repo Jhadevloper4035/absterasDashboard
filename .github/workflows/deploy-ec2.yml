@@ -114,7 +114,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "mkdir -p '$APP_DIR'"
           scp -i ~/.ssh/ec2_key /tmp/absteras-crm-deploy.tar.gz "$EC2_USER@$EC2_HOST:/tmp/absteras-crm-deploy.tar.gz"
-          printf '%s\n' "$BACKEND_ENV" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "cat > '$APP_DIR/backend.env.production'"
+          printf '%s\n' "$BACKEND_ENV" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "cat > '$APP_DIR/.env'"
       - name: Login to Docker Hub on EC2
         run: |
           printf '%s\n' "$DOCKERHUB_TOKEN" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "docker login -u '$DOCKERHUB_USERNAME' --password-stdin"
@@ -123,11 +123,9 @@ jobs:
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "
             set -e
             echo 'Cleaning stale app files'
-            find '$APP_DIR' -mindepth 1 -maxdepth 1 ! -name backend.env.production -exec rm -rf {} +
+            find '$APP_DIR' -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +
             tar -xzf /tmp/absteras-crm-deploy.tar.gz -C '$APP_DIR'
-            mkdir -p '$APP_DIR/backend'
-            mv '$APP_DIR/backend.env.production' '$APP_DIR/backend/.env.production'
-            cat > '$APP_DIR/.env' <<EOF
+            cat >> '$APP_DIR/.env' <<EOF
 BACKEND_IMAGE=$BACKEND_IMAGE
 FRONTEND_IMAGE=$FRONTEND_IMAGE
 EOF

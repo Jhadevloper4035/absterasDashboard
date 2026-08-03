@@ -11,10 +11,12 @@ const originalAuthSessionUpdateMany = AuthSession.updateMany;
 const originalBlockedTokenUpdateOne = BlockedToken.updateOne;
 const originalExists = User.exists;
 const originalFind = User.find;
+const originalCountDocuments = User.countDocuments;
 const originalFindById = User.findById;
 const originalFindByIdAndUpdate = User.findByIdAndUpdate;
 const originalCreate = User.create;
 const originalLoginHistoryFind = LoginHistory.find;
+const originalLoginHistoryCountDocuments = LoginHistory.countDocuments;
 const originalLoginHistoryUpdateMany = LoginHistory.updateMany;
 
 function res() {
@@ -35,6 +37,7 @@ function res() {
 afterEach(() => {
   User.exists = originalExists;
   User.find = originalFind;
+  User.countDocuments = originalCountDocuments;
   User.findById = originalFindById;
   User.findByIdAndUpdate = originalFindByIdAndUpdate;
   User.create = originalCreate;
@@ -42,6 +45,7 @@ afterEach(() => {
   AuthSession.updateMany = originalAuthSessionUpdateMany;
   BlockedToken.updateOne = originalBlockedTokenUpdateOne;
   LoginHistory.find = originalLoginHistoryFind;
+  LoginHistory.countDocuments = originalLoginHistoryCountDocuments;
   LoginHistory.updateMany = originalLoginHistoryUpdateMany;
 });
 
@@ -185,14 +189,18 @@ test('admin lists team users only', async () => {
       sort() {
         return this;
       },
+      skip() {
+        return this;
+      },
       limit() {
         return Promise.resolve([]);
       },
     };
   };
+  User.countDocuments = async () => 0;
 
   const response = res();
-  await listUsers({ user: { role: 'admin' } }, response);
+  await listUsers({ user: { role: 'admin' }, query: {} }, response);
 
   assert.deepEqual(filter, { role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
   assert.deepEqual(response.body.data, []);
@@ -207,8 +215,11 @@ test('admin login history can include every user role', async () => {
       sort() {
         return this;
       },
+      skip() {
+        return this;
+      },
       limit(value) {
-        assert.equal(value, 100);
+        assert.equal(value, 25);
         return this;
       },
       populate() {
@@ -219,6 +230,7 @@ test('admin login history can include every user role', async () => {
       },
     };
   };
+  LoginHistory.countDocuments = async () => 0;
 
   const response = res();
   await listLoginHistory({ user: { role: 'admin' }, query: {} }, response);
@@ -241,6 +253,9 @@ test('admin can filter privileged user login history', async () => {
       sort() {
         return this;
       },
+      skip() {
+        return this;
+      },
       limit() {
         return this;
       },
@@ -252,6 +267,7 @@ test('admin can filter privileged user login history', async () => {
       },
     };
   };
+  LoginHistory.countDocuments = async () => 0;
   AuthSession.find = (value) => {
     sessionFilter = value;
     return {
@@ -288,6 +304,9 @@ test('login history closes duplicate current rows for the same user', async () =
     sort() {
       return this;
     },
+    skip() {
+      return this;
+    },
     limit() {
       return this;
     },
@@ -298,9 +317,13 @@ test('login history closes duplicate current rows for the same user', async () =
       return Promise.resolve([{ _id: 'session-1', user, createdAt: newestLogin, ipAddress: '127.0.0.1', userAgent: 'Chrome' }]);
     },
   });
+  LoginHistory.countDocuments = async () => 2;
   AuthSession.updateMany = async () => {};
   LoginHistory.find = () => ({
     sort() {
+      return this;
+    },
+    skip() {
       return this;
     },
     limit() {

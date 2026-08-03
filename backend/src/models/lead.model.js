@@ -335,4 +335,10 @@ leadSchema.pre('validate', function setDerivedLeadFields() {
 
 });
 
+leadSchema.index({ owner: 1, status: 1, createdAt: -1 });
+leadSchema.index({ status: 1, createdAt: -1 });
+leadSchema.index({ assignmentException: 1, createdAt: -1 });
+leadSchema.index({ 'meetingHistory.startsAt': 1 });
+leadSchema.index({ createdAt: -1 });
+
 export const Lead = mongoose.model('Lead', leadSchema);

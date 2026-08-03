@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "db:seed": "node src/seed.js",
+    "smoke": "node ../scripts/smoke-crm.mjs",
     "test": "node --test",
     "check": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check"
   },

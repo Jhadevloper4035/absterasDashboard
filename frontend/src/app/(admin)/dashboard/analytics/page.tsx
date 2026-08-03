@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Badge, Card, CardBody, Col, Row, Table } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb'
 import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import { apiFetch } from '@/helpers/api'
+import { buildApiUrl } from '@/helpers/apiUrl'
 import { useAuthStore } from '@/store/authStore'
 import type { UserType } from '@/types/auth'
 import type { LeadOwner, LeadType } from '@/types/lead'
@@ -21,23 +22,37 @@ type Task = {
   createdAt?: string
 }
 
-const closedLeadStatuses = ['WON', 'LOST', 'ON_HOLD']
+type DashboardSummary = {
+  stats: {
+    activeLeads: number
+    unassignedLeads: number
+    todayMeetings: number
+    overdueTasks: number
+    dueTodayTasks: number
+    teamUsers: number
+  }
+  todayMeetings: LeadType[]
+  priorityTasks: Task[]
+  recentLeads: LeadType[]
+}
+
 const ownerName = (owner?: string | LeadOwner | TaskUser) => (typeof owner === 'object' ? owner.name : 'Unassigned')
 const dateText = (value?: string) => (value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)) : 'No date')
 const timeText = (value?: string) => (value ? new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(new Date(value)) : '')
-const dayKey = (value: string | Date) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
-const isToday = (value?: string) => Boolean(value && dayKey(value) === dayKey(new Date()))
-const isOverdue = (value?: string) => Boolean(value && new Date(value).getTime() < Date.now() && !isToday(value))
 const taskStatusColor = (status: string) => (status === 'Done' ? 'success' : status === 'Blocked' ? 'danger' : ['In Progress', 'Review', 'Testing'].includes(status) ? 'warning' : 'primary')
 const leadStatusColor = (lead: LeadType) => (lead.status === 'WON' ? 'success' : lead.assignmentException ? 'warning' : closedLeadStatuses.includes(lead.status) ? 'secondary' : 'primary')
-const teamRoles = ['sales', 'operations', 'accounts', 'designers']
+const closedLeadStatuses = ['WON', 'LOST', 'ON_HOLD']
 
 const AdminDashboard = () => {
   const token = useAuthStore((state) => state.token)
-  const [leads, setLeads] = useState<LeadType[]>([])
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [users, setUsers] = useState<UserType[]>([])
+  const [summary, setSummary] = useState<DashboardSummary>({
+    stats: { activeLeads: 0, unassignedLeads: 0, todayMeetings: 0, overdueTasks: 0, dueTodayTasks: 0, teamUsers: 0 },
+    todayMeetings: [],
+    priorityTasks: [],
+    recentLeads: [],
+  })
   const [loading, setLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -45,49 +60,44 @@ const AdminDashboard = () => {
 
     setLoading(true)
     setError('')
-    Promise.all([
-      apiFetch<{ data: LeadType[] }>('/leads?limit=50', { token }),
-      apiFetch<{ data: Task[] }>('/tasks', { token }),
-      apiFetch<{ data: UserType[] }>('/users', { token }),
-    ])
-      .then(([leadRes, taskRes, userRes]) => {
-        setLeads(leadRes.data)
-        setTasks(taskRes.data)
-        setUsers(userRes.data)
-      })
+    apiFetch<{ data: DashboardSummary }>('/dashboard/summary', { token })
+      .then((res) => setSummary(res.data))
       .catch((e) => setError(e instanceof Error ? e.message : 'Unable to load dashboard'))
       .finally(() => setLoading(false))
   }, [token])
 
-  const activeLeads = leads.filter((lead) => !closedLeadStatuses.includes(lead.status))
-  const unassignedLeads = activeLeads.filter((lead) => lead.assignmentException || !lead.owner)
-  const todayMeetings = leads
-    .filter((lead) => isToday(lead.nextMeeting?.startsAt))
-    .sort((a, b) => new Date(a.nextMeeting!.startsAt!).getTime() - new Date(b.nextMeeting!.startsAt!).getTime())
-  const openTasks = tasks.filter((task) => task.status !== 'Done')
-  const overdueTasks = openTasks.filter((task) => isOverdue(task.dueDate))
-  const dueTodayTasks = openTasks.filter((task) => isToday(task.dueDate))
-  const urgentTasks = useMemo(
-    () =>
-      [...openTasks]
-        .sort((a, b) => {
-          const priority = Number(b.priority === 'Critical') - Number(a.priority === 'Critical') || Number(b.priority === 'High') - Number(a.priority === 'High')
-          return priority || new Date(a.dueDate || a.createdAt || 0).getTime() - new Date(b.dueDate || b.createdAt || 0).getTime()
-        })
-        .slice(0, 6),
-    [openTasks],
-  )
-  const recentLeads = [...leads].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 6)
-  const activeTeamUsers = users.filter((item) => teamRoles.includes(item.role) && item.status === 'active')
-
   const stats = [
-    { label: 'Active leads', value: activeLeads.length, note: 'Follow-up required', bg: 'primary' },
-    { label: 'Unassigned leads', value: unassignedLeads.length, note: 'Assign today', bg: unassignedLeads.length ? 'warning' : 'success' },
-    { label: "Today's meetings", value: todayMeetings.length, note: 'Scheduled', bg: 'info' },
-    { label: 'Overdue tasks', value: overdueTasks.length, note: 'Action required', bg: overdueTasks.length ? 'danger' : 'success' },
-    { label: 'Tasks due today', value: dueTodayTasks.length, note: 'Due today', bg: 'warning' },
-    { label: 'Team users', value: activeTeamUsers.length, note: 'Active team', bg: 'secondary' },
+    { label: 'Active leads', value: summary.stats.activeLeads, note: 'Follow-up required', bg: 'primary' },
+    { label: 'Unassigned leads', value: summary.stats.unassignedLeads, note: 'Assign today', bg: summary.stats.unassignedLeads ? 'warning' : 'success' },
+    { label: "Today's meetings", value: summary.stats.todayMeetings, note: 'Scheduled', bg: 'info' },
+    { label: 'Overdue tasks', value: summary.stats.overdueTasks, note: 'Action required', bg: summary.stats.overdueTasks ? 'danger' : 'success' },
+    { label: 'Tasks due today', value: summary.stats.dueTodayTasks, note: 'Due today', bg: 'warning' },
+    { label: 'Team users', value: summary.stats.teamUsers, note: 'Active team', bg: 'secondary' },
   ]
+
+  const downloadReport = async () => {
+    if (!token) return
+    setExporting(true)
+    setError('')
+    try {
+      const response = await fetch(buildApiUrl('/dashboard/summary.csv'), {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
+      })
+      if (!response.ok) throw new Error('Unable to export dashboard report')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'absteras-dashboard-report.csv'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to export dashboard report')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <>
@@ -99,11 +109,14 @@ const AdminDashboard = () => {
         <div className="d-flex gap-2 flex-wrap ms-auto">
           <Link to="/leads/create" className="btn btn-primary text-nowrap">Create Lead</Link>
           <Link to="/tasks/create" className="btn btn-outline-primary text-nowrap">Create Task</Link>
+          <button type="button" className="btn btn-outline-secondary text-nowrap" onClick={downloadReport} disabled={exporting}>
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
         </div>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
-      {loading && !leads.length && !tasks.length ? (
+      {loading && !summary.recentLeads.length && !summary.priorityTasks.length ? (
         <div className="text-center py-5">
           <Spinner className="spinner-border-sm me-2" tag="span" />
           <span className="text-muted">Loading dashboard...</span>
@@ -139,7 +152,7 @@ const AdminDashboard = () => {
                 </div>
                 <Link to="/leads/scheduled" className="btn btn-sm btn-outline-secondary text-nowrap">View All</Link>
               </div>
-              {!todayMeetings.length ? <Alert variant="info" className="mb-0">No meetings scheduled today.</Alert> : (
+              {!summary.todayMeetings.length ? <Alert variant="info" className="mb-0">No meetings scheduled today.</Alert> : (
                 <div className="table-responsive">
                   <Table hover className="table-nowrap align-middle mb-0">
                     <thead>
@@ -152,7 +165,7 @@ const AdminDashboard = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {todayMeetings.map((lead) => (
+                      {summary.todayMeetings.map((lead) => (
                         <tr key={lead._id}>
                           <td>{timeText(lead.nextMeeting?.startsAt)}</td>
                           <td>
@@ -182,8 +195,8 @@ const AdminDashboard = () => {
                 </div>
                 <Link to="/tasks/all" className="btn btn-sm btn-outline-secondary text-nowrap">View All</Link>
               </div>
-              {!urgentTasks.length ? <Alert variant="info" className="mb-0">No open tasks.</Alert> : (
-                urgentTasks.map((task) => (
+              {!summary.priorityTasks.length ? <Alert variant="info" className="mb-0">No open tasks.</Alert> : (
+                summary.priorityTasks.map((task) => (
                   <div className="d-flex justify-content-between align-items-start gap-3 border-top py-3" key={task._id}>
                     <div style={{ minWidth: 0 }}>
                       <Link to={`/tasks/${task._id}`} className="fw-semibold d-block text-truncate">{task.title}</Link>
@@ -210,7 +223,7 @@ const AdminDashboard = () => {
             </div>
             <Link to="/leads" className="btn btn-sm btn-outline-secondary text-nowrap">View All</Link>
           </div>
-          {!recentLeads.length ? <Alert variant="info" className="mb-0">No leads found.</Alert> : (
+          {!summary.recentLeads.length ? <Alert variant="info" className="mb-0">No leads found.</Alert> : (
             <div className="table-responsive">
               <Table hover className="table-nowrap align-middle mb-0">
                 <thead>
@@ -224,7 +237,7 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentLeads.map((lead) => (
+                  {summary.recentLeads.map((lead) => (
                     <tr key={lead._id}>
                       <td>
                         <div className="fw-semibold">{lead.name}</div>

@@ -20,6 +20,10 @@ function leadQueryFor(user, extra = {}) {
   return canManageLeads(user) ? extra : { ...extra, owner: user._id };
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function withCurrentMeeting(lead) {
   const data = typeof lead.toObject === 'function' ? lead.toObject() : lead;
   const history = data.meetingHistory || [];
@@ -95,12 +99,26 @@ export async function createLead(req, res) {
 
 export async function listLeads(req, res) {
   const page = Math.max(Number(req.query.page || 1), 1);
-  const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 50);
+  const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 50);
   const query = leadQueryFor(req.user);
   if (LEAD_STATUSES.includes(req.query.status)) query.status = req.query.status;
   if (req.query.assignmentException === 'true') query.assignmentException = true;
   if (req.query.hasMeeting === 'true') query['meetingHistory.startsAt'] = { $exists: true };
   if (req.query.upcomingMeeting === 'true') query['meetingHistory.startsAt'] = { $gte: new Date() };
+  if (req.query.name) query.name = { $regex: escapeRegex(req.query.name), $options: 'i' };
+  if (req.query.phone) query.phone = { $regex: escapeRegex(req.query.phone), $options: 'i' };
+  if (req.query.email) query.email = { $regex: escapeRegex(req.query.email), $options: 'i' };
+  if (canManageLeads(req.user) && req.query.owner) {
+    if (req.query.owner === 'unassigned') query.owner = null;
+    else query.owner = req.query.owner;
+  }
+  if (req.query.createdFrom || req.query.createdTo) {
+    query.createdAt = {};
+    if (req.query.createdFrom) query.createdAt.$gte = new Date(`${req.query.createdFrom}T00:00:00.000Z`);
+    if (req.query.createdTo) query.createdAt.$lte = new Date(`${req.query.createdTo}T23:59:59.999Z`);
+  }
+  if (req.query.meeting === 'scheduled') query['meetingHistory.0'] = { $exists: true };
+  if (req.query.meeting === 'none') query['meetingHistory.0'] = { $exists: false };
   const [leads, total] = await Promise.all([
     Lead.find(query)
       .populate('owner', 'name email role status')

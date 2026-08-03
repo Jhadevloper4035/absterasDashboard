@@ -32,4 +32,7 @@ const authSessionSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+authSessionSchema.index({ user: 1, revokedAt: 1, expiresAt: 1, createdAt: -1 });
+authSessionSchema.index({ revokedAt: 1, expiresAt: 1, createdAt: -1 });
+
 export const AuthSession = mongoose.models.AuthSession || mongoose.model('AuthSession', authSessionSchema);

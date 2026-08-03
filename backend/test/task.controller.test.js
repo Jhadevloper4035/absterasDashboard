@@ -10,6 +10,7 @@ import { createAttachmentToken } from '../src/services/upload.service.js';
 const originalTaskFind = Task.find;
 const originalTaskFindOne = Task.findOne;
 const originalTaskExists = Task.exists;
+const originalTaskCountDocuments = Task.countDocuments;
 const originalTaskWorkTypeFind = TaskWorkType.find;
 const originalTaskWorkTypeFindOneAndUpdate = TaskWorkType.findOneAndUpdate;
 const originalUserFind = User.find;
@@ -34,6 +35,7 @@ afterEach(() => {
   Task.find = originalTaskFind;
   Task.findOne = originalTaskFindOne;
   Task.exists = originalTaskExists;
+  Task.countDocuments = originalTaskCountDocuments;
   TaskWorkType.find = originalTaskWorkTypeFind;
   TaskWorkType.findOneAndUpdate = originalTaskWorkTypeFindOneAndUpdate;
   User.find = originalUserFind;
@@ -270,12 +272,16 @@ test('assigned user only lists assigned tasks and can mark done', async () => {
       sort() {
         return this;
       },
+      skip() {
+        return this;
+      },
       limit(value) {
         limit = value;
         return Promise.resolve([]);
       },
     };
   };
+  Task.countDocuments = async () => 0;
 
   await listTasks({ user: { _id: 'sales-1', role: 'sales' }, query: { limit: '5' } }, res());
   assert.deepEqual(query, { assignee: 'sales-1' });
@@ -306,11 +312,15 @@ test('deadline filter lists only open tasks before today', async () => {
       sort() {
         return this;
       },
+      skip() {
+        return this;
+      },
       limit() {
         return Promise.resolve([]);
       },
     };
   };
+  Task.countDocuments = async () => 0;
 
   await listTasks({ user: { _id: 'admin-1', role: 'admin' }, query: { deadline: 'exceeded' } }, res());
 

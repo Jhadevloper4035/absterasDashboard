@@ -16,10 +16,11 @@ export type CreateUserPayload = {
 
 type UserManagementStore = {
   users: UserType[]
+  meta: { page: number; limit: number; total: number; totalPages: number }
   loading: boolean
   error: string | undefined
   clearUsers: () => void
-  fetchUsers: () => Promise<UserType[]>
+  fetchUsers: (query?: string) => Promise<UserType[]>
   createUser: (payload: CreateUserPayload) => Promise<UserType>
   updateUser: (id: string, patch: Partial<UserType> & { password?: string }) => Promise<UserType>
 }
@@ -34,14 +35,15 @@ export const useUserManagementStore = create<UserManagementStore>()(
   devtools(
     (set) => ({
       users: [],
+      meta: { page: 1, limit: 25, total: 0, totalPages: 1 },
       loading: false,
       error: undefined,
-      clearUsers: () => set({ users: [] }, false, 'users/clear'),
-      fetchUsers: async () => {
+      clearUsers: () => set({ users: [], meta: { page: 1, limit: 25, total: 0, totalPages: 1 } }, false, 'users/clear'),
+      fetchUsers: async (query = '') => {
         set({ loading: true, error: undefined }, false, 'users/fetch:start')
         try {
-          const res = await authedFetch<{ data: UserType[] }>('/users')
-          set({ users: res.data, loading: false }, false, 'users/fetch:success')
+          const res = await authedFetch<{ data: UserType[]; meta?: { page: number; limit: number; total: number; totalPages: number } }>(`/users${query}`)
+          set({ users: res.data, meta: res.meta || { page: 1, limit: res.data.length, total: res.data.length, totalPages: 1 }, loading: false }, false, 'users/fetch:success')
           return res.data
         } catch (e) {
           const message = e instanceof Error ? e.message : 'Unable to load users'

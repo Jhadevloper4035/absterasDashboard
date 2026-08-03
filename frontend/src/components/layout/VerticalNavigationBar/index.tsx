@@ -1,13 +1,9 @@
-import { lazy, Suspense } from 'react'
-
-import FallbackLoading from '@/components/FallbackLoading'
 import LogoBox from '@/components/LogoBox'
 import SimplebarReactClient from '@/components/wrappers/SimplebarReactClient'
 import { useAuthStore } from '@/store/authStore'
 import { getMenuItems } from '@/helpers/menu'
 import HoverMenuToggle from './components/HoverMenuToggle'
-
-const AppMenu = lazy(() => import('./components/AppMenu'))
+import AppMenu from './components/AppMenu'
 
 const VerticalNavigationBar = () => {
   const role = useAuthStore((state) => state.user?.role)
@@ -20,9 +16,7 @@ const VerticalNavigationBar = () => {
       <HoverMenuToggle />
 
       <SimplebarReactClient className="scrollbar">
-        <Suspense fallback={<FallbackLoading />}>
-          <AppMenu menuItems={menuItems} />
-        </Suspense>
+        <AppMenu menuItems={menuItems} />
       </SimplebarReactClient>
     </div>
   )

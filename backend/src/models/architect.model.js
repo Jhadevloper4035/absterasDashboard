@@ -43,4 +43,7 @@ const architectSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+architectSchema.index({ createdAt: -1 });
+architectSchema.index({ status: 1, createdAt: -1 });
+
 export const Architect = mongoose.model('Architect', architectSchema);

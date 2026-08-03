@@ -10,9 +10,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Modal } from 'react-bootstrap'
 import { toast } from 'react-toastify'
 
+type PageMeta = { page: number; limit: number; total: number; totalPages: number }
+
 const ArchitectLeadsPage = () => {
   const token = useAuthStore((state) => state.token)
   const [architects, setArchitects] = useState<ArchitectType[]>([])
+  const [meta, setMeta] = useState<PageMeta>({ page: 1, limit: 25, total: 0, totalPages: 1 })
+  const [page, setPage] = useState(1)
   const [selectedArchitect, setSelectedArchitect] = useState<ArchitectType>()
   const [deleteTarget, setDeleteTarget] = useState<ArchitectType>()
   const [loading, setLoading] = useState(false)
@@ -45,8 +49,9 @@ const ArchitectLeadsPage = () => {
       setLoading(true)
       setError('')
       try {
-        const res = await apiFetch<{ data: ArchitectType[] }>('/architects?limit=10', { token })
+        const res = await apiFetch<{ data: ArchitectType[]; meta?: PageMeta }>(`/architects?page=${page}&limit=25`, { token })
         setArchitects(res.data)
+        setMeta(res.meta || { page, limit: res.data.length, total: res.data.length, totalPages: 1 })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Unable to load architects')
       } finally {
@@ -55,7 +60,7 @@ const ArchitectLeadsPage = () => {
     }
 
     load()
-  }, [token])
+  }, [page, token])
 
   const columns = useMemo<ColumnDef<ArchitectType>[]>(
     () => [
@@ -121,7 +126,7 @@ const ArchitectLeadsPage = () => {
           <div className="d-flex align-items-center justify-content-between mb-3">
             <h4 className="card-title mb-0">Architect List</h4>
             <Badge bg="light" text="dark">
-              {loading ? 'Loading' : `${architects.length} architects`}
+              {loading ? 'Loading' : `${meta.total} architects`}
             </Badge>
           </div>
           {error && <Alert variant="danger">{error}</Alert>}
@@ -132,8 +137,21 @@ const ArchitectLeadsPage = () => {
               <span className="text-muted">Loading data...</span>
             </div>
           ) : (
-            <ReactTable<ArchitectType> columns={columns} data={architects} rowsPerPageList={[10, 25, 50]} pageSize={10} tableClass="text-nowrap mb-0" theadClass="bg-light bg-opacity-50" showPagination />
+            <ReactTable<ArchitectType> columns={columns} data={architects} pageSize={25} tableClass="text-nowrap mb-0" theadClass="bg-light bg-opacity-50" />
           )}
+          <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
+            <span className="text-muted fs-13">
+              Showing page {meta.page} of {meta.totalPages}
+            </span>
+            <div className="d-flex gap-2">
+              <Button size="sm" variant="outline-secondary" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))}>
+                Previous
+              </Button>
+              <Button size="sm" variant="outline-secondary" disabled={loading || page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>
+                Next
+              </Button>
+            </div>
+          </div>
         </CardBody>
       </Card>
       <Modal show={!!selectedArchitect} onHide={() => setSelectedArchitect(undefined)} centered>
