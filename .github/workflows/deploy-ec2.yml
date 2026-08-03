@@ -40,7 +40,6 @@ jobs:
   build-and-push:
     needs: check
     runs-on: ubuntu-latest
-    # FIX: only ever build/push from main, even for manual dispatch
     if: github.ref == 'refs/heads/main'
     outputs:
       backend-image: ${{ steps.images.outputs.backend-image }}
@@ -91,7 +90,6 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    # FIX: no longer allow workflow_dispatch to bypass the main-branch check
     if: github.ref == 'refs/heads/main'
     env:
       APP_DIR: ${{ secrets.EC2_APP_DIR || '/opt/absteras-crm' }}
@@ -105,6 +103,7 @@ jobs:
       FRONTEND_IMAGE: ${{ needs.build-and-push.outputs.frontend-image }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Prepare SSH
         run: |
           test -n "$EC2_HOST"
@@ -117,25 +116,27 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
       - name: Package deploy files
         run: |
           tar -czf /tmp/absteras-crm-deploy.tar.gz docker-compose.prod.yml deploy/nginx.conf deploy/nginx-custom-domain.conf
+
       - name: Copy deploy files to EC2
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "mkdir -p '$APP_DIR'"
           scp -i ~/.ssh/ec2_key /tmp/absteras-crm-deploy.tar.gz "$EC2_USER@$EC2_HOST:/tmp/absteras-crm-deploy.tar.gz"
           printf '%s\n' "$BACKEND_ENV" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "cat > '$APP_DIR/.env'"
+
       - name: Login to Docker Hub on EC2
         run: |
           printf '%s\n' "$DOCKERHUB_TOKEN" | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "docker login -u '$DOCKERHUB_USERNAME' --password-stdin"
+
       - name: Pull images and restart app
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "
             set -e
+            cd '$APP_DIR'
 
-            # FIX: stop the CURRENTLY RUNNING stack using the compose file
-            # that's still on disk, before we overwrite it. Avoids orphaned
-            # containers if service names/ports change between releases.
             if [ -f docker-compose.prod.yml ]; then
               echo 'Stopping current containers'
               docker compose -f docker-compose.prod.yml down --remove-orphans || true
@@ -144,7 +145,7 @@ jobs:
             echo 'Cleaning stale app files'
             find '$APP_DIR' -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +
             tar -xzf /tmp/absteras-crm-deploy.tar.gz -C '$APP_DIR'
-            printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' "$BACKEND_IMAGE" "$FRONTEND_IMAGE" >> '$APP_DIR/.env'
+            printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' '$BACKEND_IMAGE' '$FRONTEND_IMAGE' >> '$APP_DIR/.env'
 
             echo 'Pulling new images'
             docker compose -f docker-compose.prod.yml pull
@@ -155,6 +156,7 @@ jobs:
             echo 'Cleaning old docker images'
             docker image prune -af
           "
+
       - name: Health check
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "
