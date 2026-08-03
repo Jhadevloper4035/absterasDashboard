@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
 
 jobs:
   check:
@@ -109,7 +117,7 @@ jobs:
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
       - name: Package deploy files
         run: |
-          tar -czf /tmp/absteras-crm-deploy.tar.gz docker-compose.prod.yml deploy/nginx.conf
+          tar -czf /tmp/absteras-crm-deploy.tar.gz docker-compose.prod.yml deploy/nginx.conf deploy/nginx-custom-domain.conf
       - name: Copy deploy files to EC2
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "mkdir -p '$APP_DIR'"
