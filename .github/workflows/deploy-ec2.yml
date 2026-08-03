@@ -27,6 +27,10 @@ jobs:
             frontend/package-lock.json
       - name: Backend checks
         working-directory: backend
+        env:
+          NODE_ENV: test
+          AUTH_SECRET: test-secret-012345678901234567890123
+          MONGODB_URI: mongodb://127.0.0.1:27017/absteras_test
         run: |
           npm ci
           npm test

@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 
+const isTestEnv = process.env.NODE_ENV === 'test';
 const envFile = process.env.NODE_ENV === 'production' ? '.env' : `.env.${process.env.NODE_ENV || 'development'}`;
 
 dotenv.config({ path: `../${envFile}` });
@@ -8,7 +9,7 @@ dotenv.config({ path: envFile });
 const required = ['AUTH_SECRET', 'MONGODB_URI'];
 const missing = required.filter((key) => !process.env[key]);
 
-if (missing.length) {
+if (missing.length && !isTestEnv) {
   throw new Error(`Missing required env: ${missing.join(', ')}`);
 }
 
@@ -24,10 +25,10 @@ if (isProduction) {
 
 export const env = {
   appName: process.env.APP_NAME || 'Absteras Company CRM API',
-  authSecret: process.env.AUTH_SECRET,
+  authSecret: process.env.AUTH_SECRET || (isTestEnv ? 'test-secret-012345678901234567890123' : undefined),
   corsOrigin: process.env.CORS_ORIGIN || '*',
   isProduction,
-  mongoUri: process.env.MONGODB_URI,
+  mongoUri: process.env.MONGODB_URI || (isTestEnv ? 'mongodb://127.0.0.1:27017/absteras_test' : undefined),
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 4000),
   setupToken: process.env.SETUP_TOKEN,
