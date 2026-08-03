@@ -40,7 +40,8 @@ jobs:
   build-and-push:
     needs: check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # FIX: only ever build/push from main, even for manual dispatch
+    if: github.ref == 'refs/heads/main'
     outputs:
       backend-image: ${{ steps.images.outputs.backend-image }}
       frontend-image: ${{ steps.images.outputs.frontend-image }}
@@ -90,7 +91,8 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # FIX: no longer allow workflow_dispatch to bypass the main-branch check
+    if: github.ref == 'refs/heads/main'
     env:
       APP_DIR: ${{ secrets.EC2_APP_DIR || '/opt/absteras-crm' }}
       BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
@@ -130,21 +132,44 @@ jobs:
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "
             set -e
+
+            # FIX: stop the CURRENTLY RUNNING stack using the compose file
+            # that's still on disk, before we overwrite it. Avoids orphaned
+            # containers if service names/ports change between releases.
+            if [ -f docker-compose.prod.yml ]; then
+              echo 'Stopping current containers'
+              docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            fi
+
             echo 'Cleaning stale app files'
             find '$APP_DIR' -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +
             tar -xzf /tmp/absteras-crm-deploy.tar.gz -C '$APP_DIR'
-            cat > '$APP_DIR/.env' <<'EOF'
-BACKEND_IMAGE=$BACKEND_IMAGE
-FRONTEND_IMAGE=$FRONTEND_IMAGE
-EOF
-            cd '$APP_DIR'
+            printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' "$BACKEND_IMAGE" "$FRONTEND_IMAGE" >> '$APP_DIR/.env'
+
             echo 'Pulling new images'
             docker compose -f docker-compose.prod.yml pull
-            echo 'Stopping old containers'
-            docker compose -f docker-compose.prod.yml down --remove-orphans
+
             echo 'Starting new containers'
-            docker compose -f docker-compose.prod.yml up -d --force-recreate
-            echo 'Cleaning old docker images and build cache'
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
+
+            echo 'Cleaning old docker images'
             docker image prune -af
-            docker builder prune -af
+          "
+      - name: Health check
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "
+            set -e
+            echo 'Waiting for backend to become healthy'
+            for i in \$(seq 1 15); do
+              if curl -fsS http://localhost/api/health >/dev/null 2>&1; then
+                echo 'Backend healthy'
+                exit 0
+              fi
+              echo \"Attempt \$i/15 failed, retrying in 5s...\"
+              sleep 5
+            done
+            echo 'Backend failed health check after deploy'
+            cd '$APP_DIR'
+            docker compose -f docker-compose.prod.yml logs --tail=100
+            exit 1
           "
