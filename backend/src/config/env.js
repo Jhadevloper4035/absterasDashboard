@@ -1,9 +1,19 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
-const envFile = process.env.NODE_ENV === 'production' ? '.env' : `.env.${process.env.NODE_ENV || 'development'}`;
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = nodeEnv === 'production' ? '.env' : `.env.${nodeEnv}`;
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(currentDir, '../../..');
+const projectRoot = process.cwd();
 
-dotenv.config({ path: `../${envFile}` });
-dotenv.config({ path: envFile });
+for (const candidate of [path.join(repoRoot, envFile), path.join(repoRoot, '.env'), path.join(projectRoot, envFile), path.join(projectRoot, '.env')]) {
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+  }
+}
 
 const required = ['AUTH_SECRET', 'MONGODB_URI'];
 const missing = required.filter((key) => !process.env[key]);
@@ -12,7 +22,7 @@ if (missing.length) {
   throw new Error(`Missing required env: ${missing.join(', ')}`);
 }
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = nodeEnv === 'production';
 const weakSecretPattern = /^(replace-with|change-me|development)/i;
 
 if (isProduction) {
@@ -26,9 +36,10 @@ export const env = {
   appName: process.env.APP_NAME || 'Absteras Company CRM API',
   authSecret: process.env.AUTH_SECRET,
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  host: process.env.HOST || '0.0.0.0',
   isProduction,
   mongoUri: process.env.MONGODB_URI,
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: Number(process.env.PORT || 4000),
   setupToken: process.env.SETUP_TOKEN,
   smtp: {

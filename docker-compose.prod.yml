@@ -23,6 +23,8 @@ services:
 
   frontend:
     image: ${FRONTEND_IMAGE}
+    environment:
+      VITE_API_BASE_URL: /api
     expose:
       - "8080"
     depends_on:
