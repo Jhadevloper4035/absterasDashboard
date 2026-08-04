@@ -102,6 +102,22 @@ test('production setup requires a one-time setup token', async () => {
   }
 });
 
+test('setup explains when the first user already exists', async () => {
+  User.exists = async () => ({ _id: 'existing-user' });
+
+  let denied;
+  await allowFirstSuperadminOrUserManager(
+    { body: { role: 'superadmin' }, get: () => '' },
+    {},
+    (error) => {
+      denied = error;
+    },
+  );
+
+  assert.equal(denied.statusCode, 409);
+  assert.match(denied.message, /setup is already complete/i);
+});
+
 test('login updates lastLoginAt without revalidating legacy user fields', async () => {
   const passwordHash = await hashPassword('CodexAdmin123!');
   const user = {

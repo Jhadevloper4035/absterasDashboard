@@ -48,6 +48,10 @@ function setupTokenMatches(value) {
 
 export async function allowFirstSuperadminOrUserManager(req, res, next) {
   if (await User.exists()) {
+    if (!String(req.get('authorization') || '').startsWith('Bearer ')) {
+      return next(authError(409, 'Initial setup is already complete. Sign in as an admin to create more users.'));
+    }
+
     return authenticate(req, res, (error) => {
       if (error) return next(error);
       return authorizeRoles('superadmin', 'admin')(req, res, next);
