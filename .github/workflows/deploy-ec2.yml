@@ -44,7 +44,7 @@ jobs:
   build-and-push:
     needs: check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     outputs:
       backend-image: ${{ steps.images.outputs.backend-image }}
       frontend-image: ${{ steps.images.outputs.frontend-image }}
@@ -68,6 +68,10 @@ jobs:
         run: |
           echo "backend-image=$DOCKER_NAMESPACE/absteras-crm-backend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
           echo "frontend-image=$DOCKER_NAMESPACE/absteras-crm-frontend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Debug image outputs
+        run: |
+          echo "backend-image: ${{ steps.images.outputs.backend-image }}"
+          echo "frontend-image: ${{ steps.images.outputs.frontend-image }}"
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -94,7 +98,7 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     env:
       APP_DIR: ${{ secrets.EC2_APP_DIR || '/opt/absteras-crm' }}
       BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
@@ -110,12 +114,20 @@ jobs:
 
       - name: Prepare SSH
         run: |
-          test -n "$EC2_HOST"
-          test -n "$EC2_USER"
-          test -n "$EC2_SSH_KEY"
-          test -n "$BACKEND_ENV"
-          test -n "$BACKEND_IMAGE"
-          test -n "$FRONTEND_IMAGE"
+          echo "Checking required inputs..."
+          missing=0
+          for var in EC2_HOST EC2_USER EC2_SSH_KEY BACKEND_ENV BACKEND_IMAGE FRONTEND_IMAGE; do
+            if [ -z "${!var}" ]; then
+              echo "ERROR: \$$var is empty"
+              missing=1
+            else
+              echo "OK: \$$var is set"
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "One or more required env vars are missing. Aborting."
+            exit 1
+          fi
           mkdir -p ~/.ssh
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
