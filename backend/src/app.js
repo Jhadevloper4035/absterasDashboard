@@ -39,6 +39,7 @@ app.use(cors(createCorsOptions()));
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/health', healthRouter);
+app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/architects', architectRouter);
 app.use('/api/dashboard', dashboardRouter);

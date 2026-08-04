@@ -87,6 +87,27 @@ test('cannot create a second admin user', async () => {
   assert.equal(response.body.error.message, 'Only one admin is allowed');
 });
 
+test('cannot create a second superadmin user', async () => {
+  User.exists = async () => ({ _id: 'superadmin-1' });
+
+  const response = res();
+  await createUser(
+    {
+      body: {
+        name: 'Second Superadmin',
+        email: 'superadmin2@example.com',
+        phone: '9876543210',
+        password: 'Secret123',
+        role: 'superadmin',
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Only one superadmin is allowed');
+});
+
 test('user creation requires mobile number', async () => {
   const response = res();
   await createUser(

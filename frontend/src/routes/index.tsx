@@ -9,6 +9,7 @@ const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'))
 const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
 const LoginHistory = lazy(() => import('@/app/(admin)/users/login-history/page'))
+const HealthStatus = lazy(() => import('@/app/(admin)/health/status/page'))
 const Leads = lazy(() => import('@/app/(admin)/leads/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
 const SalesCreateLead = lazy(() => import('@/app/(admin)/leads/sales-create/page'))
@@ -212,6 +213,12 @@ const generalRoutes: RoutesProps[] = [
     name: 'User Login History',
     element: <LoginHistory />,
     roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/health/status',
+    name: 'Health Status',
+    element: <HealthStatus />,
+    roles: ['superadmin'],
   },
   {
     path: '/leads',

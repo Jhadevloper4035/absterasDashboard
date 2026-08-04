@@ -38,6 +38,19 @@ export function isEmailConfigured() {
   return Boolean(testSender || (env.smtp.host && env.smtp.from));
 }
 
+export async function emailHealth({ verify = false } = {}) {
+  if (!isEmailConfigured()) return { status: 'not_configured', configured: false };
+  if (testSender) return { status: 'ok', configured: true, mode: 'test' };
+  if (!verify) return { status: 'configured', configured: true, host: env.smtp.host, from: env.smtp.from };
+
+  try {
+    await getTransporter().verify();
+    return { status: 'ok', configured: true, host: env.smtp.host, from: env.smtp.from };
+  } catch (error) {
+    return { status: 'degraded', configured: true, host: env.smtp.host, from: env.smtp.from, error: error.code || error.message || 'Email check failed' };
+  }
+}
+
 export function setEmailSenderForTest(sender) {
   testSender = sender;
   transporter = undefined;

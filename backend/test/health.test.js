@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import mongoose from 'mongoose';
 import { app, createCorsOptions, createTrustProxySetting } from '../src/app.js';
 import { env } from '../src/config/env.js';
+import { sendHealthTestEmail } from '../src/controllers/health.controller.js';
+import { setEmailSenderForTest } from '../src/services/email.service.js';
 
 function request(method, url) {
   return new Promise((resolve, reject) => {
@@ -56,6 +58,37 @@ test('health reports degraded before MongoDB connects', async () => {
     assert.equal(body.database.state, 'disconnected');
   } finally {
     await mongoose.disconnect();
+  }
+});
+
+test('health email test sends to current superadmin email', async () => {
+  let sent;
+  setEmailSenderForTest((message) => {
+    sent = message;
+    return Promise.resolve({ messageId: 'ok' });
+  });
+
+  try {
+    const response = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.body = body;
+        return this;
+      },
+    };
+
+    await sendHealthTestEmail({ user: { email: 'admin@example.com' } }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.data.to, 'admin@example.com');
+    assert.equal(sent.to, 'admin@example.com');
+    assert.equal(sent.subject, 'CRM email test');
+  } finally {
+    setEmailSenderForTest(undefined);
   }
 });
 

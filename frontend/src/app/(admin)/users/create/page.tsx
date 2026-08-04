@@ -39,7 +39,7 @@ const CreateUserPage = () => {
   )
 
   useEffect(() => {
-    if (canManageUsers) fetchUsers().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
+    if (canManageUsers) fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
     else clearUsers()
   }, [canManageUsers, clearUsers, fetchUsers])
 

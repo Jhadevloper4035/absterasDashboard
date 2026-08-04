@@ -44,6 +44,13 @@ export const MENU_ITEMS: MenuItemType[] = [
     roles: allRoles,
   },
   {
+    key: 'health-status',
+    icon: 'iconamoon:shield-yes-duotone',
+    label: 'Health Status',
+    url: '/health/status',
+    roles: ['superadmin'],
+  },
+  {
     key: 'sales-create-lead',
     icon: 'iconamoon:send-duotone',
     label: 'Create Lead',
