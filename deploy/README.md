@@ -31,7 +31,25 @@ docker compose version
 test -w /opt/absteras-crm
 ```
 
-Open inbound ports `22` and `80` in the EC2 security group.
+Open inbound ports `22`, `80` and `443` in the EC2 security group.
+
+## HTTPS
+
+Create the first certificate on the EC2 host before deploying the HTTPS nginx config:
+
+```sh
+sudo apt-get install -y certbot
+cd /opt/absteras-crm
+docker compose -f docker-compose.prod.yml down
+sudo certbot certonly --standalone -d crm.absteras.com
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Renewals use the same host certificates mounted into the nginx container:
+
+```sh
+sudo certbot renew --pre-hook "cd /opt/absteras-crm && docker compose -f docker-compose.prod.yml stop nginx" --post-hook "cd /opt/absteras-crm && docker compose -f docker-compose.prod.yml start nginx"
+```
 
 ## GitHub Secrets
 
