@@ -6,6 +6,7 @@ import { notifyUsers } from '../services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
+const TASK_ASSIGNEE_ROLES = ['sales', 'operations', 'accounts', 'designers'];
 
 function canManageTasks(user) {
   return ADMIN_ROLES.includes(user.role);
@@ -75,7 +76,7 @@ async function taskData(task) {
 }
 
 async function findAssignee(id) {
-  return User.findOne({ _id: id, status: 'active', role: { $ne: 'superadmin' } });
+  return User.findOne({ _id: id, status: 'active', role: { $in: TASK_ASSIGNEE_ROLES } });
 }
 
 function notificationMetadata(type, taskId, actor) {
@@ -93,7 +94,7 @@ export async function listTaskAssignees(req, res) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const users = await User.find({ status: 'active', role: { $ne: 'superadmin' } }).select('name email role status').sort({ name: 1 }).limit(1000);
+  const users = await User.find({ status: 'active', role: { $in: TASK_ASSIGNEE_ROLES } }).select('name email role status').sort({ name: 1 }).limit(1000);
   return res.json({ data: users });
 }
 
@@ -229,7 +230,7 @@ export async function createTask(req, res) {
 
   const assignee = await findAssignee(req.body.assignee);
   if (!assignee) {
-    return res.status(400).json({ error: { message: 'Assign task to an active non-superadmin user' } });
+    return res.status(400).json({ error: { message: 'Assign task to an active sales, operations, accounts, or designers user' } });
   }
 
   const task = new Task({ createdBy: req.user._id, assignee: assignee._id });
@@ -259,7 +260,7 @@ export async function updateTask(req, res) {
 
     const assignee = await findAssignee(req.body.assignee);
     if (!assignee) {
-      return res.status(400).json({ error: { message: 'Assign task to an active non-superadmin user' } });
+      return res.status(400).json({ error: { message: 'Assign task to an active sales, operations, accounts, or designers user' } });
     }
     task.assignee = assignee._id;
   }

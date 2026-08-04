@@ -146,7 +146,7 @@ test('new tasks get random 6-digit ticket numbers', async () => {
   assert.deepEqual(existsQuery, { ticketNumber: task.ticketNumber });
 });
 
-test('admin can create rich task for active non-superadmin user', async () => {
+test('admin can create rich task for active accounts user', async () => {
   const adminId = new mongoose.Types.ObjectId();
   const assigneeId = new mongoose.Types.ObjectId();
   let userQuery;
@@ -160,7 +160,7 @@ test('admin can create rich task for active non-superadmin user', async () => {
   attachment.attachmentToken = createAttachmentToken(attachment);
   User.findOne = async (filter) => {
     userQuery = filter;
-    return { _id: assigneeId, role: 'admin', status: 'active' };
+    return { _id: assigneeId, role: 'accounts', status: 'active' };
   };
   const originalSave = Task.prototype.save;
   const originalPopulate = Task.prototype.populate;
@@ -189,7 +189,7 @@ test('admin can create rich task for active non-superadmin user', async () => {
     );
 
     assert.equal(response.statusCode, 201);
-    assert.deepEqual(userQuery, { _id: assigneeId, status: 'active', role: { $ne: 'superadmin' } });
+    assert.deepEqual(userQuery, { _id: assigneeId, status: 'active', role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
     assert.equal(saved.title, 'Implement JWT refresh-token rotation');
     assert.deepEqual(saved.labels, ['backend', 'authentication', 'security']);
     assert.equal(saved.attachments[0].originalName, 'spec.pdf');
@@ -238,7 +238,7 @@ test('task attachments require backend-issued upload token', async () => {
   }
 });
 
-test('assignees exclude superadmin profiles', async () => {
+test('task assignees are active sales operations accounts and designers users', async () => {
   let query;
   User.find = (filter) => {
     query = filter;
@@ -257,7 +257,7 @@ test('assignees exclude superadmin profiles', async () => {
 
   await listTaskAssignees({ user: { _id: 'admin-1', role: 'admin' } }, res());
 
-  assert.deepEqual(query, { status: 'active', role: { $ne: 'superadmin' } });
+  assert.deepEqual(query, { status: 'active', role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
 });
 
 test('assigned user only lists assigned tasks and can mark done', async () => {

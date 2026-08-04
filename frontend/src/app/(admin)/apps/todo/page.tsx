@@ -63,6 +63,7 @@ const emptyForm = {
 }
 const todoStatuses = ['Pending', 'In-Progress', 'Completed']
 const taskStatuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Testing', 'Blocked', 'Done']
+const taskAssigneeRoles = ['sales', 'operations', 'accounts', 'designers']
 const statusVariant = (status: TodoStatus | TaskStatus) => (status === 'Completed' || status === 'Done' ? 'success' : status === 'Blocked' ? 'danger' : status === 'In-Progress' || status === 'In Progress' || status === 'Review' || status === 'Testing' ? 'warning' : 'primary')
 const priorityColor = (priority: TodoPriority) => (priority === 'Critical' || priority === 'High' ? 'danger' : priority === 'Medium' ? 'warning' : 'success')
 const priorityBg = priorityColor
@@ -114,7 +115,7 @@ const TODO = () => {
     setUploadFailed(false)
     setUploadProgress(0)
   }
-  const groups = useMemo(() => [...new Set([...Object.keys(workTypesByRole), ...users.map((person) => person.role).filter(Boolean)])].sort(), [users, workTypesByRole])
+  const groups = useMemo(() => [...new Set([...Object.keys(workTypesByRole), ...users.map((person) => person.role).filter(Boolean)])].filter((role) => taskAssigneeRoles.includes(role)).sort(), [users, workTypesByRole])
   const workTypes = useMemo(() => {
     const roleWorkTypes = groupFilter ? workTypesByRole[groupFilter] || [] : Object.values(workTypesByRole).flat()
     const existingWorkTypes = todos
