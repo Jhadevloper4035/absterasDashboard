@@ -3,7 +3,7 @@ import { User } from '../models/user.model.js';
 import { LoginHistory } from '../models/login-history.model.js';
 import { cleanIpAddress } from '../helpers/request-ip.js';
 import { auditEvent } from '../services/audit.service.js';
-import { revokeActiveUserSessions } from '../services/auth-session.service.js';
+import { revokeActiveUserSessions, revokeAllActiveSessions } from '../services/auth-session.service.js';
 import { hashPassword, passwordPolicyError } from '../services/password.service.js';
 
 const SINGLE_USER_ROLES = ['superadmin', 'admin'];
@@ -191,6 +191,13 @@ export async function logoutUser(req, res) {
   await LoginHistory.updateMany({ user: user._id, logoutAt: null }, { $set: { logoutAt: new Date(), logoutReason: 'logout' } });
   await auditEvent(req, { action: 'user.logout', entity: 'user', entityId: user._id, before: { status: user.status, role: user.role } });
   return res.json({ data: { ok: true } });
+}
+
+export async function logoutAllUsers(req, res) {
+  const revokedSessions = await revokeAllActiveSessions();
+  await LoginHistory.updateMany({ logoutAt: null }, { $set: { logoutAt: new Date(), logoutReason: 'logout' } });
+  await auditEvent(req, { action: 'user.logout_all', entity: 'user', entityId: 'all', details: { revokedSessions } });
+  return res.json({ data: { ok: true, revokedSessions } });
 }
 
 export async function getUser(req, res) {

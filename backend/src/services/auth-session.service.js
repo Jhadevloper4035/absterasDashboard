@@ -25,6 +25,18 @@ export async function revokeActiveUserSessions(userId) {
   );
 }
 
+export async function revokeAllActiveSessions() {
+  const now = new Date();
+  const sessions = await AuthSession.find({ revokedAt: null, expiresAt: { $gt: now } }).select('accessTokenJti user').lean();
+  await AuthSession.updateMany({ revokedAt: null }, { revokedAt: now });
+  await Promise.all(
+    sessions
+      .filter((session) => session.accessTokenJti)
+      .map((session) => blockAccessToken({ jti: session.accessTokenJti, exp: Math.floor(Date.now() / 1000) + ACCESS_TOKEN_TTL_SECONDS, sub: session.user })),
+  );
+  return sessions.length;
+}
+
 export async function hasActiveUserSession(userId) {
   return Boolean(await AuthSession.exists({ user: userId, revokedAt: null, expiresAt: { $gt: new Date() } }));
 }

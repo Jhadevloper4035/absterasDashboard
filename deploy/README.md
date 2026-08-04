@@ -31,24 +31,35 @@ docker compose version
 test -w /opt/absteras-crm
 ```
 
-Open inbound ports `22`, `80` and `443` in the EC2 security group.
+Open inbound ports `22` and `443` in the EC2 security group. Keep `80` closed for the final setup.
 
 ## HTTPS
 
-Create the first certificate on the EC2 host before deploying the HTTPS nginx config:
+Create the first certificate on the EC2 host before deploying the HTTPS nginx config.
+
+Preferred when port `80` must stay closed: use a DNS challenge with your DNS provider, then start nginx:
+
+```sh
+sudo apt-get install -y certbot
+sudo certbot certonly --manual --preferred-challenges dns -d crm.absteras.com
+cd /opt/absteras-crm
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Quick bootstrap option: briefly open port `80`, create the cert, then close port `80` again:
 
 ```sh
 sudo apt-get install -y certbot
 cd /opt/absteras-crm
 docker compose -f docker-compose.prod.yml down
-sudo certbot certonly --standalone -d crm.absteras.com
+sudo certbot certonly --standalone --preferred-challenges http -d crm.absteras.com
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Renewals use the same host certificates mounted into the nginx container:
+Renewals use the same host certificates mounted into the nginx container. If you used manual DNS, renew manually before expiry:
 
 ```sh
-sudo certbot renew --pre-hook "cd /opt/absteras-crm && docker compose -f docker-compose.prod.yml stop nginx" --post-hook "cd /opt/absteras-crm && docker compose -f docker-compose.prod.yml start nginx"
+sudo certbot renew
 ```
 
 ## GitHub Secrets

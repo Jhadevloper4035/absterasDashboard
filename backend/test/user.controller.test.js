@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createUser, getUser, listLoginHistory, listUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
+import { createUser, getUser, listLoginHistory, listUsers, logoutAllUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
 import { AuthSession } from '../src/models/auth-session.model.js';
 import { BlockedToken } from '../src/models/blocked-token.model.js';
 import { LoginHistory } from '../src/models/login-history.model.js';
@@ -388,6 +388,48 @@ test('admin can logout an active user from login history', async () => {
   assert.equal(response.body.data.ok, true);
   assert.deepEqual(sessionUpdate.filter, { user: userId, revokedAt: null });
   assert.deepEqual(historyUpdate.filter, { user: userId, logoutAt: null });
+  assert.ok(historyUpdate.update.$set.logoutAt instanceof Date);
+  assert.equal(historyUpdate.update.$set.logoutReason, 'logout');
+});
+
+test('admin can logout all active users', async () => {
+  let sessionUpdate;
+  let historyUpdate;
+
+  AuthSession.find = (filter) => {
+    assert.equal(filter.revokedAt, null);
+    return {
+      select(field) {
+        assert.equal(field, 'accessTokenJti user');
+        return this;
+      },
+      lean() {
+        return Promise.resolve([
+          { accessTokenJti: 'access-1', user: 'user-1' },
+          { accessTokenJti: 'access-2', user: 'user-2' },
+        ]);
+      },
+    };
+  };
+  AuthSession.updateMany = async (filter, update) => {
+    sessionUpdate = { filter, update };
+  };
+  const blockedTokens = [];
+  BlockedToken.updateOne = async (filter, update) => {
+    blockedTokens.push({ filter, update });
+  };
+  LoginHistory.updateMany = async (filter, update) => {
+    historyUpdate = { filter, update };
+  };
+
+  const response = res();
+  await logoutAllUsers({ user: { _id: 'admin-1', role: 'admin' }, get: () => '', ip: '127.0.0.1' }, response);
+
+  assert.equal(response.body.data.ok, true);
+  assert.equal(response.body.data.revokedSessions, 2);
+  assert.deepEqual(sessionUpdate.filter, { revokedAt: null });
+  assert.equal(blockedTokens.length, 2);
+  assert.deepEqual(historyUpdate.filter, { logoutAt: null });
   assert.ok(historyUpdate.update.$set.logoutAt instanceof Date);
   assert.equal(historyUpdate.update.$set.logoutReason, 'logout');
 });
