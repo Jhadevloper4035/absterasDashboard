@@ -128,7 +128,15 @@ test('login updates lastLoginAt without revalidating legacy user fields', async 
     assert.deepEqual(filter, { _id: 'user-1' });
     lastLoginUpdate = update.$set.lastLoginAt;
   };
-  AuthSession.exists = async () => null;
+  AuthSession.find = () => ({
+    select() {
+      return this;
+    },
+    lean() {
+      return Promise.resolve([]);
+    },
+  });
+  AuthSession.updateMany = async () => ({ modifiedCount: 0 });
   AuthSession.create = async () => ({});
   LoginHistory.updateMany = async () => ({ modifiedCount: 0 });
   LoginHistory.create = async (body) => {
@@ -172,7 +180,7 @@ test('login updates lastLoginAt without revalidating legacy user fields', async 
   assert.ok(response.cookies.sales_crm_refresh);
 });
 
-test('login is blocked when the user already has an active session', async () => {
+test('login revokes an existing active session instead of blocking the user', async () => {
   const passwordHash = await hashPassword('CodexAdmin123!');
   const user = {
     _id: 'user-1',
@@ -184,16 +192,30 @@ test('login is blocked when the user already has an active session', async () =>
   };
 
   User.findOne = () => ({ select: () => Promise.resolve(user) });
-  AuthSession.exists = async () => ({ _id: 'session-1' });
-  User.updateOne = async () => {
-    throw new Error('lastLoginAt should not update when login is blocked');
+  User.updateOne = async () => {};
+  AuthSession.find = () => ({
+    select() {
+      return this;
+    },
+    lean() {
+      return Promise.resolve([{ accessTokenJti: 'access-1' }]);
+    },
+  });
+  let revokedFilter;
+  AuthSession.updateMany = async (filter) => {
+    revokedFilter = filter;
   };
-  AuthSession.create = async () => {
-    throw new Error('session should not be created when login is blocked');
-  };
+  AuthSession.create = async () => ({});
+  BlockedToken.updateOne = async () => {};
+  LoginHistory.updateMany = async () => ({ modifiedCount: 1 });
+  LoginHistory.create = async () => ({});
 
   const response = {
     statusCode: 200,
+    cookies: {},
+    cookie(name, value) {
+      this.cookies[name] = value;
+    },
     status(code) {
       this.statusCode = code;
       return this;
@@ -212,8 +234,9 @@ test('login is blocked when the user already has an active session', async () =>
     response,
   );
 
-  assert.equal(response.statusCode, 409);
-  assert.match(response.body.error.message, /already logged in/);
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(revokedFilter, { user: 'user-1', revokedAt: null });
+  assert.ok(response.cookies.sales_crm_refresh);
 });
 
 test('logout closes the current login history row', async () => {

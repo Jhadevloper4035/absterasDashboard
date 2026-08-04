@@ -2,7 +2,7 @@ import { User } from '../models/user.model.js';
 import { LoginHistory } from '../models/login-history.model.js';
 import { requestIp } from '../helpers/request-ip.js';
 import { verifyPassword } from '../services/password.service.js';
-import { createSession, hasActiveUserSession, rotateSession, revokeSession } from '../services/auth-session.service.js';
+import { createSession, revokeActiveUserSessions, rotateSession, revokeSession } from '../services/auth-session.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
 
 const REFRESH_COOKIE = 'sales_crm_refresh';
@@ -95,15 +95,11 @@ export async function login(req, res) {
     return res.status(401).json({ error: { message: 'Invalid email or password' } });
   }
 
-  if (await hasActiveUserSession(user._id)) {
-    logAuth('auth.login.blocked_active_session', req, { userId: String(user._id), email: normalizedEmail });
-    return res.status(409).json({ error: { message: 'User is already logged in. Please logout from the active device or ask admin to end the session.' } });
-  }
-
   const lastLoginAt = new Date();
   await User.updateOne({ _id: user._id }, { $set: { lastLoginAt } });
   user.lastLoginAt = lastLoginAt;
 
+  await revokeActiveUserSessions(user._id);
   const session = await createSession(user, req);
   await recordLogin(user, req, lastLoginAt);
   setRefreshCookie(res, session.refreshToken, session.refreshTokenExpiresAt);
