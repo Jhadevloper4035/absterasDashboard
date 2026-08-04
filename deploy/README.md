@@ -4,7 +4,7 @@ This deployment uses one EC2 instance, Docker Compose, and Nginx reverse proxy.
 
 ## EC2 Setup
 
-Install Docker and allow the deploy user to run it:
+Run this on a fresh Ubuntu EC2 instance as the deploy user, usually `ubuntu`:
 
 ```sh
 sudo apt-get update
@@ -15,7 +15,20 @@ sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo usermod -aG docker ubuntu
+sudo usermod -aG docker "$USER"
+
+sudo mkdir -p /opt/absteras-crm
+sudo chown -R "$USER:$USER" /opt/absteras-crm
+sudo chmod 750 /opt/absteras-crm
+newgrp docker
+```
+
+Verify Docker and the app directory:
+
+```sh
+docker --version
+docker compose version
+test -w /opt/absteras-crm
 ```
 
 Open inbound ports `22` and `80` in the EC2 security group.

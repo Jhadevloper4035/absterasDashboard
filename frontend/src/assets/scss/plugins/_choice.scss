@@ -252,7 +252,7 @@
   border-color: $input-border-color !important;
   box-shadow: none !important;
 
-  &::focus {
+  &:focus {
     border-color: $input-focus-border-color !important;
   }
 }

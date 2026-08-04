@@ -123,7 +123,7 @@ jobs:
 
       - name: Package deploy files
         run: |
-          tar -czf /tmp/absteras-crm-deploy.tar.gz docker-compose.prod.yml deploy/nginx.conf deploy/nginx-custom-domain.conf
+          tar -czf /tmp/absteras-crm-deploy.tar.gz docker-compose.prod.yml deploy/nginx.conf
 
       - name: Copy deploy files to EC2
         run: |
@@ -167,7 +167,7 @@ jobs:
             set -e
             echo 'Waiting for backend to become healthy'
             for i in \$(seq 1 15); do
-              if curl -fsS http://localhost/api/health >/dev/null 2>&1; then
+              if curl -fsS http://localhost/health >/dev/null 2>&1; then
                 echo 'Backend healthy'
                 exit 0
               fi
