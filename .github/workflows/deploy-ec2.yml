@@ -171,7 +171,7 @@ jobs:
             set -e
             echo 'Waiting for backend to become healthy'
             for i in \$(seq 1 15); do
-              if curl -fsS http://localhost/health >/dev/null 2>&1; then
+              if curl -kfsS https://localhost/health >/dev/null 2>&1; then
                 echo 'Backend healthy'
                 exit 0
               fi
