@@ -46,8 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     outputs:
-      backend-image: ${{ steps.images.outputs.backend-image }}
-      frontend-image: ${{ steps.images.outputs.frontend-image }}
+      backend_image: ${{ steps.images.outputs.backend_image }}
+      frontend_image: ${{ steps.images.outputs.frontend_image }}
     env:
       DOCKER_NAMESPACE: ${{ secrets.DOCKER_IMAGE_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
       IMAGE_TAG: ${{ github.sha }}
@@ -66,12 +66,12 @@ jobs:
       - name: Image names
         id: images
         run: |
-          echo "backend-image=$DOCKER_NAMESPACE/absteras-crm-backend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
-          echo "frontend-image=$DOCKER_NAMESPACE/absteras-crm-frontend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "backend_image=$DOCKER_NAMESPACE/absteras-crm-backend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=$DOCKER_NAMESPACE/absteras-crm-frontend:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
       - name: Debug image outputs
         run: |
-          echo "backend-image: ${{ steps.images.outputs.backend-image }}"
-          echo "frontend-image: ${{ steps.images.outputs.frontend-image }}"
+          echo "backend_image: ${{ steps.images.outputs.backend_image }}"
+          echo "frontend_image: ${{ steps.images.outputs.frontend_image }}"
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -80,7 +80,7 @@ jobs:
           target: prod
           push: true
           tags: |
-            ${{ steps.images.outputs.backend-image }}
+            ${{ steps.images.outputs.backend_image }}
             ${{ env.DOCKER_NAMESPACE }}/absteras-crm-backend:latest
       - name: Build and push frontend
         uses: docker/build-push-action@v6
@@ -92,7 +92,7 @@ jobs:
           build-args: |
             VITE_API_BASE_URL=/api
           tags: |
-            ${{ steps.images.outputs.frontend-image }}
+            ${{ steps.images.outputs.frontend_image }}
             ${{ env.DOCKER_NAMESPACE }}/absteras-crm-frontend:latest
 
   deploy:
@@ -102,13 +102,13 @@ jobs:
     env:
       APP_DIR: ${{ secrets.EC2_APP_DIR || '/opt/absteras-crm' }}
       BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
-      BACKEND_IMAGE: ${{ needs.build-and-push.outputs.backend-image }}
+      BACKEND_IMAGE: ${{ needs.build-and-push.outputs.backend_image }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       EC2_HOST: ${{ secrets.EC2_HOST }}
       EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
       EC2_USER: ${{ secrets.EC2_USER }}
-      FRONTEND_IMAGE: ${{ needs.build-and-push.outputs.frontend-image }}
+      FRONTEND_IMAGE: ${{ needs.build-and-push.outputs.frontend_image }}
     steps:
       - uses: actions/checkout@v4
 
