@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { connectDatabase } from './config/db.js';
-import { Architect } from './models/architect.model.js';
+import { Architect } from './modules/leads/models/architect.model.js';
 import { Lead } from './modules/leads/models/lead.model.js';
 import { Task } from './modules/tasks/models/task.model.js';
 import { User } from './models/user.model.js';

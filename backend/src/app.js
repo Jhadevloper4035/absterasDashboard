@@ -3,7 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { env } from './config/env.js';
 import { errorHandler, notFound } from './middleware/error.middleware.js';
-import { architectRouter } from './routes/architect.routes.js';
+import { architectRouter } from './modules/leads/architects.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { dashboardRouter } from './routes/dashboard.routes.js';
 import { healthRouter } from './routes/health.routes.js';

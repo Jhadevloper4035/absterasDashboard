@@ -1,5 +1,5 @@
 import { Architect } from '../models/architect.model.js';
-import { auditEvent } from '../services/audit.service.js';
+import { auditEvent } from '../../../services/audit.service.js';
 
 const ARCHITECT_CREATE_FIELDS = ['name', 'phone', 'email', 'company', 'city', 'specialty', 'notes'];
 

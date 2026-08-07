@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { createArchitect, deleteArchitect, listArchitects } from '../controllers/architect.controller.js';
-import { asyncHandler } from '../middleware/async-handler.js';
-import { authenticate, authorizeRoles } from '../modules/auth/middleware/auth.middleware.js';
+import { createArchitect, deleteArchitect, listArchitects } from './controllers/architect.controller.js';
+import { asyncHandler } from '../../middleware/async-handler.js';
+import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware.js';
 
 export const architectRouter = Router();
 

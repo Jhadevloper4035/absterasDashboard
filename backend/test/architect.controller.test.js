@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createArchitect, deleteArchitect } from '../src/controllers/architect.controller.js';
-import { Architect } from '../src/models/architect.model.js';
+import { createArchitect, deleteArchitect } from '../src/modules/leads/controllers/architect.controller.js';
+import { Architect } from '../src/modules/leads/models/architect.model.js';
 
 const originalCreate = Architect.create;
 const originalFindOneAndDelete = Architect.findOneAndDelete;
