@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
-import { createTodo, listTodoAssignees, listTodos, updateTodo } from '../src/controllers/todo.controller.js';
-import { Todo } from '../src/models/todo.model.js';
+import { createTodo, listTodoAssignees, listTodos, updateTodo } from '../src/modules/tasks/controllers/todo.controller.js';
+import { Todo } from '../src/modules/tasks/models/todo.model.js';
 import { User } from '../src/models/user.model.js';
 
 const originalTodoFind = Todo.find;

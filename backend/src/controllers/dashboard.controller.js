@@ -1,5 +1,5 @@
 import { Lead } from '../models/lead.model.js';
-import { Task } from '../models/task.model.js';
+import { Task } from '../modules/tasks/models/task.model.js';
 import { User } from '../models/user.model.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];

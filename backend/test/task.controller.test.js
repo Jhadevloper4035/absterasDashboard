@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
-import { addTaskNote, createTask, createTaskWorkType, deleteTaskWorkType, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from '../src/controllers/task.controller.js';
-import { Task } from '../src/models/task.model.js';
-import { TaskWorkType } from '../src/models/task-work-type.model.js';
+import { addTaskNote, createTask, createTaskWorkType, deleteTaskWorkType, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from '../src/modules/tasks/controllers/task.controller.js';
+import { Task } from '../src/modules/tasks/models/task.model.js';
+import { TaskWorkType } from '../src/modules/tasks/models/task-work-type.model.js';
 import { User } from '../src/models/user.model.js';
 import { createAttachmentToken } from '../src/services/upload.service.js';
 
