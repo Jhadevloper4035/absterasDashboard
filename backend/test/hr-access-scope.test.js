@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { listAttendance } from '../src/controllers/attendance.controller.js';
-import { listEmployees } from '../src/controllers/hr.controller.js';
+import { listAttendance } from '../src/modules/hr/controllers/attendance.controller.js';
+import { listEmployees } from '../src/modules/hr/controllers/employee.controller.js';
 import { authorizeHrModule } from '../src/middleware/auth.middleware.js';
-import { Attendance } from '../src/models/attendance.model.js';
-import { Employee } from '../src/models/employee.model.js';
+import { Attendance } from '../src/modules/hr/models/attendance.model.js';
+import { Employee } from '../src/modules/hr/models/employee.model.js';
 import { User } from '../src/models/user.model.js';
 
 const originals = { attendanceFind: Attendance.find, attendanceCount: Attendance.countDocuments, employeeFind: Employee.find, employeeCount: Employee.countDocuments, userFind: User.find };

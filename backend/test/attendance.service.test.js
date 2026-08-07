@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calculateAttendance } from '../src/services/attendance.service.js';
+import { calculateAttendance } from '../src/modules/hr/services/attendance.service.js';
 
 test('attendance flags late, half-day, work hours, and short leave', () => {
   assert.deepEqual(calculateAttendance({ employeeType: 'site', status: 'present', checkIn: '10:40', checkOut: '18:45' }), { status: 'late', workMinutes: 485, isShortLeave: false, overtimeMinutes: 45 });

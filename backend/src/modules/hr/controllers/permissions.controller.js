@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
-import { HR_ACCESS_LEVELS, HR_MODULES, HrPermission } from '../models/hr-permission.model.js';
-import { User } from '../models/user.model.js';
-import { auditEvent } from '../services/audit.service.js';
-import { userRoles } from '../middleware/auth.middleware.js';
+import { HR_ACCESS_LEVELS, HR_MODULES, HrPermission } from '../models/permission.model.js';
+import { User } from '../../../models/user.model.js';
+import { auditEvent } from '../../../services/audit.service.js';
+import { userRoles } from '../../../middleware/auth.middleware.js';
 
 function invalidUser(res, userId) {
   if (!mongoose.isObjectIdOrHexString(userId)) {

@@ -1,7 +1,7 @@
 import { AuthSession } from '../models/auth-session.model.js';
 import { User } from '../models/user.model.js';
-import { Employee } from '../models/employee.model.js';
-import { SalaryStructure } from '../models/salary-structure.model.js';
+import { Employee } from '../modules/hr/models/employee.model.js';
+import { SalaryStructure } from '../modules/hr/models/salary-structure.model.js';
 import { LoginHistory } from '../models/login-history.model.js';
 import { cleanIpAddress } from '../helpers/request-ip.js';
 import { auditEvent } from '../services/audit.service.js';

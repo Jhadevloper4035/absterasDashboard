@@ -1,4 +1,4 @@
-import { env } from '../config/env.js';
+import { env } from '../../../config/env.js';
 
 const minutes = (time) => {
   const [hour, minute] = String(time || '').split(':').map(Number);

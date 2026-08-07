@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { getHrPermissions, updateHrPermissions } from '../src/controllers/hr-permission.controller.js';
-import { HR_MODULES, HrPermission } from '../src/models/hr-permission.model.js';
+import { getHrPermissions, updateHrPermissions } from '../src/modules/hr/controllers/permissions.controller.js';
+import { HR_MODULES, HrPermission } from '../src/modules/hr/models/permission.model.js';
 import { User } from '../src/models/user.model.js';
 
 const originalExists = User.exists;

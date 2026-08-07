@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { leaveAttendanceDates, leaveDays } from '../src/services/leave.service.js';
+import { leaveAttendanceDates, leaveDays } from '../src/modules/hr/services/leave.service.js';
 
 test('leave days exclude configured holidays without assuming weekend policy', () => {
   assert.equal(leaveDays('2026-08-03', '2026-08-05', [new Date('2026-08-04T00:00:00.000Z')]), 2);

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { headcountAttritionReport, payrollCostReport } from '../src/controllers/hr-report.controller.js';
-import { Employee } from '../src/models/employee.model.js';
-import { PayrollRun } from '../src/models/payroll-run.model.js';
+import { headcountAttritionReport, payrollCostReport } from '../src/modules/hr/controllers/reports.controller.js';
+import { Employee } from '../src/modules/hr/models/employee.model.js';
+import { PayrollRun } from '../src/modules/hr/models/payroll-run.model.js';
 
 test('headcount report returns a zero-safe attrition rate', async () => {
   const originalFind = Employee.find;

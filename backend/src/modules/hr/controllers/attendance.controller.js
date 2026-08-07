@@ -2,7 +2,7 @@ import { Attendance, ATTENDANCE_STATUSES } from '../models/attendance.model.js';
 import { Employee } from '../models/employee.model.js';
 import { Holiday } from '../models/holiday.model.js';
 import { LeaveRequest } from '../models/leave-request.model.js';
-import { auditEvent } from '../services/audit.service.js';
+import { auditEvent } from '../../../services/audit.service.js';
 import { calculateAttendance } from '../services/attendance.service.js';
 
 const dateAtMidnight = (value) => {

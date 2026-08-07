@@ -4,8 +4,8 @@ import { Employee } from '../models/employee.model.js';
 import { ExpenseClaim } from '../models/expense-claim.model.js';
 import { PayrollRun } from '../models/payroll-run.model.js';
 import { SalaryStructure } from '../models/salary-structure.model.js';
-import { auditEvent } from '../services/audit.service.js';
-import { notifyUsers } from '../services/notification.service.js';
+import { auditEvent } from '../../../services/audit.service.js';
+import { notifyUsers } from '../../../services/notification.service.js';
 import { createPayslipPdf } from '../services/payslip-pdf.service.js';
 import { calculatePayroll, generateBankFile } from '../services/payroll.service.js';
 

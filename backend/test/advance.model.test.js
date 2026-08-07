@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
-import { Advance } from '../src/models/advance.model.js';
+import { Advance } from '../src/modules/hr/models/advance.model.js';
 
 test('advance request starts pending and requires a monthly deduction', async () => {
   const advance = new Advance({ employee: new mongoose.Types.ObjectId(), amount: 500, reason: 'Emergency', deductionSchedule: { monthlyAmount: 100 } });

@@ -5,8 +5,8 @@ import { LeaveRequest } from '../models/leave-request.model.js';
 import { LeaveType } from '../models/leave-type.model.js';
 import { Attendance } from '../models/attendance.model.js';
 import { PaidLeaveAllocation } from '../models/paid-leave-allocation.model.js';
-import { auditEvent } from '../services/audit.service.js';
-import { notifyUsers } from '../services/notification.service.js';
+import { auditEvent } from '../../../services/audit.service.js';
+import { notifyUsers } from '../../../services/notification.service.js';
 import { dayAtMidnight, leaveAttendanceDates, leaveDays } from '../services/leave.service.js';
 
 const year = (date) => new Date(date).getUTCFullYear();

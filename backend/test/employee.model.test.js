@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
-import { Employee } from '../src/models/employee.model.js';
+import { Employee } from '../src/modules/hr/models/employee.model.js';
 
 test('employee requires the core HR profile fields', async () => {
   await assert.rejects(() => new Employee({}).validate(), /Path `user` is required/);

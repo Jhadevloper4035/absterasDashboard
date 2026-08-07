@@ -1,18 +1,17 @@
 import { Router } from 'express';
-import { createHoliday, deleteHoliday, listAttendance, listHolidays, markAttendance, updateHoliday } from '../controllers/attendance.controller.js';
-import { createLeaveRequest, createLeaveType, creditCompOff, decideLeaveRequest, deleteLeaveType, encashLeave, listLeaveBalances, listLeaveRequests, listLeaveTypes, updateLeaveType } from '../controllers/leave.controller.js';
-import { createExpenseClaim, decideExpenseClaim, listExpenseClaims } from '../controllers/expense.controller.js';
-import { attendanceLeaveReport, headcountAttritionReport, payrollCostReport } from '../controllers/hr-report.controller.js';
-import { employeeMonthlyOverview } from '../controllers/employee-overview.controller.js';
-import { hrDashboard } from '../controllers/hr-dashboard.controller.js';
-import { createAdvance, createPayrollRun, createSalaryStructure, decideAdvance, downloadBankFile, getPayrollRun, listAdvances, listMyAdvances, listPayrollRuns, listSalaryStructures, previewPayroll, previewSettlement, processPayrollRun, requestAdvance, updateSalaryStructure } from '../controllers/payroll.controller.js';
-import { createDepartment, createDesignation, createEmployee, deleteDepartment, deleteDesignation, deleteEmployee, getEmployee, listDepartments, listDesignations, listEmployees, updateDepartment, updateDesignation, updateEmployee } from '../controllers/hr.controller.js';
-import { asyncHandler } from '../middleware/async-handler.js';
-import { authenticate, authorizeHrModule, authorizeRoles } from '../middleware/auth.middleware.js';
+import { createHoliday, deleteHoliday, listAttendance, listHolidays, markAttendance, updateHoliday } from './controllers/attendance.controller.js';
+import { createLeaveRequest, createLeaveType, creditCompOff, decideLeaveRequest, deleteLeaveType, encashLeave, listLeaveBalances, listLeaveRequests, listLeaveTypes, updateLeaveType } from './controllers/leave.controller.js';
+import { createExpenseClaim, decideExpenseClaim, listExpenseClaims } from './controllers/expense.controller.js';
+import { attendanceLeaveReport, headcountAttritionReport, payrollCostReport } from './controllers/reports.controller.js';
+import { employeeMonthlyOverview } from './controllers/employee-overview.controller.js';
+import { hrDashboard } from './controllers/dashboard.controller.js';
+import { createAdvance, createPayrollRun, createSalaryStructure, decideAdvance, downloadBankFile, getPayrollRun, listAdvances, listMyAdvances, listPayrollRuns, listSalaryStructures, previewPayroll, previewSettlement, processPayrollRun, requestAdvance, updateSalaryStructure } from './controllers/payroll.controller.js';
+import { createDepartment, createDesignation, createEmployee, deleteDepartment, deleteDesignation, deleteEmployee, getEmployee, listDepartments, listDesignations, listEmployees, updateDepartment, updateDesignation, updateEmployee } from './controllers/employee.controller.js';
+import { asyncHandler } from '../../middleware/async-handler.js';
+import { authenticate, authorizeHrModule, authorizeRoles } from '../../middleware/auth.middleware.js';
 
 export const hrRouter = Router();
 hrRouter.use(asyncHandler(authenticate));
-
 hrRouter.get('/dashboard', authorizeHrModule('employees', 'manage'), asyncHandler(hrDashboard));
 
 for (const [path, list, create, update, remove] of [['/departments', listDepartments, createDepartment, updateDepartment, deleteDepartment], ['/designations', listDesignations, createDesignation, updateDesignation, deleteDesignation]]) {

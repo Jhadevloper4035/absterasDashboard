@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { generateBankFile, unpaidLeaveDaysForPayroll } from '../src/services/payroll.service.js';
+import { generateBankFile, unpaidLeaveDaysForPayroll } from '../src/modules/hr/services/payroll.service.js';
 
 test('bank file safely quotes employee values', () => {
   const csv = generateBankFile({ entries: [{ employee: { _id: 'employee-1', user: { name: 'Ava "A"' } }, netPay: 1234.5 }] });

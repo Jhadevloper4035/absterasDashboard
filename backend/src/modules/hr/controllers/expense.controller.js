@@ -1,7 +1,7 @@
 import { Employee } from '../models/employee.model.js';
 import { ExpenseClaim } from '../models/expense-claim.model.js';
-import { auditEvent } from '../services/audit.service.js';
-import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
+import { auditEvent } from '../../../services/audit.service.js';
+import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
 
 const ownEmployee = (user) => Employee.findOne({ user: user._id }).select('_id');
 const monthRange = (value) => {

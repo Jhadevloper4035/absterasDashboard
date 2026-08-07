@@ -7,12 +7,12 @@ import { architectRouter } from './routes/architect.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { dashboardRouter } from './routes/dashboard.routes.js';
 import { healthRouter } from './routes/health.routes.js';
-import { hrPermissionRouter } from './routes/hr-permission.routes.js';
-import { hrRouter } from './routes/hr.routes.js';
-import { leadRouter } from './routes/lead.routes.js';
+import { hrPermissionRouter } from './modules/hr/permissions.routes.js';
+import { hrRouter } from './modules/hr/hr.routes.js';
+import { leadRouter } from './modules/leads/leads.routes.js';
 import { notificationRouter } from './routes/notification.routes.js';
-import { taskRouter } from './routes/task.routes.js';
-import { todoRouter } from './routes/todo.routes.js';
+import { taskRouter } from './modules/tasks/tasks.routes.js';
+import { todoRouter } from './modules/tasks/todos.routes.js';
 import { uploadRouter } from './routes/upload.routes.js';
 import { userRouter } from './routes/user.routes.js';
 
