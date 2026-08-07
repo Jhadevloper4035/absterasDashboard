@@ -35,6 +35,13 @@ const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
 const SalesCreateLead = lazy(() => import('@/app/(admin)/leads/sales-create/page'))
 const PendingLeads = lazy(() => import('@/app/(admin)/leads/pending/page'))
 const ArchitectLeads = lazy(() => import('@/app/(admin)/leads/architect/page'))
+const ClientManagement = lazy(() => import('@/app/(admin)/clients/page'))
+const CreateClient = lazy(() => import('@/app/(admin)/clients/create/page'))
+const ClientOverview = lazy(() => import('@/app/(admin)/clients/[clientId]/page'))
+const CreateInvoice = lazy(() => import('@/app/(admin)/invoices/create/page'))
+const Challans = lazy(() => import('@/app/(admin)/challans/page'))
+const CreateChallan = lazy(() => import('@/app/(admin)/challans/create/page'))
+const ChallanDetail = lazy(() => import('@/app/(admin)/challans/[challanId]/page'))
 const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
 const WonLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
 const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
@@ -264,6 +271,14 @@ const generalRoutes: RoutesProps[] = [
   { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'] },
   { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles },
   { path: '/hr/reports', name: 'HR reports', element: <HrReports />, roles: hrAccessRoles },
+  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: [...adminRoles, 'operations'] },
+  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: adminRoles },
+  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: [...adminRoles, 'operations'] },
+  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: adminRoles },
+  { path: '/challans', name: 'Challans', element: <Challans />, roles: adminRoles },
+  { path: '/challans/create', name: 'Create Challan', element: <CreateChallan />, roles: adminRoles },
+  { path: '/challans/:challanId/edit', name: 'Update Challan', element: <CreateChallan />, roles: adminRoles },
+  { path: '/challans/:challanId', name: 'Challan', element: <ChallanDetail />, roles: adminRoles },
   {
     path: '/leads',
     name: 'Leads',
@@ -335,12 +350,6 @@ const generalRoutes: RoutesProps[] = [
   {
     path: '/upcoming/purchase-bill',
     name: 'Purchase Bill',
-    element: <ComingSoon />,
-    roles: ['superadmin', 'admin'],
-  },
-  {
-    path: '/upcoming/client-management',
-    name: 'Client Management',
     element: <ComingSoon />,
     roles: ['superadmin', 'admin'],
   },

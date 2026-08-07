@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 import { connectDatabase } from './config/db.js';
 import { Architect } from './modules/leads/models/architect.model.js';
 import { Lead } from './modules/leads/models/lead.model.js';
+import { Client } from './modules/clients/models/client.model.js';
+import { Challan } from './modules/challans/models/challan.model.js';
+import { Invoice } from './modules/invoices/models/invoice.model.js';
 import { Task } from './modules/tasks/models/task.model.js';
 import { User } from './models/user.model.js';
 import { hashPassword } from './modules/auth/services/password.service.js';
@@ -83,6 +86,52 @@ const demoArchitects = [
   notes: 'Dummy architect profile',
 }));
 
+const demoClients = [
+  ['Emaar Gomti Green A2-19', 'Emaar Properties', 'Lucknow', '09', 'Gomti Nagar, Lucknow', 250000],
+  ['Marina Retail Fitout', 'Marina Retail Group', 'Maharashtra', '27', 'Bandra Kurla Complex, Mumbai', 420000],
+  ['Palm View Hotel Lobby', 'Palm View Hotels', 'Delhi', '07', 'Aerocity, New Delhi', 310000],
+  ['Skyline Kitchen Project', 'Skyline Kitchens', 'Karnataka', '29', 'Indiranagar, Bengaluru', 180000],
+  ['Nexa Store Fixtures', 'Nexa Retail Group', 'Gujarat', '24', 'SG Highway, Ahmedabad', 195000],
+].map(([siteName, name, state, stateCode, siteAddress, estimatedValue], index) => ({
+  name,
+  phone: `+9715033300${index + 1}`,
+  email: `projects${index + 1}@${name.toLowerCase().replaceAll(' ', '').replaceAll('.', '')}.example.com`,
+  billingAddress: siteAddress,
+  shippingAddress: siteAddress,
+  state,
+  stateCode,
+  siteName,
+  siteAddress,
+  startDate: new Date(Date.UTC(2026, index, 1)),
+  status: index === 2 ? 'on hold' : 'active',
+  estimatedValue,
+  notes: 'Dummy client project for demo use.',
+}));
+
+const demoInvoices = [
+  ['1/2026-27', 'Emaar Properties', 'ALUMINIUM SHEET', '7606', 100000, 'unpaid'],
+  ['2/2026-27', 'Marina Retail Group', 'ALUMINIUM EXTRUSION', '7604', 125000, 'partially paid'],
+  ['3/2026-27', 'Palm View Hotels', 'GLASS PANEL', '7007', 80000, 'paid'],
+  ['4/2026-27', 'Skyline Kitchens', 'ACP PANEL', '7610', 65000, 'unpaid'],
+  ['5/2026-27', 'Nexa Retail Group', 'HARDWARE & FITTINGS', '8302', 45000, 'paid'],
+].map(([invoiceNumber, clientName, description, hsnCode, taxableAmount, status], index) => ({
+  invoiceNumber,
+  clientName,
+  description,
+  hsnCode,
+  taxableAmount,
+  status,
+  invoiceDate: new Date(Date.UTC(2026, 3, index + 1)),
+}));
+
+const demoChallans = [
+  ['13', 'Emaar Properties', 'ALUMINIUM EXTRUSION', '7604', 81, 448],
+  ['14', 'Marina Retail Group', 'GLASS PANEL', '7007', 20, 2250],
+  ['15', 'Palm View Hotels', 'ACP PANEL', '7610', 35, 1200],
+  ['16', 'Skyline Kitchens', 'HARDWARE & FITTINGS', '8302', 50, 650],
+  ['17', 'Nexa Retail Group', 'ALUMINIUM SHEET', '7606', 12, 3800],
+].map(([challanNumber, clientName, description, hsnCode, quantity, rate], index) => ({ challanNumber, clientName, description, hsnCode, quantity, rate, challanDate: new Date(Date.UTC(2026, 6, 24 + index)) }));
+
 const demoTasks = [
   ['Call new website leads', 'Contact all new web enquiries and record the first response.', 'To Do', 'High', 'Lead Intake'],
   ['Review duplicate lead queue', 'Check uncertain phone/email matches before assignment.', 'In Progress', 'Critical', 'Data Quality'],
@@ -132,6 +181,48 @@ async function seed() {
     }
   }
 
+  let clientCount = 0;
+  for (const client of demoClients) {
+    if (!(await Client.exists({ email: client.email }))) {
+      await Client.create(client);
+      clientCount += 1;
+    }
+  }
+
+  let invoiceCount = 0;
+  for (const demoInvoice of demoInvoices) {
+    if (await Invoice.exists({ invoiceNumber: demoInvoice.invoiceNumber, financialYear: '2026-27' })) continue;
+    const client = await Client.findOne({ name: demoInvoice.clientName });
+    if (!client) continue;
+    const tax = demoInvoice.taxableAmount * 0.18;
+    await Invoice.create({
+      invoiceNumber: demoInvoice.invoiceNumber,
+      financialYear: '2026-27',
+      client: client._id,
+      invoiceDate: demoInvoice.invoiceDate,
+      placeOfSupply: client.state,
+      placeOfSupplyCode: client.stateCode,
+      lineItems: [{ description: demoInvoice.description, hsnCode: demoInvoice.hsnCode, quantity: 1, unit: 'NOS', unitPrice: demoInvoice.taxableAmount, lineAmount: demoInvoice.taxableAmount }],
+      taxableAmount: demoInvoice.taxableAmount,
+      igstAmount: tax,
+      grandTotal: demoInvoice.taxableAmount + tax,
+      status: demoInvoice.status,
+    });
+    invoiceCount += 1;
+  }
+
+  let challanCount = 0;
+  for (const demoChallan of demoChallans) {
+    if (await Challan.exists({ challanNumber: demoChallan.challanNumber })) continue;
+    const client = await Client.findOne({ name: demoChallan.clientName });
+    if (!client) continue;
+    const taxableAmount = demoChallan.quantity * demoChallan.rate;
+    const freightCharge = 2000;
+    const gstAmount = taxableAmount * 0.18;
+    await Challan.create({ challanNumber: demoChallan.challanNumber, client: client._id, challanDate: demoChallan.challanDate, transportType: 'Road', lineItems: [{ description: demoChallan.description, hsnCode: demoChallan.hsnCode, quantity: demoChallan.quantity, unit: 'NOS', rate: demoChallan.rate, amount: taxableAmount }], freightCharge, taxableAmount, gstAmount, totalAmount: taxableAmount + freightCharge + gstAmount });
+    challanCount += 1;
+  }
+
   const creator = await User.findOne({ status: 'active', role: { $in: ['admin', 'superadmin'] } }).sort({ role: 1, createdAt: 1 });
   const assignees = await User.find({ status: 'active', role: { $ne: 'superadmin' } }).sort({ createdAt: 1 });
   let taskCount = 0;
@@ -155,6 +246,9 @@ async function seed() {
   console.log(`Seeded ${userCount} demo users`);
   console.log(`Seeded ${demoLeads.length} demo leads`);
   console.log(`Seeded ${demoArchitects.length} demo architects`);
+  console.log(`Seeded ${clientCount} demo clients`);
+  console.log(`Seeded ${invoiceCount} demo invoices`);
+  console.log(`Seeded ${challanCount} demo challans`);
   console.log(`Seeded ${taskCount} demo tasks`);
 }
 

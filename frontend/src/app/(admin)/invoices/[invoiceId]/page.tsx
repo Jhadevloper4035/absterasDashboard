@@ -1,153 +1,20 @@
-import { useEffect, useState } from 'react'
-import { Card, CardBody, CardTitle, Col, Row } from 'react-bootstrap'
-import { useNavigate, useParams } from 'react-router-dom'
-
-import { getInvoiceById } from '@/helpers/data'
-import PageBreadcrumb from '@/components/layout/PageBreadcrumb'
-import { currency } from '@/context/constants'
-import SubmissionButton from './components/SubmissionButton'
 import PageMetaData from '@/components/PageTitle'
-import type { InvoiceType } from '@/types/data'
+import { apiFetch } from '@/helpers/api'
+import { useEffect, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Alert, Button, Card, CardBody, Table } from 'react-bootstrap'
 
-import logoDark from '@/assets/images/logo-dark.png'
+type Invoice = { invoiceNumber: string; financialYear: string; invoiceDate: string; placeOfSupply?: string; placeOfSupplyCode?: string; reverseCharge: boolean; grRrNumber?: string; transport?: string; vehicleNumber?: string; station?: string; taxableAmount: number; igstAmount: number; cgstAmount: number; sgstAmount: number; roundOff: number; grandTotal: number; lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; unitPrice: number; lineAmount: number }[]; client: { name: string; gstin?: string; billingAddress?: string; shippingAddress?: string } }
+const money = (value = 0) => value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const InvoiceDetail = () => {
-  const [invoice, setInvoice] = useState<InvoiceType>()
+const InvoiceDetailPage = () => {
   const { invoiceId } = useParams()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    (async () => {
-      if (invoiceId) {
-        const data = await getInvoiceById(invoiceId)
-        if (data) setInvoice(data)
-        else navigate('/pages/error-404-alt')
-      }
-    })()
-  }, [])
-
-  return (
-    <>
-      <PageBreadcrumb subName="Invoice" title={invoice?.id ?? 'Invoice Details'} />
-      <PageMetaData title={invoice?.id ?? 'Invoice Details'} />
-
-      <Row>
-        <Col xs={12}>
-          {invoice && (
-            <Card>
-              <CardBody>
-                <div className="clearfix">
-                  <div className="float-sm-end">
-                    <div className="auth-logo">
-                      <img className="logo-dark me-1" src={logoDark} alt="logo-dark" height={24} />
-                    </div>
-                    <address className="mt-3">
-                      1729 Bangor St,
-                      <br />
-                      Houlton, ME, 04730 <br />
-                      <abbr title="Phone">P:</abbr> (207) 532-9109
-                    </address>
-                  </div>
-                  <div className="float-sm-start">
-                    <CardTitle as={'h5'} className="mb-2">
-                      Invoice: #{invoice.id}
-                    </CardTitle>
-                  </div>
-                </div>
-                <Row className="mt-3">
-                  <Col md={6}>
-                    <h6 className="fw-normal text-muted">Customer</h6>
-                    <h6 className="fs-16">{invoice.customer?.name}</h6>
-                    <address>
-                      135 White Cemetery Rd,
-                      <br />
-                      Perryville, KY, 40468
-                      <br />
-                      <abbr title="Phone">P:</abbr> (304) 584-4345
-                    </address>
-                  </Col>
-                </Row>
-                <Row>
-                  <Col xs={12}>
-                    <div className="table-responsive table-borderless text-nowrap mt-3 table-centered">
-                      <table className="table mb-0">
-                        <thead className="bg-light bg-opacity-50">
-                          <tr>
-                            <th className="border-0 py-2">Product Name</th>
-                            <th className="border-0 py-2">Quantity</th>
-                            <th className="border-0 py-2">Price</th>
-                            <th className="text-end border-0 py-2">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td>G15 Gaming Laptop</td>
-                            <td>3</td>
-                            <td>{currency}240.59</td>
-                            <td className="text-end">{currency}721.77</td>
-                          </tr>
-                          <tr>
-                            <td>Sony Alpha ILCE 6000Y 24.3 MP Mirrorless Digital SLR Camera</td>
-                            <td>5</td>
-                            <td>{currency}135.99</td>
-                            <td className="text-end">{currency}679.95</td>
-                          </tr>
-                          <tr>
-                            <td>Sony Over-Ear Wireless Headphone with Mic</td>
-                            <td>1</td>
-                            <td>{currency}99.49</td>
-                            <td className="text-end">{currency}99.49</td>
-                          </tr>
-                          <tr className="border-bottom">
-                            <td>Adam ROMA USB-C / USB-A 3.1 (2-in-1 Flash Drive) – 128GB</td>
-                            <td>2</td>
-                            <td>{currency}350.19</td>
-                            <td className="text-end">700.38</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </Col>
-                </Row>
-                <Row className="mt-3">
-                  <Col sm={7}>
-                    <div className="clearfix pt-xl-3 pt-0">
-                      <h6 className="text-muted">Notes:</h6>
-                      <small className="text-muted">
-                        All accounts are to be paid within 7 days from receipt of invoice. To be paid by cheque or credit card or direct payment
-                        online. If account is not paid within 7 days the credits details supplied as confirmation of work undertaken will be charged
-                        the agreed quoted fee noted above.
-                      </small>
-                    </div>
-                  </Col>
-                  <Col sm={5}>
-                    <div className="float-end">
-                      <p>
-                        <span className="fw-medium">Sub-total :</span>
-                        <span className="float-end">{currency}2266.59</span>
-                      </p>
-                      <p>
-                        <span className="fw-medium">Discount (10%) :</span>
-                        <span className="float-end">
-                          &nbsp;&nbsp;&nbsp;
-                          {currency}226.659
-                        </span>
-                      </p>
-                      <h3>{currency}2039.931 USD</h3>
-                    </div>
-                    <div className="clearfix" />
-                  </Col>
-                </Row>
-                <div className="mt-5 mb-1">
-                  <SubmissionButton />
-                </div>
-              </CardBody>
-            </Card>
-          )}
-        </Col>
-      </Row>
-    </>
-  )
+  const [searchParams] = useSearchParams()
+  const [invoice, setInvoice] = useState<Invoice>()
+  const [error, setError] = useState('')
+  useEffect(() => { if (invoiceId) apiFetch<{ data: Invoice }>(`/invoices/${invoiceId}`).then(({ data }) => setInvoice(data)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load invoice')) }, [invoiceId])
+  useEffect(() => { if (invoice && searchParams.get('print') === '1') window.print() }, [invoice, searchParams])
+  return <><PageMetaData title={invoice ? `Invoice ${invoice.invoiceNumber}` : 'Invoice'} /><style>{'@media print { .no-print { display: none !important; } body { background: #fff !important; } .card { border: 0 !important; box-shadow: none !important; } }'}</style>{error && <Alert variant="danger">{error}</Alert>}{invoice && <Card><CardBody><div className="no-print d-flex justify-content-between mb-4"><Link to="/invoices"><Button variant="outline-secondary">Back to invoices</Button></Link><Button onClick={() => window.print()}>Print invoice</Button></div><div className="text-center border-bottom pb-3 mb-3"><h5 className="mb-1">TAX INVOICE</h5><h2 className="mb-1">ABSTERAS</h2><div>GSTIN: 06ABXFA0801H1ZK</div></div><div className="row border-bottom mb-3 pb-3"><div className="col-md-6"><strong>Invoice No.</strong> {invoice.invoiceNumber}<br /><strong>Date:</strong> {new Date(invoice.invoiceDate).toLocaleDateString()}<br /><strong>Place of Supply:</strong> {[invoice.placeOfSupply, invoice.placeOfSupplyCode && `(${invoice.placeOfSupplyCode})`].filter(Boolean).join(' ')}<br /><strong>Reverse Charge:</strong> {invoice.reverseCharge ? 'Yes' : 'No'}</div><div className="col-md-6"><strong>GR/RR No.:</strong> {invoice.grRrNumber || '-'}<br /><strong>Transport:</strong> {invoice.transport || '-'}<br /><strong>Vehicle No.:</strong> {invoice.vehicleNumber || '-'}<br /><strong>Station:</strong> {invoice.station || '-'}</div></div><div className="row mb-3"><div className="col-md-6"><h6>Billed to</h6><strong>{invoice.client.name}</strong><br />{invoice.client.billingAddress || '-'}<br />GSTIN / UIN: {invoice.client.gstin || '-'}</div><div className="col-md-6"><h6>Shipped to</h6><strong>{invoice.client.name}</strong><br />{invoice.client.shippingAddress || invoice.client.billingAddress || '-'}<br />GSTIN / UIN: {invoice.client.gstin || '-'}</div></div><Table bordered responsive><thead><tr><th>#</th><th>Description of Goods</th><th>HSN/SAC</th><th className="text-end">Qty.</th><th className="text-end">Unit Price</th><th className="text-end">Amount</th></tr></thead><tbody>{invoice.lineItems.map((item, index) => <tr key={index}><td>{index + 1}</td><td>{item.description}</td><td>{item.hsnCode || '-'}</td><td className="text-end">{item.quantity} {item.unit}</td><td className="text-end">{money(item.unitPrice)}</td><td className="text-end">{money(item.lineAmount)}</td></tr>)}</tbody><tfoot><tr><td colSpan={5} className="text-end">Taxable amount</td><td className="text-end">{money(invoice.taxableAmount)}</td></tr>{invoice.igstAmount > 0 && <tr><td colSpan={5} className="text-end">IGST</td><td className="text-end">{money(invoice.igstAmount)}</td></tr>}{invoice.cgstAmount > 0 && <tr><td colSpan={5} className="text-end">CGST</td><td className="text-end">{money(invoice.cgstAmount)}</td></tr>}{invoice.sgstAmount > 0 && <tr><td colSpan={5} className="text-end">SGST</td><td className="text-end">{money(invoice.sgstAmount)}</td></tr>}{invoice.roundOff !== 0 && <tr><td colSpan={5} className="text-end">Round off</td><td className="text-end">{money(invoice.roundOff)}</td></tr>}<tr><th colSpan={5} className="text-end">Grand total</th><th className="text-end">{money(invoice.grandTotal)}</th></tr></tfoot></Table><div className="mt-4"><strong>Terms & Conditions</strong><div>Goods once sold will not be taken back. Interest at 18% p.a. applies to overdue payments. Subject to Haryana jurisdiction.</div><div className="text-end mt-4">For ABSTERAS<br /><br />Authorised Signatory</div></div></CardBody></Card>}</>
 }
 
-export default InvoiceDetail
+export default InvoiceDetailPage

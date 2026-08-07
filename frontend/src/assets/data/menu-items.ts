@@ -1,6 +1,7 @@
 import type { MenuItemType } from '@/types/menu'
 
 const adminRoles = ['superadmin', 'admin']
+const clientRoles = [...adminRoles, 'operations']
 const teamRoles = ['sales', 'operations', 'accounts', 'designers']
 const allRoles = [...adminRoles, ...teamRoles]
 const hrRoles = [...adminRoles, 'hr-management']
@@ -174,7 +175,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'erp',
     label: 'ERP',
     isTitle: true,
-    roles: [...adminRoles, 'hr-management', 'employee'],
+    roles: [...adminRoles, 'hr-management', 'employee', 'operations'],
   },
   {
     key: 'employee-panel',
@@ -217,7 +218,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'seo-website',
     icon: 'iconamoon:search-duotone',
     label: 'SEO Website',
-    roles: ['superadmin', 'admin'],
+    roles: clientRoles,
     children: [
       {
         key: 'seo-website-overview',
@@ -235,9 +236,16 @@ export const MENU_ITEMS: MenuItemType[] = [
     roles: ['superadmin', 'admin'],
     children: [
       {
-        key: 'challan-management-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/challan-management',
+        key: 'challan-management-list',
+        label: 'List Challans',
+        url: '/challans',
+        parentKey: 'challan-management',
+        roles: ['superadmin', 'admin'],
+      },
+      {
+        key: 'challan-management-create',
+        label: 'Create Challan',
+        url: '/challans/create',
         parentKey: 'challan-management',
         roles: ['superadmin', 'admin'],
       },
@@ -251,8 +259,8 @@ export const MENU_ITEMS: MenuItemType[] = [
     children: [
       {
         key: 'sales-bill-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/sales-bill',
+        label: 'Create Invoice',
+        url: '/invoices/create',
         parentKey: 'sales-bill',
         roles: ['superadmin', 'admin'],
       },
@@ -277,14 +285,49 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'client-management',
     icon: 'iconamoon:profile-circle-duotone',
     label: 'Client Management',
-    roles: ['superadmin', 'admin'],
+    roles: clientRoles,
     children: [
       {
         key: 'client-management-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/client-management',
+        label: 'All Clients',
+        url: '/clients',
         parentKey: 'client-management',
-        roles: ['superadmin', 'admin'],
+        roles: clientRoles,
+      },
+      {
+        key: 'client-management-create',
+        label: 'Create Client',
+        url: '/clients/create',
+        parentKey: 'client-management',
+        roles: adminRoles,
+      },
+      {
+        key: 'client-management-invoices',
+        label: 'List Invoices',
+        url: '/invoices',
+        parentKey: 'client-management',
+        roles: clientRoles,
+      },
+      {
+        key: 'client-management-create-invoice',
+        label: 'Create Invoice',
+        url: '/invoices/create',
+        parentKey: 'client-management',
+        roles: adminRoles,
+      },
+      {
+        key: 'client-management-challans',
+        label: 'List Challans',
+        url: '/challans',
+        parentKey: 'client-management',
+        roles: adminRoles,
+      },
+      {
+        key: 'client-management-create-challan',
+        label: 'Create Challan',
+        url: '/challans/create',
+        parentKey: 'client-management',
+        roles: adminRoles,
       },
     ],
   },

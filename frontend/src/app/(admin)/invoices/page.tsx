@@ -1,151 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Button, Card, CardBody, Col, Row } from 'react-bootstrap'
-import { Link } from 'react-router-dom'
-
-import PageBreadcrumb from '@/components/layout/PageBreadcrumb'
 import PageMetaData from '@/components/PageTitle'
-import IconifyIcon from '@/components/wrappers/IconifyIcon'
-import { currency } from '@/context/constants'
-import { getAllInvoices } from '@/helpers/data'
-import type { InvoiceType } from '@/types/data'
+import { apiFetch } from '@/helpers/api'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Alert, Badge, Button, Card, CardBody, Form, Table } from 'react-bootstrap'
 
-const Invoices = () => {
-  const [allInvoices, setAllInvoices] = useState<InvoiceType[]>()
+type Client = { _id: string; name: string }
+type Invoice = { _id: string; invoiceNumber: string; invoiceDate: string; grandTotal: number; status: 'unpaid' | 'partially paid' | 'paid'; client?: Client }
 
-  useEffect(() => {
-    (async () => {
-      const data = await getAllInvoices()
-      setAllInvoices(data)
-    })()
-  }, [])
-
-  return (
-    <>
-      <PageBreadcrumb subName="Invoice" title="Invoices List" />
-      <PageMetaData title="Invoices" />
-
-      <Row>
-        <Col>
-          <Card>
-            <CardBody>
-              <div className="d-flex flex-wrap justify-content-between gap-3">
-                <div className="search-bar">
-                  <span>
-                    <IconifyIcon icon="bx:search-alt" className="mb-1" />
-                  </span>
-                  <input type="search" className="form-control" id="search" placeholder="Search invoice..." />
-                </div>
-                <div>
-                  <Button variant="success">
-                    <IconifyIcon icon="bx:plus" className="me-1" />
-                    Create Invoice
-                  </Button>
-                </div>
-              </div>
-            </CardBody>
-            <div>
-              <div className="table-responsive table-centered">
-                <table className="table text-nowrap mb-0">
-                  <thead className="bg-light bg-opacity-50">
-                    <tr>
-                      <th className="border-0 py-2">Invoice ID</th>
-                      <th className="border-0 py-2">Customer</th>
-                      <th className="border-0 py-2">Created Date</th>
-                      <th className="border-0 py-2">Due Date</th>
-                      <th className="border-0 py-2">Amount</th>
-                      <th className="border-0 py-2">Payment Status</th>
-                      <th className="border-0 py-2">Via</th>
-                      <th className="border-0 py-2">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allInvoices?.map((invoice, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <Link to={`/invoices/${invoice.id}`} className="fw-medium">
-                            #{invoice.id}
-                          </Link>
-                        </td>
-                        <td>
-                          <div className="d-flex align-items-center">
-                            {invoice.customer && <img src={invoice.customer.image} alt="user-img" className="avatar-xs rounded-circle me-2" />}
-                            <div>
-                              <h5 className="fs-14 mt-1 fw-normal">{invoice.customer?.name}</h5>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          {invoice.customer && new Date(invoice.customer?.createdAt).toDateString()}&nbsp;
-                        </td>
-                        <td> {invoice.order && new Date(invoice.order?.createdAt).toDateString()}</td>
-                        <td>
-                          {currency}
-                          {invoice.product?.price}
-                        </td>
-                        <td>
-                          <span
-                            className={`badge badge-soft-${invoice.order?.status === 'Cancelled' ? 'danger' : invoice.order?.status == 'Processing' ? 'warning' : 'success'}`}>
-                            {invoice.order?.status}
-                          </span>
-                        </td>
-                        <td>{invoice.order?.paymentMethod}</td>
-                        <td>
-                          <Button variant="soft-secondary" size="sm" type="button" className="me-2">
-                            <IconifyIcon icon="bx:edit" className="fs-16" />
-                          </Button>
-                          <Button variant="soft-danger" size="sm" type="button">
-                            <IconifyIcon icon="bx:trash" className="bx bx-trash fs-16" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="align-items-center justify-content-between row g-0 text-center text-sm-start p-3 border-top">
-                <div className="col-sm">
-                  <div className="text-muted">
-                    Showing&nbsp;
-                    <span className="fw-semibold">10</span>&nbsp; of&nbsp;
-                    <span className="fw-semibold">52</span>&nbsp; invoices
-                  </div>
-                </div>
-                <Col sm="auto" className="mt-3 mt-sm-0">
-                  <ul className="pagination pagination-rounded m-0">
-                    <li className="page-item">
-                      <Link to="" className="page-link">
-                        <IconifyIcon icon="bx:left-arrow-alt" />
-                      </Link>
-                    </li>
-                    <li className="page-item active">
-                      <Link to="" className="page-link">
-                        1
-                      </Link>
-                    </li>
-                    <li className="page-item">
-                      <Link to="" className="page-link">
-                        2
-                      </Link>
-                    </li>
-                    <li className="page-item">
-                      <Link to="" className="page-link">
-                        3
-                      </Link>
-                    </li>
-                    <li className="page-item">
-                      <Link to="" className="page-link">
-                        <IconifyIcon icon="bx:right-arrow-alt" />
-                      </Link>
-                    </li>
-                  </ul>
-                </Col>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-    </>
-  )
+const InvoicesPage = () => {
+  const [clients, setClients] = useState<Client[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [search, setSearch] = useState('')
+  const [client, setClient] = useState('')
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const load = () => { const query = new URLSearchParams(); if (search) query.set('q', search); if (client) query.set('client', client); if (status) query.set('status', status); apiFetch<{ data: Invoice[] }>(`/invoices?${query}`).then(({ data }) => setInvoices(data)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load invoices')) }
+  useEffect(() => { apiFetch<{ data: Client[] }>('/clients?limit=100').then(({ data }) => setClients(data)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load clients')) }, [])
+  useEffect(() => { load() }, [search, client, status])
+  return <><PageMetaData title="Invoices" /><Card className="mb-3"><CardBody><div className="d-flex justify-content-between align-items-start flex-wrap gap-3"><div><h4 className="card-title mb-1">Invoices</h4><p className="text-muted mb-0">Filter invoices by number, client, or payment status.</p></div><Link to="/invoices/create"><Button>Create invoice</Button></Link></div>{error && <Alert className="mt-3 mb-0" variant="danger">{error}</Alert>}</CardBody></Card><Card><CardBody><div className="row g-2 mb-3"><div className="col-md-4"><Form.Control placeholder="Search invoice number" value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="col-md-4"><Form.Select value={client} onChange={(event) => setClient(event.target.value)}><option value="">All clients</option>{clients.map((entry) => <option key={entry._id} value={entry._id}>{entry.name}</option>)}</Form.Select></div><div className="col-md-4"><Form.Select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All payment statuses</option><option value="unpaid">Unpaid</option><option value="partially paid">Partially paid</option><option value="paid">Paid</option></Form.Select></div></div><Table responsive hover className="mb-0"><thead><tr><th>Invoice</th><th>Client</th><th>Date</th><th>Grand total</th><th>Status</th><th /></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice._id}><td>{invoice.invoiceNumber}</td><td>{invoice.client ? <Link to={`/clients/${invoice.client._id}`}>{invoice.client.name}</Link> : '-'}</td><td>{new Date(invoice.invoiceDate).toLocaleDateString()}</td><td>{invoice.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td><Badge bg={invoice.status === 'paid' ? 'success' : invoice.status === 'partially paid' ? 'warning' : 'secondary'}>{invoice.status}</Badge></td><td className="text-end"><Link to={`/invoices/${invoice._id}`}><Button size="sm" variant="outline-primary" className="me-2">View</Button></Link><Button size="sm" variant="outline-secondary" onClick={() => window.open(`/invoices/${invoice._id}?print=1`, '_blank')}>Print</Button></td></tr>)}{!invoices.length && <tr><td colSpan={6} className="text-center text-muted py-4">No invoices found.</td></tr>}</tbody></Table></CardBody></Card></>
 }
 
-export default Invoices
+export default InvoicesPage
