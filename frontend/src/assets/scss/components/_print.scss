@@ -20,4 +20,12 @@
         box-shadow: none;
         margin: 0 !important;
     }
+
+    .attendance-report-table .table-responsive {
+        overflow: visible !important;
+    }
+
+    .attendance-report-table .table {
+        white-space: normal !important;
+    }
 }

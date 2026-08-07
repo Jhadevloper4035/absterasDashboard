@@ -189,7 +189,7 @@ test('admin can create rich task for active accounts user', async () => {
     );
 
     assert.equal(response.statusCode, 201);
-    assert.deepEqual(userQuery, { _id: assigneeId, status: 'active', role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
+    assert.deepEqual(userQuery, { _id: assigneeId, status: 'active', $or: [{ role: { $in: ['sales', 'operations', 'accounts', 'designers'] } }, { additionalRoles: { $in: ['sales', 'operations', 'accounts', 'designers'] } }] });
     assert.equal(saved.title, 'Implement JWT refresh-token rotation');
     assert.deepEqual(saved.labels, ['backend', 'authentication', 'security']);
     assert.equal(saved.attachments[0].originalName, 'spec.pdf');
@@ -257,7 +257,7 @@ test('task assignees are active sales operations accounts and designers users', 
 
   await listTaskAssignees({ user: { _id: 'admin-1', role: 'admin' } }, res());
 
-  assert.deepEqual(query, { status: 'active', role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
+  assert.deepEqual(query, { status: 'active', $or: [{ role: { $in: ['sales', 'operations', 'accounts', 'designers'] } }, { additionalRoles: { $in: ['sales', 'operations', 'accounts', 'designers'] } }] });
 });
 
 test('assigned user only lists assigned tasks and can mark done', async () => {

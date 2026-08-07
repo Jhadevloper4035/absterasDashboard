@@ -7,7 +7,7 @@ import { RateLimit } from '../src/models/rate-limit.model.js';
 import { User } from '../src/models/user.model.js';
 import { env } from '../src/config/env.js';
 import { cleanIpAddress } from '../src/helpers/request-ip.js';
-import { allowFirstSuperadminOrUserManager } from '../src/middleware/auth.middleware.js';
+import { allowFirstSuperadminOrUserManager, authorizeHrModule, authorizeRoles } from '../src/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
 import { login, logout } from '../src/controllers/auth.controller.js';
 import { createAccessTokenPair, createSession, isAccessTokenBlocked, rotateSession } from '../src/services/auth-session.service.js';
@@ -65,6 +65,22 @@ test('password hashing verifies only the original password', async () => {
 test('ip address display removes ipv6 mapped prefix', () => {
   assert.equal(cleanIpAddress('::ffff:172.26.0.1'), '172.26.0.1');
   assert.equal(cleanIpAddress('203.0.113.10, 10.0.0.1'), '203.0.113.10');
+});
+
+test('role authorization accepts an assigned additional business role', () => {
+  let nextError;
+  authorizeRoles('sales')({ user: { role: 'accounts', additionalRoles: ['sales'] } }, {}, (error) => { nextError = error; });
+  assert.equal(nextError, undefined);
+});
+
+test('HR and employee access types grant only their intended HR scope', async () => {
+  const employeeRequest = { user: { accessTypes: ['employee'] } };
+  await authorizeHrModule('expenses', 'view')(employeeRequest, {}, (error) => assert.equal(error, undefined));
+  assert.equal(employeeRequest.hrAccess, 'view');
+
+  const hrRequest = { user: { accessTypes: ['hr-management'] } };
+  await authorizeHrModule('payroll', 'manage')(hrRequest, {}, (error) => assert.equal(error, undefined));
+  assert.equal(hrRequest.hrAccess, 'manage');
 });
 
 test('production setup requires a one-time setup token', async () => {

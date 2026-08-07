@@ -7,6 +7,8 @@ import { architectRouter } from './routes/architect.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { dashboardRouter } from './routes/dashboard.routes.js';
 import { healthRouter } from './routes/health.routes.js';
+import { hrPermissionRouter } from './routes/hr-permission.routes.js';
+import { hrRouter } from './routes/hr.routes.js';
 import { leadRouter } from './routes/lead.routes.js';
 import { notificationRouter } from './routes/notification.routes.js';
 import { taskRouter } from './routes/task.routes.js';
@@ -40,6 +42,8 @@ app.use(express.json({ limit: '1mb' }));
 
 app.use('/health', healthRouter);
 app.use('/api/health', healthRouter);
+app.use('/api/hr/permissions', hrPermissionRouter);
+app.use('/api/hr', hrRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/architects', architectRouter);
 app.use('/api/dashboard', dashboardRouter);

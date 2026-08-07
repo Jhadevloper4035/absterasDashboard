@@ -45,6 +45,15 @@ const userSchema = new mongoose.Schema(
       enum: USER_ROLES,
       default: 'sales',
     },
+    additionalRoles: [{
+      type: String,
+      enum: USER_ROLES,
+    }],
+    accessTypes: [{
+      type: String,
+      trim: true,
+      lowercase: true,
+    }],
     status: {
       type: String,
       enum: USER_STATUSES,
@@ -109,6 +118,7 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ role: 1, status: 1, createdAt: -1 });
+userSchema.index({ additionalRoles: 1, status: 1, createdAt: -1 });
 userSchema.index({ status: 1, createdAt: -1 });
 
 export const User = mongoose.model('User', userSchema);

@@ -56,7 +56,7 @@ async function getDashboardSummary(user) {
     Lead.countDocuments(meetingQuery),
     Task.countDocuments(overdueTaskQuery),
     Task.countDocuments(todayTaskQuery),
-    canManage(user) ? User.countDocuments({ role: { $in: TEAM_ROLES }, status: 'active' }) : 1,
+    canManage(user) ? User.countDocuments({ status: 'active', $or: [{ role: { $in: TEAM_ROLES } }, { additionalRoles: { $in: TEAM_ROLES } }] }) : 1,
     Lead.find(userLeadQuery(user))
       .populate('owner', 'name email role status')
       .sort({ createdAt: -1 })

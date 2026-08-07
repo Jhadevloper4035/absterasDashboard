@@ -3,6 +3,7 @@ import { User } from '../models/user.model.js';
 import { auditEvent } from '../services/audit.service.js';
 import { notifyUsers } from '../services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../services/upload.service.js';
+import { userRoles } from '../middleware/auth.middleware.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
 const LEAD_CREATE_ROLES = [...ADMIN_ROLES, 'sales'];
@@ -71,7 +72,7 @@ function notificationMetadata(user, type, leadId) {
 }
 
 export async function createLead(req, res) {
-  if (!LEAD_CREATE_ROLES.includes(req.user?.role)) {
+  if (!userRoles(req.user).some((role) => LEAD_CREATE_ROLES.includes(role))) {
     return forbidden(res);
   }
 
@@ -167,7 +168,7 @@ export async function updateLead(req, res) {
       return forbidden(res);
     }
 
-    const newOwner = await User.findOne({ _id: owner, role: 'sales', status: 'active' });
+    const newOwner = await User.findOne({ _id: owner, status: 'active', $or: [{ role: 'sales' }, { additionalRoles: 'sales' }] });
 
     if (!newOwner) {
       return res.status(400).json({ error: { message: 'Assign leads to an active salesperson' } });

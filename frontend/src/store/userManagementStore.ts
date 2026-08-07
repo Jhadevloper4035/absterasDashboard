@@ -10,8 +10,11 @@ export type CreateUserPayload = {
   phone: string
   password: string
   role: UserType['role']
+  additionalRoles?: UserType['role'][]
+  accessTypes?: string[]
   status: UserType['status']
   timezone: string
+  employment?: { employeeType: 'office' | 'site'; department: string; designation: string; manager?: string; joiningDate: string; monthlySalary?: string }
 }
 
 type UserManagementStore = {

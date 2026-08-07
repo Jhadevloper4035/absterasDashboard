@@ -3,13 +3,13 @@ import { Notification } from '../models/notification.model.js';
 import { User } from '../models/user.model.js';
 import { isEmailConfigured, sendNotificationEmail } from './email.service.js';
 
-async function sendEmailNotifications(ids, { title, body, metadata }) {
+async function sendEmailNotifications(ids, { title, body, metadata, attachments }) {
   const users = await User.find({ _id: { $in: ids }, status: 'active' }).select('email');
   const results = await Promise.allSettled(
     users
       .filter((user) => user.email)
       .map(async (user) => {
-        await sendNotificationEmail({ to: user.email, title, body, metadata });
+        await sendNotificationEmail({ to: user.email, title, body, metadata, attachments });
         return { user: user._id, channel: 'email', title, body, status: 'sent', metadata };
       }),
   );
@@ -31,7 +31,7 @@ async function sendEmailNotifications(ids, { title, body, metadata }) {
   }
 }
 
-export async function notifyUsers(userIds, { title, body, metadata } = {}) {
+export async function notifyUsers(userIds, { title, body, metadata, attachments } = {}) {
   const actorId = metadata?.fromUserId ? String(metadata.fromUserId) : '';
   const ids = [...new Set((userIds || []).map((id) => id?._id || id).filter(Boolean).map(String))].filter((id) => id !== actorId);
   if (!ids.length || mongoose.connection.readyState !== 1) return;
@@ -50,6 +50,6 @@ export async function notifyUsers(userIds, { title, body, metadata } = {}) {
 
   if (!isEmailConfigured()) return;
   setImmediate(() => {
-    sendEmailNotifications(ids, { title, body, metadata }).catch(() => {});
+    sendEmailNotifications(ids, { title, body, metadata, attachments }).catch(() => {});
   });
 }

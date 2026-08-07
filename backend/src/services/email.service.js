@@ -12,6 +12,12 @@ const EMAIL_TEMPLATES = {
   'task.created': { heading: 'Task assigned', intro: 'A task has been assigned to you.' },
   'task.note': { heading: 'Task note added', intro: 'A new note was added to a task.' },
   'task.updated': { heading: 'Task updated', intro: 'A task has been updated.' },
+  'hr.leave.approved': { heading: 'Leave approved', intro: 'Your leave request was approved.' },
+  'hr.leave.rejected': { heading: 'Leave rejected', intro: 'Your leave request was rejected.' },
+  'hr.advance.approved': { heading: 'Advance approved', intro: 'Your advance request was approved.' },
+  'hr.payroll.processed': { heading: 'Payroll processed', intro: 'Your payroll has been processed.' },
+  'hr.payroll.payslip': { heading: 'Salary slip ready', intro: 'Your salary slip is ready to download.' },
+  'hr.document.expiring': { heading: 'Document expiring', intro: 'An employee document is nearing expiry.' },
   default: { heading: 'CRM notification', intro: 'You have a new CRM notification.' },
 };
 
@@ -72,7 +78,7 @@ export function renderNotificationEmail({ title, body, metadata } = {}) {
   return { html, subject, template: templateKey, text };
 }
 
-export async function sendNotificationEmail({ to, title, body, metadata }) {
+export async function sendNotificationEmail({ to, title, body, metadata, attachments }) {
   const message = renderNotificationEmail({ title, body, metadata });
   if (testSender) return testSender({ to, ...message });
   if (!isEmailConfigured()) return { skipped: true };
@@ -83,5 +89,6 @@ export async function sendNotificationEmail({ to, title, body, metadata }) {
     subject: message.subject,
     text: message.text,
     html: message.html,
+    attachments,
   });
 }

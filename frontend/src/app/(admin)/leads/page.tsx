@@ -41,7 +41,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const [deleting, setDeleting] = useState(false)
   const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
 
-  const salespeople = useMemo(() => users.filter((item) => item.role === 'sales' && item.status === 'active'), [users])
+  const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
   const visibleLeads = useMemo(() => (architectOnly ? leads.filter(isArchitectLead) : leads), [architectOnly, leads])
   const assignLead = async (leadId: string, owner: string) => {
     if (!token || !owner) return

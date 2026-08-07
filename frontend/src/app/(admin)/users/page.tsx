@@ -2,15 +2,25 @@ import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useAuthContext } from '@/context/useAuthContext'
+import { apiFetch } from '@/helpers/api'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Form, InputGroup, Modal, Table } from 'react-bootstrap'
+import ReactSelect from 'react-select'
 
 const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
 const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
+const accessTypes = ['admin', ...teamRoles, 'hr-management', 'employee']
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 const singleUserRoles = ['superadmin', 'admin'] as const
+const hrModules = ['employees', 'attendance', 'leave', 'payroll', 'expenses', 'reports']
+type HrAccess = 'none' | 'view' | 'manage'
+type HrPermission = { module: string; access: HrAccess }
+const defaultHrPermissions = () => hrModules.map((module) => ({ module, access: 'none' as HrAccess }))
+const hrLabel = (module: string) => module.replace(/\b\w/g, (letter) => letter.toUpperCase())
+const accessLabel = (type: string) => type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+const joinedDate = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)) : '—'
 
 const roleBadge = (role: UserType['role']) => {
   if (role === 'superadmin') return 'danger'
@@ -33,6 +43,7 @@ const emptyEditForm = {
   email: '',
   phone: '',
   role: 'sales' as UserType['role'],
+  accessTypes: [] as string[],
   status: 'active' as UserType['status'],
   timezone: 'UTC',
   password: '',
@@ -51,15 +62,16 @@ const UsersPage = () => {
   const [editForm, setEditForm] = useState(emptyEditForm)
   const [editError, setEditError] = useState('')
   const [visiblePassword, setVisiblePassword] = useState(false)
+  const [hrPermissions, setHrPermissions] = useState<HrPermission[]>(defaultHrPermissions)
+  const [loadingHrPermissions, setLoadingHrPermissions] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({ q: '', role: '', status: '' })
-  const canManageUsers = user?.role === 'superadmin' || user?.role === 'admin'
-  const hasRole = (role: UserType['role'], exceptId = '') => users.some((item) => item.role === role && item._id !== exceptId)
-  const editableRoles = (item: UserType) =>
-    user?.role === 'admin' ? teamRoles : roles.filter((role) => role === item.role || teamRoles.includes(role) || !hasRole(role, item._id))
-
+  const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
+  const isSuperadmin = currentAccessTypes.includes('superadmin')
+  const canManageUsers = isSuperadmin || currentAccessTypes.includes('admin')
+  const canManageProfile = (profile: UserType) => isSuperadmin || profile.role !== 'superadmin'
   useEffect(() => {
     const query = new URLSearchParams({ page: String(page), limit: '25' })
     if (filters.q.trim()) query.set('q', filters.q.trim())
@@ -73,6 +85,15 @@ const UsersPage = () => {
   useEffect(() => {
     setPage(1)
   }, [filters.q, filters.role, filters.status])
+
+  useEffect(() => {
+    if (!editingUser || singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) return
+    setLoadingHrPermissions(true)
+    apiFetch<{ data: HrPermission[] }>(`/hr/permissions/${editingUser._id}`)
+      .then((response) => setHrPermissions(response.data))
+      .catch((reason) => setEditError(reason instanceof Error ? reason.message : 'Unable to load HR access'))
+      .finally(() => setLoadingHrPermissions(false))
+  }, [editingUser])
 
   const updateUser = async (id: string, patch: Partial<UserType> & { password?: string }) => {
     setError('')
@@ -92,11 +113,13 @@ const UsersPage = () => {
     setEditingUser(item)
     setVisiblePassword(false)
     setEditError('')
+    setHrPermissions(defaultHrPermissions())
     setEditForm({
       name: item.name,
       email: item.email,
       phone: item.phone || '',
       role: item.role,
+      accessTypes: [...new Set([...(item.role === 'superadmin' ? [] : [item.role]), ...(item.additionalRoles || []), ...(item.accessTypes || [])])],
       status: item.status,
       timezone: item.timezone || 'UTC',
       password: '',
@@ -108,6 +131,7 @@ const UsersPage = () => {
     setEditForm(emptyEditForm)
     setEditError('')
     setVisiblePassword(false)
+    setHrPermissions(defaultHrPermissions())
   }
 
   const saveEdit = async (event: FormEvent) => {
@@ -142,7 +166,7 @@ const UsersPage = () => {
       timezone: editForm.timezone.trim() || 'UTC',
     }
 
-    if (!singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) patch.role = editForm.role
+    patch.accessTypes = editForm.accessTypes
     if (editForm.password.trim()) {
       if (editForm.password.length < 8 || !/[a-z]/i.test(editForm.password) || !/\d/.test(editForm.password)) {
         setEditError('Password must be at least 8 characters and include letters and numbers')
@@ -152,7 +176,14 @@ const UsersPage = () => {
     }
 
     if (await updateUser(editingUser._id, patch)) {
-      closeEdit()
+      try {
+        if (!singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) {
+          await apiFetch(`/hr/permissions/${editingUser._id}`, { method: 'PUT', body: JSON.stringify({ permissions: hrPermissions }) })
+        }
+        closeEdit()
+      } catch (reason) {
+        setEditError(reason instanceof Error ? reason.message : 'User updated, but HR access could not be saved')
+      }
     } else {
       setEditError(useUserManagementStore.getState().error || 'Unable to update user')
     }
@@ -167,19 +198,21 @@ const UsersPage = () => {
     )
   }
 
+  const accessTypeOptions = [...new Set([...accessTypes, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]), ...editForm.accessTypes])].filter((type) => type !== 'superadmin').map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }))
+
   return (
     <>
       <PageMetaData title="Users" />
       <Card>
         <CardBody>
-          <h4 className="card-title mb-3">User Profiles & Access</h4>
+          <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h4 className="card-title mb-1">User Profiles & Access</h4><p className="text-muted mb-0">All account details and assigned access types in one place.</p></div><Badge bg="light" text="dark">{meta.total} users</Badge></div>
           {(error || storeError) && <Alert variant="danger">{error || storeError}</Alert>}
           {message && <Alert variant="success">{message}</Alert>}
           <div className="d-flex gap-2 flex-wrap mb-3">
             <Form.Control style={{ flex: '1 1 260px' }} placeholder="Search name, email, mobile" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} />
             <Form.Select style={{ flex: '0 1 180px' }} value={filters.role} onChange={(event) => setFilters({ ...filters, role: event.target.value })}>
               <option value="">All roles</option>
-              {(user?.role === 'admin' ? teamRoles : roles).map((role) => (
+              {roles.map((role) => (
                 <option key={role}>{role}</option>
               ))}
             </Form.Select>
@@ -191,14 +224,14 @@ const UsersPage = () => {
             </Form.Select>
           </div>
           <div className="table-responsive">
-            <Table className="align-middle mb-0" style={{ minWidth: 880 }}>
+            <Table className="align-middle mb-0" style={{ minWidth: 960 }}>
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th style={{ minWidth: 100 }}>Timezone</th>
-                  <th style={{ minWidth: 120 }}>Role</th>
-                  <th style={{ minWidth: 120 }}>Status</th>
-                  <th style={{ minWidth: 230 }} className="text-end">
+                  <th style={{ minWidth: 260 }}>User</th>
+                  <th style={{ minWidth: 220 }}>Access types</th>
+                  <th style={{ minWidth: 150 }}>Account</th>
+                  <th style={{ minWidth: 150 }}>Activity</th>
+                  <th style={{ minWidth: 175 }} className="text-end">
                     Actions
                   </th>
                 </tr>
@@ -216,34 +249,22 @@ const UsersPage = () => {
                   <tr key={item._id}>
                     <td>
                       <div className="fw-medium">{item.name}</div>
-                      <div className="text-muted fs-13">{item.email}</div>
+                      <div className="fs-13">{item.email}</div>
                       <div className="text-muted fs-13">{item.phone || 'Mobile not added'}</div>
                     </td>
                     <td>
-                      <Badge bg="light" text="dark">
-                        {item.timezone || 'UTC'}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Badge bg={roleBadge(item.role)}>{item.role}</Badge>
+                      <div className="d-flex flex-wrap gap-1">{[...new Set([item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])])].map((type) => <Badge bg={roleBadge(type as UserType['role'])} key={type}>{accessLabel(type)}</Badge>)}</div>
                     </td>
                     <td>
                       <Badge bg={statusBadge(item.status)}>{item.status}</Badge>
+                      <div className="text-muted fs-12 mt-1">{item.timezone || 'UTC'}</div>
+                    </td>
+                    <td>
+                      <div className="fs-13">Joined {joinedDate(item.createdAt)}</div>
+                      <div className="text-muted fs-12">Updated {joinedDate(item.updatedAt)}</div>
                     </td>
                     <td className="text-end">
-                      <Button size="sm" variant="outline-primary" type="button" className="me-2" onClick={() => openEdit(item)}>
-                        <IconifyIcon icon="bx:edit" className="me-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={item.status === 'suspended' ? 'outline-success' : 'outline-danger'}
-                        type="button"
-                        className="text-nowrap d-inline-flex align-items-center gap-1"
-                        onClick={() => updateUser(item._id, { status: item.status === 'suspended' ? 'active' : 'suspended' })}>
-                        <IconifyIcon icon={item.status === 'suspended' ? 'bx:lock-open' : 'bx:lock'} className="me-1" />
-                        {item.status === 'suspended' ? 'Unlock' : 'Lock'}
-                      </Button>
+                      {canManageProfile(item) ? <div className="d-inline-flex gap-2"><Button size="sm" variant="outline-primary" type="button" onClick={() => openEdit(item)}><IconifyIcon icon="bx:edit" className="me-1" />Edit</Button><Button size="sm" variant={item.status === 'suspended' ? 'outline-success' : 'outline-danger'} type="button" className="text-nowrap" onClick={() => updateUser(item._id, { status: item.status === 'suspended' ? 'active' : 'suspended' })}><IconifyIcon icon={item.status === 'suspended' ? 'bx:lock-open' : 'bx:lock'} className="me-1" />{item.status === 'suspended' ? 'Unlock' : 'Lock'}</Button></div> : <Badge bg="light" text="dark">Superadmin protected</Badge>}
                     </td>
                   </tr>
                 ))}
@@ -273,7 +294,7 @@ const UsersPage = () => {
         </CardBody>
       </Card>
 
-      <Modal show={Boolean(editingUser)} onHide={closeEdit} centered>
+      <Modal show={Boolean(editingUser)} onHide={closeEdit} centered size="lg">
         <Form onSubmit={saveEdit}>
           <Modal.Header closeButton>
             <Modal.Title>Edit User Information</Modal.Title>
@@ -293,17 +314,16 @@ const UsersPage = () => {
               <Form.Control required type="tel" inputMode="tel" value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="10-digit mobile number" />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Role</Form.Label>
-              <Form.Select
-                value={editForm.role}
-                disabled={Boolean(editingUser && singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number]))}
-                onChange={(event) => setEditForm({ ...editForm, role: event.target.value as UserType['role'] })}>
-                {(editingUser ? editableRoles(editingUser) : ['sales']).map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </Form.Select>
+              <Form.Label>Access types</Form.Label>
+              <ReactSelect
+                isMulti
+                classNamePrefix="react-select"
+                options={accessTypeOptions}
+                placeholder="Select access types"
+                value={accessTypeOptions.filter((option) => editForm.accessTypes.includes(option.value))}
+                onChange={(options) => setEditForm({ ...editForm, accessTypes: options.map((option) => option.value) })}
+              />
+              <Form.Text>Select one or more approved business access types.</Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Status</Form.Label>
@@ -335,12 +355,25 @@ const UsersPage = () => {
               </InputGroup>
               <Form.Text>Use at least 8 characters with letters and numbers.</Form.Text>
             </Form.Group>
+            {editingUser && !singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number]) && (
+              <Form.Group className="mt-3">
+                <Form.Label>HR Access</Form.Label>
+                {loadingHrPermissions ? <Spinner className="spinner-border-sm" tag="span" /> : hrPermissions.map((permission) => (
+                  <div className="d-flex align-items-center gap-2 mb-2" key={permission.module}>
+                    <span className="flex-grow-1">{hrLabel(permission.module)}</span>
+                    <Form.Select aria-label={`${hrLabel(permission.module)} access`} value={permission.access} onChange={(event) => setHrPermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as HrAccess } : item))} style={{ maxWidth: 140 }}>
+                      <option value="none">None</option><option value="view">View</option><option value="manage">Manage</option>
+                    </Form.Select>
+                  </div>
+                ))}
+              </Form.Group>
+            )}
           </Modal.Body>
           <Modal.Footer>
             <Button variant="outline-secondary" type="button" onClick={closeEdit}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || loadingHrPermissions}>
               <IconifyIcon icon="bx:save" className="me-1" />
               Save Changes
             </Button>

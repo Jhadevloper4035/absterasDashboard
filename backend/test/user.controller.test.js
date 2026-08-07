@@ -66,27 +66,6 @@ function emptyActiveSessions() {
   });
 }
 
-test('cannot create a second admin user', async () => {
-  User.exists = async () => ({ _id: 'admin-1' });
-
-  const response = res();
-  await createUser(
-    {
-      body: {
-        name: 'Second Admin',
-        email: 'admin2@example.com',
-        phone: '9876543210',
-        password: 'Secret123',
-        role: 'admin',
-      },
-    },
-    response,
-  );
-
-  assert.equal(response.statusCode, 400);
-  assert.equal(response.body.error.message, 'Only one admin is allowed');
-});
-
 test('cannot create a second superadmin user', async () => {
   User.exists = async () => ({ _id: 'superadmin-1' });
 
@@ -126,6 +105,22 @@ test('user creation requires mobile number', async () => {
   assert.equal(response.body.error.message, 'Mobile number is required');
 });
 
+test('employment details require Employee access type', async () => {
+  const response = res();
+  await createUser(
+    {
+      body: {
+        name: 'Sales User', email: 'sales@example.com', phone: '9876543210', password: 'Secret123', role: 'sales',
+        employment: { employeeType: 'office', department: 'department-1', designation: 'designation-1', joiningDate: '2026-08-01' },
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Select the Employee access type before adding employment details');
+});
+
 test('user creation rejects weak passwords', async () => {
   const response = res();
   await createUser(
@@ -158,8 +153,8 @@ test('cannot promote a user into a second superadmin', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 400);
-  assert.equal(response.body.error.message, 'Only one superadmin is allowed');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only Superadmin can manage the Superadmin account');
 });
 
 test('cannot demote the only superadmin', async () => {
@@ -175,8 +170,8 @@ test('cannot demote the only superadmin', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 400);
-  assert.equal(response.body.error.message, 'One superadmin is required');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only Superadmin can manage the Superadmin account');
 });
 
 test('updating a privileged user can keep the same role', async () => {
@@ -202,7 +197,7 @@ test('updating a privileged user can keep the same role', async () => {
   assert.equal(response.body.data.name, 'Admin Updated');
 });
 
-test('admin lists team users only', async () => {
+test('admin lists all user profiles', async () => {
   let filter;
   User.find = (value) => {
     filter = value;
@@ -223,8 +218,22 @@ test('admin lists team users only', async () => {
   const response = res();
   await listUsers({ user: { role: 'admin' }, query: {} }, response);
 
-  assert.deepEqual(filter, { role: { $in: ['sales', 'operations', 'accounts', 'designers'] } });
+  assert.deepEqual(filter, {});
   assert.deepEqual(response.body.data, []);
+});
+
+test('access types update a business user primary and secondary access', async () => {
+  User.findById = async () => ({ _id: 'sales-1', role: 'sales', additionalRoles: [] });
+  User.findByIdAndUpdate = async (id, update) => {
+    assert.equal(id, 'sales-1');
+    assert.deepEqual(update, { role: 'accounts', additionalRoles: ['sales', 'admin'], accessTypes: ['hr'] });
+    return { _id: id, ...update, status: 'active' };
+  };
+
+  const response = res();
+  await updateUser({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'sales-1' }, body: { accessTypes: ['accounts', 'sales', 'admin', 'hr'] } }, response);
+
+  assert.equal(response.statusCode, 200);
 });
 
 test('admin login history can include every user role', async () => {
@@ -478,37 +487,57 @@ test('admin can create operations users', async () => {
   assert.equal(response.body.data.role, 'operations');
 });
 
-test('admin cannot create privileged users', async () => {
+test('admin cannot create the Superadmin account', async () => {
   const response = res();
   await createUser(
     {
       user: { role: 'admin' },
       body: {
-        name: 'New Admin',
-        email: 'admin@example.com',
+        name: 'New Superadmin',
+        email: 'superadmin@example.com',
         phone: '9876543210',
         password: 'Secret123',
-        role: 'admin',
+        role: 'superadmin',
       },
     },
     response,
   );
 
   assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Admins can create team users only');
+  assert.equal(response.body.error.message, 'Only initial setup can create the Superadmin account');
 });
 
-test('admin cannot read another admin profile', async () => {
+test('admin cannot assign Superadmin as an access type', async () => {
+  const response = res();
+  await createUser(
+    {
+      user: { role: 'admin' },
+      body: {
+        name: 'Sales User',
+        email: 'sales@example.com',
+        phone: '9876543210',
+        password: 'Secret123',
+        role: 'sales',
+        accessTypes: ['sales', 'superadmin'],
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only initial setup can create the Superadmin account');
+});
+
+test('admin can read another admin profile', async () => {
   User.findById = async () => ({ _id: 'admin-2', role: 'admin' });
 
   const response = res();
   await getUser({ user: { role: 'admin' }, params: { id: 'admin-2' } }, response);
 
-  assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Admins can manage team users only');
+  assert.equal(response.statusCode, 200);
 });
 
-test('admin cannot promote a sales user', async () => {
+test('admin access must be assigned through access types', async () => {
   User.findById = async () => ({ _id: 'sales-1', role: 'sales' });
 
   const response = res();
@@ -521,8 +550,8 @@ test('admin cannot promote a sales user', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Admins can manage team users only');
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Assign Admin through access types');
 });
 
 test('updates user display name without changing assignment identity', async () => {

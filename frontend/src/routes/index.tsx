@@ -10,6 +10,26 @@ const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
 const LoginHistory = lazy(() => import('@/app/(admin)/users/login-history/page'))
 const HealthStatus = lazy(() => import('@/app/(admin)/health/status/page'))
+const Employees = lazy(() => import('@/app/(admin)/hr/employees/page'))
+const EmployeeDetail = lazy(() => import('@/app/(admin)/hr/employees/[employeeId]/page'))
+const EmployeeOverview = lazy(() => import('@/app/(admin)/hr/employee-overview/page'))
+const MyIdCard = lazy(() => import('@/app/(admin)/hr/my-id-card/page'))
+const MyPayslips = lazy(() => import('@/app/(admin)/hr/my-payslips/page'))
+const HrOrganization = lazy(() => import('@/app/(admin)/hr/settings/organization/page'))
+const Attendance = lazy(() => import('@/app/(admin)/hr/attendance/page'))
+const AttendanceReports = lazy(() => import('@/app/(admin)/hr/attendance/reports/page'))
+const HrDashboard = lazy(() => import('@/app/(admin)/hr/page'))
+const Holidays = lazy(() => import('@/app/(admin)/hr/settings/holidays/page'))
+const Leave = lazy(() => import('@/app/(admin)/hr/leave/page'))
+const Payroll = lazy(() => import('@/app/(admin)/hr/payroll/page'))
+const PayrollDetail = lazy(() => import('@/app/(admin)/hr/payroll/[runId]/page'))
+const Salaries = lazy(() => import('@/app/(admin)/hr/payroll/salaries/page'))
+const Advances = lazy(() => import('@/app/(admin)/hr/payroll/advances/page'))
+const MyAdvances = lazy(() => import('@/app/(admin)/hr/advances/page'))
+const Settlements = lazy(() => import('@/app/(admin)/hr/payroll/settlements/page'))
+const Expenses = lazy(() => import('@/app/(admin)/hr/expenses/page'))
+const ExpenseApprovals = lazy(() => import('@/app/(admin)/hr/expenses/approvals/page'))
+const HrReports = lazy(() => import('@/app/(admin)/hr/reports/page'))
 const Leads = lazy(() => import('@/app/(admin)/leads/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
 const SalesCreateLead = lazy(() => import('@/app/(admin)/leads/sales-create/page'))
@@ -144,7 +164,8 @@ const ResetPassword2 = lazy(() => import('@/app/(other)/auth/reset-pass-2/page')
 const LockScreen = lazy(() => import('@/app/(other)/auth/lock-screen/page'))
 const LockScreen2 = lazy(() => import('@/app/(other)/auth/lock-screen-2/page'))
 
-const dashboardPath = (role?: string) => (['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics')
+const dashboardPath = (role?: string) =>
+  ['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics'
 
 const DashboardRedirect = () => {
   const role = useAuthStore((state) => state.user?.role)
@@ -155,12 +176,13 @@ export type RoutesProps = {
   path: RouteProps['path']
   name: string
   element: RouteProps['element']
-  roles?: UserType['role'][]
+  roles?: string[]
   exact?: boolean
 }
 
 const adminRoles: UserType['role'][] = ['superadmin', 'admin']
 const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
+const hrAccessRoles = [...adminRoles, 'hr-management']
 const superadminRoles: UserType['role'][] = ['superadmin']
 const superadminOnly = (routes: RoutesProps[]) => routes.map((route) => ({ ...route, roles: route.roles ?? superadminRoles }))
 
@@ -220,6 +242,28 @@ const generalRoutes: RoutesProps[] = [
     element: <HealthStatus />,
     roles: ['superadmin'],
   },
+  { path: '/hr', name: 'HR Dashboard', element: <HrDashboard />, roles: hrAccessRoles },
+  { path: '/hr/employees', name: 'Employees', element: <Employees />, roles: hrAccessRoles },
+  { path: '/hr/employees/:employeeId', name: 'Employee', element: <EmployeeDetail />, roles: hrAccessRoles },
+  { path: '/hr/employee-overview', name: 'Employee monthly overview', element: <EmployeeOverview />, roles: hrAccessRoles },
+  { path: '/hr/my-overview', name: 'My monthly overview', element: <EmployeeOverview />, roles: ['employee'] },
+  { path: '/hr/my-id-card', name: 'My ID Card', element: <MyIdCard />, roles: ['employee'] },
+  { path: '/hr/my-payslips', name: 'My Salary Slips', element: <MyPayslips />, roles: ['employee'] },
+  { path: '/hr/settings/departments', name: 'Departments & Designations', element: <HrOrganization />, roles: adminRoles },
+  { path: '/hr/settings/designations', name: 'Departments & Designations', element: <HrOrganization />, roles: adminRoles },
+  { path: '/hr/attendance', name: 'Attendance', element: <Attendance />, roles: hrAccessRoles },
+  { path: '/hr/attendance/reports', name: 'Attendance reports', element: <AttendanceReports />, roles: hrAccessRoles },
+  { path: '/hr/settings/holidays', name: 'Holidays', element: <Holidays />, roles: hrAccessRoles },
+  { path: '/hr/leave', name: 'Leave', element: <Leave />, roles: [...hrAccessRoles, 'employee'] },
+  { path: '/hr/payroll', name: 'Payroll', element: <Payroll />, roles: hrAccessRoles },
+  { path: '/hr/payroll/:runId', name: 'Payroll run', element: <PayrollDetail />, roles: hrAccessRoles },
+  { path: '/hr/payroll/salaries', name: 'Salary structures', element: <Salaries />, roles: hrAccessRoles },
+  { path: '/hr/payroll/advances', name: 'Advances', element: <Advances />, roles: hrAccessRoles },
+  { path: '/hr/advances', name: 'Salary advance', element: <MyAdvances />, roles: ['employee'] },
+  { path: '/hr/payroll/settlements', name: 'Settlements', element: <Settlements />, roles: hrAccessRoles },
+  { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'] },
+  { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles },
+  { path: '/hr/reports', name: 'HR reports', element: <HrReports />, roles: hrAccessRoles },
   {
     path: '/leads',
     name: 'Leads',

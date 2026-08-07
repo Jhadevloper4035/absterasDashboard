@@ -76,7 +76,7 @@ async function taskData(task) {
 }
 
 async function findAssignee(id) {
-  return User.findOne({ _id: id, status: 'active', role: { $in: TASK_ASSIGNEE_ROLES } });
+  return User.findOne({ _id: id, status: 'active', $or: [{ role: { $in: TASK_ASSIGNEE_ROLES } }, { additionalRoles: { $in: TASK_ASSIGNEE_ROLES } }] });
 }
 
 function notificationMetadata(type, taskId, actor) {
@@ -94,7 +94,7 @@ export async function listTaskAssignees(req, res) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const users = await User.find({ status: 'active', role: { $in: TASK_ASSIGNEE_ROLES } }).select('name email role status').sort({ name: 1 }).limit(1000);
+  const users = await User.find({ status: 'active', $or: [{ role: { $in: TASK_ASSIGNEE_ROLES } }, { additionalRoles: { $in: TASK_ASSIGNEE_ROLES } }] }).select('name email role additionalRoles status').sort({ name: 1 }).limit(1000);
   return res.json({ data: users });
 }
 
@@ -178,7 +178,7 @@ export async function listTasks(req, res) {
     extra.dueDate = { $lt: today };
   }
   if (canManageTasks(req.user) && req.query.group) {
-    const users = await User.find({ status: 'active', role: req.query.group }).select('_id').limit(1000);
+    const users = await User.find({ status: 'active', $or: [{ role: req.query.group }, { additionalRoles: req.query.group }] }).select('_id').limit(1000);
     extra.assignee = { $in: users.map((user) => user._id) };
   }
   if (canManageTasks(req.user) && req.query.assignee) extra.assignee = req.query.assignee;

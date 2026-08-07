@@ -1,14 +1,29 @@
 import { AuthSession } from '../models/auth-session.model.js';
 import { User } from '../models/user.model.js';
+import { Employee } from '../models/employee.model.js';
+import { SalaryStructure } from '../models/salary-structure.model.js';
 import { LoginHistory } from '../models/login-history.model.js';
 import { cleanIpAddress } from '../helpers/request-ip.js';
 import { auditEvent } from '../services/audit.service.js';
 import { revokeActiveUserSessions, revokeAllActiveSessions } from '../services/auth-session.service.js';
 import { hashPassword, passwordPolicyError } from '../services/password.service.js';
+import { userRoles } from '../middleware/auth.middleware.js';
 
-const SINGLE_USER_ROLES = ['superadmin', 'admin'];
+const SUPERADMIN_ROLE = 'superadmin';
 const TEAM_USER_ROLES = ['sales', 'operations', 'accounts', 'designers'];
-const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'whatsappNumber', 'role', 'status', 'timezone', 'notificationPreferences'];
+const ASSIGNABLE_ACCESS_TYPES = ['admin', ...TEAM_USER_ROLES];
+const SYSTEM_ACCESS_TYPES = [SUPERADMIN_ROLE, ...ASSIGNABLE_ACCESS_TYPES];
+const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'whatsappNumber', 'role', 'additionalRoles', 'accessTypes', 'status', 'timezone', 'notificationPreferences'];
+
+function cleanAdditionalRoles(roles, primaryRole) {
+  if (roles === undefined) return undefined;
+  return [...new Set((Array.isArray(roles) ? roles : []).filter((role) => ASSIGNABLE_ACCESS_TYPES.includes(role) && role !== primaryRole))];
+}
+
+function cleanAccessTypes(types) {
+  if (types === undefined) return undefined;
+  return [...new Set((Array.isArray(types) ? types : []).map((type) => String(type).trim().toLowerCase()).filter((type) => /^[a-z][a-z0-9-]{1,39}$/.test(type)))].slice(0, 20);
+}
 
 function cleanTerritories(territories) {
   return (Array.isArray(territories) ? territories : String(territories || '').split(','))
@@ -28,11 +43,22 @@ function allowedUserUpdate(body) {
     return fields;
   }, {});
   if (body.territories !== undefined) update.territories = cleanTerritories(body.territories);
+  if (update.additionalRoles !== undefined) update.additionalRoles = cleanAdditionalRoles(update.additionalRoles, update.role || body.role);
+  if (update.accessTypes !== undefined) update.accessTypes = cleanAccessTypes(update.accessTypes);
   return update;
 }
 
+function employmentDetails(body) {
+  const employment = body?.employment;
+  if (!employment) return null;
+  if (!['office', 'site'].includes(employment.employeeType) || !employment.department || !employment.designation || !employment.joiningDate) return undefined;
+  const monthlySalary = employment.monthlySalary === undefined || employment.monthlySalary === '' ? undefined : Number(employment.monthlySalary);
+  if (monthlySalary !== undefined && (!Number.isFinite(monthlySalary) || monthlySalary < 0)) return undefined;
+  return { employeeType: employment.employeeType, department: employment.department, designation: employment.designation, manager: employment.manager || undefined, joiningDate: employment.joiningDate, monthlySalary };
+}
+
 async function roleLimitError(role, currentUserId) {
-  if (!SINGLE_USER_ROLES.includes(role)) return '';
+  if (role !== SUPERADMIN_ROLE) return '';
 
   const filter = { role };
   if (currentUserId) filter._id = { $ne: currentUserId };
@@ -41,7 +67,7 @@ async function roleLimitError(role, currentUserId) {
 }
 
 function adminCanManage(actor, targetUser) {
-  return actor?.role === 'admin' ? TEAM_USER_ROLES.includes(targetUser.role) : true;
+  return userRoles(actor).includes(SUPERADMIN_ROLE) || !userRoles(targetUser).includes(SUPERADMIN_ROLE);
 }
 
 function escapeRegex(value) {
@@ -62,8 +88,8 @@ export async function createUser(req, res) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
 
-  if (req.user?.role === 'admin' && !TEAM_USER_ROLES.includes(req.body.role)) {
-    return res.status(403).json({ error: { message: 'Admins can create team users only' } });
+  if (req.user && (req.body.role === SUPERADMIN_ROLE || req.body.accessTypes?.includes(SUPERADMIN_ROLE))) {
+    return res.status(403).json({ error: { message: 'Only initial setup can create the Superadmin account' } });
   }
 
   const roleError = await roleLimitError(req.body.role);
@@ -71,10 +97,31 @@ export async function createUser(req, res) {
     return res.status(400).json({ error: { message: roleError } });
   }
 
+  const requestedAccessTypes = cleanAccessTypes(req.body.accessTypes) || [];
+  const employment = employmentDetails(req.body);
+  if (employment === undefined) return res.status(400).json({ error: { message: 'Employee type, department, designation and joining date are required' } });
+  if (employment && !requestedAccessTypes.includes('employee')) return res.status(400).json({ error: { message: 'Select the Employee access type before adding employment details' } });
+  if (requestedAccessTypes.includes('employee') && !employment) return res.status(400).json({ error: { message: 'Employee type, department, designation and joining date are required' } });
+
+  const userFields = allowedUserUpdate(stripPassword(req.body));
+  userFields.additionalRoles = cleanAdditionalRoles(userFields.additionalRoles, userFields.role);
+  userFields.accessTypes = requestedAccessTypes.filter((type) => !SYSTEM_ACCESS_TYPES.includes(type));
   const user = await User.create({
-    ...allowedUserUpdate(stripPassword(req.body)),
+    ...userFields,
     passwordHash: await hashPassword(req.body.password),
   });
+
+  if (employment) {
+    try {
+      const { monthlySalary, ...employeeDetails } = employment;
+      const employee = await Employee.create({ user: user._id, ...employeeDetails });
+      if (monthlySalary !== undefined) await SalaryStructure.create({ employee: employee._id, ctc: monthlySalary, basic: monthlySalary, hra: 0, effectiveFrom: employee.joiningDate });
+    } catch (error) {
+      await Employee.deleteOne({ user: user._id });
+      await User.deleteOne({ _id: user._id });
+      throw error;
+    }
+  }
 
   await auditEvent(req, { action: 'user.create', entity: 'user', entityId: user._id, after: { role: user.role, status: user.status } });
   res.status(201).json({ data: user });
@@ -83,12 +130,16 @@ export async function createUser(req, res) {
 export async function listUsers(req, res) {
   const page = Math.max(Number(req.query.page || 1), 1);
   const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
-  const filter = req.user?.role === 'admin' ? { role: { $in: TEAM_USER_ROLES } } : {};
-  if (req.query.role) filter.role = req.user?.role === 'admin' ? { $in: TEAM_USER_ROLES.filter((role) => role === req.query.role) } : req.query.role;
+  const roleFilter = req.query.role ? [req.query.role] : [];
+  const filter = roleFilter.length ? { $or: [{ role: { $in: roleFilter } }, { additionalRoles: { $in: roleFilter } }] } : {};
   if (req.query.status) filter.status = req.query.status;
   if (req.query.q) {
     const search = { $regex: escapeRegex(req.query.q), $options: 'i' };
-    filter.$or = [{ name: search }, { email: search }, { phone: search }];
+    filter.$and = [{ $or: [{ name: search }, { email: search }, { phone: search }] }];
+    if (roleFilter.length) {
+      filter.$and.unshift({ $or: [{ role: { $in: roleFilter } }, { additionalRoles: { $in: roleFilter } }] });
+      delete filter.$or;
+    }
   }
 
   const [users, total] = await Promise.all([
@@ -222,8 +273,36 @@ export async function updateUser(req, res) {
     return res.status(404).json({ error: { message: 'User not found' } });
   }
 
-  if (!adminCanManage(req.user, currentUser) || (req.user?.role === 'admin' && update.role && !TEAM_USER_ROLES.includes(update.role))) {
-    return res.status(403).json({ error: { message: 'Admins can manage team users only' } });
+  const actorIsSuperadmin = userRoles(req.user).includes(SUPERADMIN_ROLE);
+  if (!adminCanManage(req.user, currentUser) || (!actorIsSuperadmin && (currentUser.role === SUPERADMIN_ROLE || update.role === SUPERADMIN_ROLE))) {
+    return res.status(403).json({ error: { message: 'Only Superadmin can manage the Superadmin account' } });
+  }
+
+  if (update.role === 'admin' && currentUser.role !== 'admin') {
+    return res.status(400).json({ error: { message: 'Assign Admin through access types' } });
+  }
+
+  if (update.additionalRoles !== undefined) {
+    update.additionalRoles = cleanAdditionalRoles(update.additionalRoles, update.role || currentUser.role);
+  }
+
+  if (update.accessTypes !== undefined) {
+    const accessTypes = cleanAccessTypes(update.accessTypes);
+    if (accessTypes.includes(SUPERADMIN_ROLE)) return res.status(403).json({ error: { message: 'Superadmin can only be created during initial setup' } });
+    const businessTypes = accessTypes.filter((type) => TEAM_USER_ROLES.includes(type));
+    const assignableTypes = accessTypes.filter((type) => ASSIGNABLE_ACCESS_TYPES.includes(type));
+    if (TEAM_USER_ROLES.includes(currentUser.role) && !businessTypes.length) {
+      return res.status(400).json({ error: { message: 'Select at least one business access type' } });
+    }
+    if (businessTypes.length) {
+      if (TEAM_USER_ROLES.includes(currentUser.role)) {
+        update.role = businessTypes[0];
+        update.additionalRoles = assignableTypes.filter((type) => type !== update.role);
+      } else {
+        update.additionalRoles = assignableTypes.filter((type) => type !== currentUser.role);
+      }
+    }
+    update.accessTypes = accessTypes.filter((type) => !SYSTEM_ACCESS_TYPES.includes(type));
   }
 
   if (update.phone !== undefined && !String(update.phone).trim()) {
@@ -236,8 +315,8 @@ export async function updateUser(req, res) {
       return res.status(400).json({ error: { message: roleError } });
     }
 
-    if (SINGLE_USER_ROLES.includes(currentUser.role) && update.role !== currentUser.role) {
-      return res.status(400).json({ error: { message: `One ${currentUser.role} is required` } });
+    if (currentUser.role === SUPERADMIN_ROLE && update.role !== currentUser.role) {
+      return res.status(400).json({ error: { message: 'Superadmin role cannot be changed' } });
     }
   }
 

@@ -3,6 +3,7 @@ import type { MenuItemType } from '@/types/menu'
 const adminRoles = ['superadmin', 'admin']
 const teamRoles = ['sales', 'operations', 'accounts', 'designers']
 const allRoles = [...adminRoles, ...teamRoles]
+const hrRoles = [...adminRoles, 'hr-management']
 
 export const MENU_ITEMS: MenuItemType[] = [
   {
@@ -15,7 +16,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:home-duotone',
     label: 'Dashboard',
     url: '/dashboard/analytics',
-    roles: ['superadmin', 'admin'],
+    roles: adminRoles,
   },
   {
     key: 'dashboard-sales',
@@ -62,6 +63,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:send-duotone',
     label: 'Lead Management',
     children: [
+      { key: 'hr-dashboard', label: 'Dashboard', url: '/hr', parentKey: 'hr-management', roles: hrRoles },
       {
         key: 'leads-create',
         label: 'Create Lead',
@@ -172,21 +174,43 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'erp',
     label: 'ERP',
     isTitle: true,
-    roles: ['superadmin', 'admin'],
+    roles: [...adminRoles, 'hr-management', 'employee'],
+  },
+  {
+    key: 'employee-panel',
+    icon: 'iconamoon:profile-circle-duotone',
+    label: 'Employee Panel',
+    roles: ['employee'],
+    children: [
+      { key: 'employee-overview', label: 'Dashboard', url: '/hr/my-overview', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-id-card', label: 'My ID Card', url: '/hr/my-id-card', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-payslips', label: 'My Salary Slips', url: '/hr/my-payslips', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-leave', label: 'My Leave', url: '/hr/leave', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-reimbursements', label: 'My Reimbursements', url: '/hr/expenses', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-advance', label: 'Salary Advance', url: '/hr/advances', parentKey: 'employee-panel', roles: ['employee'] },
+    ],
   },
   {
     key: 'hr-management',
     icon: 'iconamoon:profile-circle-duotone',
     label: 'HR Management',
-    roles: ['superadmin', 'admin'],
+    roles: hrRoles,
     children: [
       {
-        key: 'hr-management-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/hr-management',
+        key: 'hr-employees',
+        label: 'All Employees',
+        url: '/hr/employees',
         parentKey: 'hr-management',
-        roles: ['superadmin', 'admin'],
+        roles: hrRoles,
       },
+      { key: 'hr-employee-overview', label: 'Employee monthly overview', url: '/hr/employee-overview', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-attendance', label: 'Mark Attendance', url: '/hr/attendance', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-leave', label: 'Leave', url: '/hr/leave', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-payroll', label: 'Payroll', url: '/hr/payroll', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-reports', label: 'HR Reports', url: '/hr/reports', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-expense-approvals', label: 'Reimbursement approvals', url: '/hr/expenses/approvals', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-attendance-reports', label: 'Attendance Reports', url: '/hr/attendance/reports', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-holidays', label: 'Holidays', url: '/hr/settings/holidays', parentKey: 'hr-management', roles: hrRoles },
     ],
   },
   {
@@ -904,6 +928,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     children: [
       {
         key: 'users-create',
+        icon: 'bx:user-plus',
         label: 'Create User',
         url: '/users/create',
         parentKey: 'user-management',
@@ -911,13 +936,23 @@ export const MENU_ITEMS: MenuItemType[] = [
       },
       {
         key: 'users-list',
+        icon: 'bx:id-card',
         label: 'Profiles & Access',
         url: '/users',
         parentKey: 'user-management',
         roles: ['superadmin', 'admin'],
       },
       {
+        key: 'users-departments',
+        icon: 'bx:buildings',
+        label: 'Create Departments',
+        url: '/hr/settings/departments',
+        parentKey: 'user-management',
+        roles: ['superadmin', 'admin'],
+      },
+      {
         key: 'users-login-history',
+        icon: 'bx:history',
         label: 'Login History',
         url: '/users/login-history',
         parentKey: 'user-management',

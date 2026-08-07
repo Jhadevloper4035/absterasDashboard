@@ -1,0 +1,15 @@
+import PageMetaData from '@/components/PageTitle'
+import { apiFetch } from '@/helpers/api'
+import type { EmployeeType } from '@/types/hr'
+import { FormEvent, useEffect, useState } from 'react'
+import { Alert, Button, Card, CardBody, Form, Table } from 'react-bootstrap'
+
+type Salary = { _id: string; employee: EmployeeType; ctc: number; basic: number; hra: number; effectiveFrom: string }
+const SalariesPage = () => {
+  const [employees, setEmployees] = useState<EmployeeType[]>([]); const [salaries, setSalaries] = useState<Salary[]>([]); const [form, setForm] = useState({ employee: '', ctc: '', basic: '', hra: '', effectiveFrom: new Date().toISOString().slice(0, 10) }); const [error, setError] = useState('')
+  const load = () => Promise.all([apiFetch<{ data: EmployeeType[] }>('/hr/payroll/employees?limit=100'), apiFetch<{ data: Salary[] }>('/hr/payroll/salary-structures')]).then(([employeeResponse, salaryResponse]) => { setEmployees(employeeResponse.data); setSalaries(salaryResponse.data) }).catch((value) => setError(value instanceof Error ? value.message : 'Unable to load salary data'))
+  useEffect(() => { load() }, [])
+  const save = async (event: FormEvent) => { event.preventDefault(); try { await apiFetch('/hr/payroll/salary-structures', { method: 'POST', body: JSON.stringify({ ...form, ctc: Number(form.ctc), basic: Number(form.basic), hra: Number(form.hra), allowances: [] }) }); load() } catch (value) { setError(value instanceof Error ? value.message : 'Unable to save salary') } }
+  return <><PageMetaData title="Salary structures" /><Card><CardBody><h4 className="card-title mb-1">Salary structures</h4><p className="text-muted">All amounts are monthly. CTC is retained for reporting; payroll uses basic, HRA, and allowances.</p>{error && <Alert variant="danger">{error}</Alert>}<Form className="row g-2 mb-4" onSubmit={save}><div className="col-md-3"><Form.Select required value={form.employee} onChange={(event) => setForm({ ...form, employee: event.target.value })}><option value="">Employee</option>{employees.map((employee) => <option key={employee._id} value={employee._id}>{employee.user.name}</option>)}</Form.Select></div>{(['ctc', 'basic', 'hra'] as const).map((field) => <div className="col-md-2" key={field}><Form.Control required min="0" type="number" placeholder={field.toUpperCase()} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></div>)}<div className="col-md-2"><Form.Control required type="date" value={form.effectiveFrom} onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })} /></div><div className="col-md-1"><Button type="submit">Save</Button></div></Form><Table responsive><thead><tr><th>Employee</th><th>CTC</th><th>Basic</th><th>HRA</th><th>Effective</th></tr></thead><tbody>{salaries.map((salary) => <tr key={salary._id}><td>{salary.employee?.user?.name}</td><td>{salary.ctc}</td><td>{salary.basic}</td><td>{salary.hra}</td><td>{new Date(salary.effectiveFrom).toLocaleDateString()}</td></tr>)}</tbody></Table></CardBody></Card></>
+}
+export default SalariesPage

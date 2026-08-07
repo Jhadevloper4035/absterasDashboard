@@ -93,3 +93,9 @@ test('renderNotificationEmail selects template by notification scenario', () => 
   assert.match(email.text, /A lead has been assigned to you/);
   assert.match(email.text, /From: Admin User \(admin\)/);
 });
+
+test('salary slip email uses the payroll template', () => {
+  const email = renderNotificationEmail({ title: 'Salary slip — 2026-08', body: 'Net pay: 5000', metadata: { type: 'hr.payroll.payslip' } });
+  assert.equal(email.template, 'hr.payroll.payslip');
+  assert.match(email.text, /salary slip is ready/i);
+});

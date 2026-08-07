@@ -67,7 +67,7 @@ const LeadDetailPage = () => {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
-  const salespeople = useMemo(() => users.filter((item) => item.role === 'sales' && item.status === 'active'), [users])
+  const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
 
   useEffect(() => {
     if (!token || !leadId) return

@@ -25,6 +25,16 @@ const demoUsers = [
     status: 'active',
     timezone: 'Asia/Dubai',
   },
+  {
+    name: 'Codex HR Manager',
+    email: 'codex.hr@example.com',
+    phone: '+971500000002',
+    password: 'HrManager123!',
+    role: 'operations',
+    accessTypes: ['hr-management'],
+    status: 'active',
+    timezone: 'Asia/Dubai',
+  },
 ];
 
 const demoLeads = [

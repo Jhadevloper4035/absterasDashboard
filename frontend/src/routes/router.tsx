@@ -4,8 +4,10 @@ import AuthLayout from '@/layouts/AuthLayout'
 import { useAuthContext } from '@/context/useAuthContext'
 import { appRoutes, authRoutes } from '@/routes/index'
 import AdminLayout from '@/layouts/AdminLayout'
+import type { UserType } from '@/types/auth'
 
-const dashboardPath = (role?: string) => (['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics')
+const dashboardPath = (roles: string[] = []) => roles.includes('hr-management') ? '/hr' : roles.includes('employee') ? '/hr/my-overview' : roles.some((role) => ['sales', 'operations', 'accounts', 'designers'].includes(role)) ? '/dashboard/sales' : '/dashboard/analytics'
+const accessRoles = (user?: UserType): string[] => [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].filter(Boolean) as string[]
 const publicPaths = ['/auth/sign-in', '/auth/setup-superadmin']
 
 const AppRouter = (props: RouteProps) => {
@@ -20,7 +22,7 @@ const AppRouter = (props: RouteProps) => {
         <Route
           key={idx + route.name}
           path={route.path}
-          element={isAuthenticated ? <Navigate to={dashboardPath(user?.role)} replace /> : <AuthLayout {...props}>{route.element}</AuthLayout>}
+          element={isAuthenticated ? <Navigate to={dashboardPath(accessRoles(user))} replace /> : <AuthLayout {...props}>{route.element}</AuthLayout>}
         />
       ))}
 
@@ -31,10 +33,10 @@ const AppRouter = (props: RouteProps) => {
           element={
             loading ? null : !isAuthenticated ? (
               <Navigate to={{ pathname: '/auth/sign-in', search: `?redirectTo=${redirectTo}` }} replace />
-            ) : !route.roles || (user?.role && route.roles.includes(user.role)) ? (
+            ) : !route.roles || accessRoles(user).some((role) => route.roles?.includes(role)) ? (
               <AdminLayout {...props}>{route.element}</AdminLayout>
             ) : (
-              <Navigate to={dashboardPath(user?.role)} replace />
+              <Navigate to={dashboardPath(accessRoles(user))} replace />
             )
           }
         />

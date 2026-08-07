@@ -1,0 +1,18 @@
+import mongoose from 'mongoose';
+
+const leaveRequestSchema = new mongoose.Schema({
+  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+  leaveType: { type: mongoose.Schema.Types.ObjectId, ref: 'LeaveType', required: true },
+  fromDate: { type: Date, required: true },
+  toDate: { type: Date, required: true },
+  days: { type: Number, min: 0.5, required: true },
+  reason: { type: String, trim: true },
+  status: { type: String, enum: ['pending', 'approved', 'rejected', 'encashed'], default: 'pending' },
+  paidDays: { type: Number, min: 0, default: 0 },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  decisionNote: { type: String, trim: true },
+  encashedAt: Date,
+}, { timestamps: true });
+leaveRequestSchema.index({ employee: 1, fromDate: 1, toDate: 1 });
+
+export const LeaveRequest = mongoose.models.LeaveRequest || mongoose.model('LeaveRequest', leaveRequestSchema);

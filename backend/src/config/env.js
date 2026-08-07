@@ -32,6 +32,10 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 4000),
   setupToken: process.env.SETUP_TOKEN,
+  attendance: {
+    shiftStart: process.env.HR_SHIFT_START || '10:30',
+    shiftEnd: process.env.HR_SHIFT_END || '18:00',
+  },
   smtp: {
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     host: process.env.SMTP_HOST,

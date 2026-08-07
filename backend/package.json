@@ -8,6 +8,14 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "db:seed": "node src/seed.js",
+    "hr:migrate-users": "node scripts/migrate-users-to-employees.mjs",
+    "hr:seed-employees": "node scripts/seed-dummy-employees.mjs",
+    "hr:seed-demo-data": "node scripts/seed-employee-demo-data.mjs",
+    "hr:seed-late-attendance": "node scripts/seed-late-attendance.mjs",
+    "hr:seed-pending-leave": "node scripts/seed-pending-leave.mjs",
+    "hr:seed-manager": "node scripts/seed-hr-manager.mjs",
+    "hr:accrue-leave": "node scripts/accrue-leave-balances.mjs",
+    "hr:notify-expiring-documents": "node scripts/notify-expiring-documents.mjs",
     "smoke": "node ../scripts/smoke-crm.mjs",
     "test": "node --test",
     "check": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check"
@@ -25,6 +33,7 @@
     "mongoose": "^9.0.1",
     "multer": "^2.0.2",
     "nodemailer": "^9.0.3",
+    "pdfkit": "^0.19.1",
     "sharp": "^0.35.3"
   },
   "devDependencies": {
