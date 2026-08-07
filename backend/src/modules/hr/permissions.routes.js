@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getHrPermissions, getMyHrAccess, updateHrPermissions } from './controllers/permissions.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeRoles } from '../../middleware/auth.middleware.js';
+import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware.js';
 
 export const hrPermissionRouter = Router();
 hrPermissionRouter.get('/me', asyncHandler(authenticate), asyncHandler(getMyHrAccess));

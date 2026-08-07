@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { createUser, getUser, listLoginHistory, listUsers, logoutAllUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
-import { AuthSession } from '../src/models/auth-session.model.js';
-import { BlockedToken } from '../src/models/blocked-token.model.js';
-import { LoginHistory } from '../src/models/login-history.model.js';
+import { AuthSession } from '../src/modules/auth/models/auth-session.model.js';
+import { BlockedToken } from '../src/modules/auth/models/blocked-token.model.js';
+import { LoginHistory } from '../src/modules/auth/models/login-history.model.js';
 import { User } from '../src/models/user.model.js';
 
 const originalAuthSessionFind = AuthSession.find;

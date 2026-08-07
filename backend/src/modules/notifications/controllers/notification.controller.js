@@ -1,6 +1,6 @@
 import { Notification } from '../models/notification.model.js';
-import { Lead } from '../modules/leads/models/lead.model.js';
-import { Task } from '../modules/tasks/models/task.model.js';
+import { Lead } from '../../leads/models/lead.model.js';
+import { Task } from '../../tasks/models/task.model.js';
 
 function senderFrom(user) {
   if (!user) return null;

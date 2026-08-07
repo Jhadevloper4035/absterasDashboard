@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
-import { Notification } from '../src/models/notification.model.js';
+import { Notification } from '../src/modules/notifications/models/notification.model.js';
 import { User } from '../src/models/user.model.js';
 import { renderNotificationEmail, setEmailSenderForTest } from '../src/services/email.service.js';
-import { notifyUsers } from '../src/services/notification.service.js';
+import { notifyUsers } from '../src/modules/notifications/services/notification.service.js';
 
 const originalInsertMany = Notification.insertMany;
 const originalUserFind = User.find;

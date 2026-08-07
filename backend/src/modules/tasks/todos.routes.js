@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createTodo, deleteTodo, listTodoAssignees, listTodos, updateTodo } from './controllers/todo.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeRoles } from '../../middleware/auth.middleware.js';
+import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware.js';
 import { USER_ROLES } from '../../models/user.model.js';
 
 export const todoRouter = Router();

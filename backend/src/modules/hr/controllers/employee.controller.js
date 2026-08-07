@@ -5,7 +5,7 @@ import { User } from '../../../models/user.model.js';
 import { SalaryStructure } from '../models/salary-structure.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
-import { revokeActiveUserSessions } from '../../../services/auth-session.service.js';
+import { revokeActiveUserSessions } from '../../auth/services/auth-session.service.js';
 
 const EMPLOYEE_FIELDS = ['employeeType', 'department', 'designation', 'manager', 'joiningDate', 'status', 'lastWorkingDate', 'emergencyContact'];
 const isAdmin = (user) => ['superadmin', 'admin'].includes(user.role);

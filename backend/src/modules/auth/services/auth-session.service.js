@@ -1,6 +1,6 @@
 import { AuthSession } from '../models/auth-session.model.js';
 import { BlockedToken } from '../models/blocked-token.model.js';
-import { requestIp } from '../helpers/request-ip.js';
+import { requestIp } from '../../../helpers/request-ip.js';
 import { ACCESS_TOKEN_TTL_SECONDS, createAccessToken, createRefreshToken, hashRefreshToken } from './token.service.js';
 
 export function createAccessTokenPair(user) {

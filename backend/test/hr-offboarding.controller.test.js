@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { deleteEmployee } from '../src/modules/hr/controllers/employee.controller.js';
-import { AuthSession } from '../src/models/auth-session.model.js';
+import { AuthSession } from '../src/modules/auth/models/auth-session.model.js';
 import { Employee } from '../src/modules/hr/models/employee.model.js';
 import { User } from '../src/models/user.model.js';
 

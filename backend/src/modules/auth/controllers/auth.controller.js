@@ -1,6 +1,6 @@
-import { User } from '../models/user.model.js';
+import { User } from '../../../models/user.model.js';
 import { LoginHistory } from '../models/login-history.model.js';
-import { requestIp } from '../helpers/request-ip.js';
+import { requestIp } from '../../../helpers/request-ip.js';
 import { verifyPassword } from '../services/password.service.js';
 import { createSession, revokeActiveUserSessions, rotateSession, revokeSession } from '../services/auth-session.service.js';
 import { verifyAccessToken } from '../services/token.service.js';

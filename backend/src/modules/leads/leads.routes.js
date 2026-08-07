@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createLead, deleteLead, getLead, listLeads, updateLead } from './controllers/lead.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeRoles } from '../../middleware/auth.middleware.js';
+import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware.js';
 import { USER_ROLES } from '../../models/user.model.js';
 
 export const leadRouter = Router();

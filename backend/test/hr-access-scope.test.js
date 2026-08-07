@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { listAttendance } from '../src/modules/hr/controllers/attendance.controller.js';
 import { listEmployees } from '../src/modules/hr/controllers/employee.controller.js';
-import { authorizeHrModule } from '../src/middleware/auth.middleware.js';
+import { authorizeHrModule } from '../src/modules/auth/middleware/auth.middleware.js';
 import { Attendance } from '../src/modules/hr/models/attendance.model.js';
 import { Employee } from '../src/modules/hr/models/employee.model.js';
 import { User } from '../src/models/user.model.js';

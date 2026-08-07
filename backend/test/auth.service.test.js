@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { AuthSession } from '../src/models/auth-session.model.js';
-import { BlockedToken } from '../src/models/blocked-token.model.js';
-import { LoginHistory } from '../src/models/login-history.model.js';
+import { AuthSession } from '../src/modules/auth/models/auth-session.model.js';
+import { BlockedToken } from '../src/modules/auth/models/blocked-token.model.js';
+import { LoginHistory } from '../src/modules/auth/models/login-history.model.js';
 import { RateLimit } from '../src/models/rate-limit.model.js';
 import { User } from '../src/models/user.model.js';
 import { env } from '../src/config/env.js';
 import { cleanIpAddress } from '../src/helpers/request-ip.js';
-import { allowFirstSuperadminOrUserManager, authorizeHrModule, authorizeRoles } from '../src/middleware/auth.middleware.js';
+import { allowFirstSuperadminOrUserManager, authorizeHrModule, authorizeRoles } from '../src/modules/auth/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
-import { login, logout } from '../src/controllers/auth.controller.js';
-import { createAccessTokenPair, createSession, isAccessTokenBlocked, rotateSession } from '../src/services/auth-session.service.js';
-import { hashPassword, verifyPassword } from '../src/services/password.service.js';
-import { createAccessToken, hashRefreshToken, verifyAccessToken } from '../src/services/token.service.js';
+import { login, logout } from '../src/modules/auth/controllers/auth.controller.js';
+import { createAccessTokenPair, createSession, isAccessTokenBlocked, rotateSession } from '../src/modules/auth/services/auth-session.service.js';
+import { hashPassword, verifyPassword } from '../src/modules/auth/services/password.service.js';
+import { createAccessToken, hashRefreshToken, verifyAccessToken } from '../src/modules/auth/services/token.service.js';
 
 const testReq = (userAgent = 'node-test', ip = '127.0.0.1') => ({
   ip,

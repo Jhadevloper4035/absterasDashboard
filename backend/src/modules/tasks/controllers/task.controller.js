@@ -2,7 +2,7 @@ import { Task, TASK_PRIORITIES, TASK_STATUSES } from '../models/task.model.js';
 import { DEFAULT_TASK_WORK_TYPES, TASK_WORK_TYPE_ROLES, TaskWorkType, normalizeTaskWorkType } from '../models/task-work-type.model.js';
 import { User } from '../../../models/user.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
-import { notifyUsers } from '../../../services/notification.service.js';
+import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];

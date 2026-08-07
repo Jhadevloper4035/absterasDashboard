@@ -1,9 +1,9 @@
 import { Lead, LEAD_STATUSES } from '../models/lead.model.js';
 import { User } from '../../../models/user.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
-import { notifyUsers } from '../../../services/notification.service.js';
+import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
-import { userRoles } from '../../../middleware/auth.middleware.js';
+import { userRoles } from '../../auth/middleware/auth.middleware.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
 const LEAD_CREATE_ROLES = [...ADMIN_ROLES, 'sales'];

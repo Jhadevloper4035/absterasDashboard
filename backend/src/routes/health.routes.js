@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getHealth, getHealthStatus, sendHealthTestEmail } from '../controllers/health.controller.js';
 import { asyncHandler } from '../middleware/async-handler.js';
-import { authenticate, authorizeRoles } from '../middleware/auth.middleware.js';
+import { authenticate, authorizeRoles } from '../modules/auth/middleware/auth.middleware.js';
 
 export const healthRouter = Router();
 

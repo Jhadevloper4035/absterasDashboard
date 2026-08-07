@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { login, logout, me, refresh } from '../controllers/auth.controller.js';
-import { asyncHandler } from '../middleware/async-handler.js';
-import { authenticate } from '../middleware/auth.middleware.js';
-import { rateLimit } from '../middleware/rate-limit.middleware.js';
+import { login, logout, me, refresh } from './controllers/auth.controller.js';
+import { asyncHandler } from '../../middleware/async-handler.js';
+import { authenticate } from './middleware/auth.middleware.js';
+import { rateLimit } from '../../middleware/rate-limit.middleware.js';
 
 export const authRouter = Router();
 

@@ -1,13 +1,13 @@
-import { AuthSession } from '../models/auth-session.model.js';
+import { AuthSession } from '../modules/auth/models/auth-session.model.js';
 import { User } from '../models/user.model.js';
 import { Employee } from '../modules/hr/models/employee.model.js';
 import { SalaryStructure } from '../modules/hr/models/salary-structure.model.js';
-import { LoginHistory } from '../models/login-history.model.js';
+import { LoginHistory } from '../modules/auth/models/login-history.model.js';
 import { cleanIpAddress } from '../helpers/request-ip.js';
 import { auditEvent } from '../services/audit.service.js';
-import { revokeActiveUserSessions, revokeAllActiveSessions } from '../services/auth-session.service.js';
-import { hashPassword, passwordPolicyError } from '../services/password.service.js';
-import { userRoles } from '../middleware/auth.middleware.js';
+import { revokeActiveUserSessions, revokeAllActiveSessions } from '../modules/auth/services/auth-session.service.js';
+import { hashPassword, passwordPolicyError } from '../modules/auth/services/password.service.js';
+import { userRoles } from '../modules/auth/middleware/auth.middleware.js';
 
 const SUPERADMIN_ROLE = 'superadmin';
 const TEAM_USER_ROLES = ['sales', 'operations', 'accounts', 'designers'];

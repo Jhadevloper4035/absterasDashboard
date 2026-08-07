@@ -13,7 +13,7 @@ import {
   allowFirstSuperadminOrUserManager,
   authenticate,
   authorizeRoles,
-} from '../middleware/auth.middleware.js';
+} from '../modules/auth/middleware/auth.middleware.js';
 
 export const userRouter = Router();
 

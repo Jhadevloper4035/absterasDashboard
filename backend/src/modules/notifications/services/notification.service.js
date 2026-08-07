@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { Notification } from '../models/notification.model.js';
-import { User } from '../models/user.model.js';
-import { isEmailConfigured, sendNotificationEmail } from './email.service.js';
+import { User } from '../../../models/user.model.js';
+import { isEmailConfigured, sendNotificationEmail } from '../../../services/email.service.js';
 
 async function sendEmailNotifications(ids, { title, body, metadata, attachments }) {
   const users = await User.find({ _id: { $in: ids }, status: 'active' }).select('email');

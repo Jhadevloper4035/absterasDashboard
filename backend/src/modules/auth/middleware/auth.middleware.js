@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
-import { env } from '../config/env.js';
-import { User } from '../models/user.model.js';
-import { HrPermission } from '../modules/hr/models/permission.model.js';
+import { env } from '../../../config/env.js';
+import { User } from '../../../models/user.model.js';
+import { HrPermission } from '../../hr/models/permission.model.js';
 import { isAccessTokenBlocked } from '../services/auth-session.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
 

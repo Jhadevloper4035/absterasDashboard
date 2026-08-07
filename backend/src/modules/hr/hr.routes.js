@@ -8,7 +8,7 @@ import { hrDashboard } from './controllers/dashboard.controller.js';
 import { createAdvance, createPayrollRun, createSalaryStructure, decideAdvance, downloadBankFile, getPayrollRun, listAdvances, listMyAdvances, listPayrollRuns, listSalaryStructures, previewPayroll, previewSettlement, processPayrollRun, requestAdvance, updateSalaryStructure } from './controllers/payroll.controller.js';
 import { createDepartment, createDesignation, createEmployee, deleteDepartment, deleteDesignation, deleteEmployee, getEmployee, listDepartments, listDesignations, listEmployees, updateDepartment, updateDesignation, updateEmployee } from './controllers/employee.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeHrModule, authorizeRoles } from '../../middleware/auth.middleware.js';
+import { authenticate, authorizeHrModule, authorizeRoles } from '../auth/middleware/auth.middleware.js';
 
 export const hrRouter = Router();
 hrRouter.use(asyncHandler(authenticate));
