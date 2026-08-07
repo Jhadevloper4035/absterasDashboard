@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { listUnreadNotifications } from '../src/controllers/notification.controller.js';
-import { Lead } from '../src/models/lead.model.js';
+import { Lead } from '../src/modules/leads/models/lead.model.js';
 import { Notification } from '../src/models/notification.model.js';
 import { Task } from '../src/modules/tasks/models/task.model.js';
 

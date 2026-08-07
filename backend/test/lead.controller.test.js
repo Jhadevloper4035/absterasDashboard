@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createLead, deleteLead, getLead, listLeads, updateLead } from '../src/controllers/lead.controller.js';
-import { Lead } from '../src/models/lead.model.js';
+import { createLead, deleteLead, getLead, listLeads, updateLead } from '../src/modules/leads/controllers/lead.controller.js';
+import { Lead } from '../src/modules/leads/models/lead.model.js';
 import { User } from '../src/models/user.model.js';
 import { createAttachmentToken } from '../src/services/upload.service.js';
 

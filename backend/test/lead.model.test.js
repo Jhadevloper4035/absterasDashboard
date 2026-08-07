@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
-import { LEAD_STATUSES, Lead } from '../src/models/lead.model.js';
+import { LEAD_STATUSES, Lead } from '../src/modules/leads/models/lead.model.js';
 
 test('lead requires a name and source', async () => {
   await assert.rejects(() => new Lead({}).validate(), /Path `name` is required/);

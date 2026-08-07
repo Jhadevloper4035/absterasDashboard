@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { LEAD_STATUSES } from './lead.model.js';
+import { LEAD_STATUSES } from '../modules/leads/models/lead.model.js';
 
 const { ObjectId, Mixed } = mongoose.Schema.Types;
 
