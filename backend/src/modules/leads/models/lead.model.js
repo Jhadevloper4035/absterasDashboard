@@ -51,6 +51,18 @@ const noteAttachmentSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const leadDocumentSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: ['site_images', 'psf', 'boq', 'estimation'], required: true },
+    key: { type: String, required: true },
+    contentType: String,
+    originalName: String,
+    size: Number,
+    checksum: String,
+  },
+  { _id: false },
+);
+
 const noteSchema = new mongoose.Schema(
   {
     text: {
@@ -281,6 +293,8 @@ const leadSchema = new mongoose.Schema(
     meetingHistory: [nextMeetingSchema],
     notes: [noteSchema],
     attachments: [attachmentSchema],
+    leadCost: { type: Number, min: 0 },
+    documents: [leadDocumentSchema],
     closedAt: Date,
     lossReason: {
       type: String,

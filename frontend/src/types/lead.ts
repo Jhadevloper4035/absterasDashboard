@@ -12,6 +12,8 @@ export type LeadAttachment = {
   attachmentToken?: string
 }
 
+export type LeadDocument = LeadAttachment & { type: 'site_images' | 'psf' | 'boq' | 'estimation' }
+
 export type LeadNote = {
   _id?: string
   text?: string
@@ -51,6 +53,8 @@ export type LeadType = {
   siteAddress?: string
   googleMapUrl?: string
   territory?: string
+  leadCost?: number
+  documents?: LeadDocument[]
   status: string
   owner?: string | LeadOwner
   assignmentException?: boolean

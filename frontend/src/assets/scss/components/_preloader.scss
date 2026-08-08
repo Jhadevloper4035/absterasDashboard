@@ -19,6 +19,21 @@
   }
 }
 
+.app-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-content: center;
+  background: #282f36;
+}
+
+.app-loader .spinner-border {
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: auto;
+}
+
 @keyframes load {
   0% {
     width: 0;

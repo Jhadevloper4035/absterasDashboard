@@ -41,10 +41,11 @@ const CreateUserPage = () => {
   const [departments, setDepartments] = useState<OrganizationItem[]>([])
   const [designations, setDesignations] = useState<OrganizationItem[]>([])
   const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
+  const isSuperadmin = currentAccessTypes.includes('superadmin')
   const canManageUsers = currentAccessTypes.includes('superadmin') || currentAccessTypes.includes('admin')
   const createRoles = teamRoles
-  const accessTypeOptions = useMemo(() => [...new Set([...defaultAccessTypes, ...createRoles, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])])])].filter((type) => type !== 'superadmin')
-    .map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) })), [createRoles, users])
+  const accessTypeOptions = useMemo(() => [...new Set([...defaultAccessTypes, ...createRoles, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])])])].filter((type) => type !== 'superadmin' && (isSuperadmin || type !== 'admin'))
+    .map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) })), [createRoles, isSuperadmin, users])
 
   useEffect(() => {
     if (canManageUsers) fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))

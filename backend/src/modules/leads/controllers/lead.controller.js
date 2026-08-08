@@ -7,10 +7,11 @@ import { userRoles } from '../../auth/middleware/auth.middleware.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
 const LEAD_CREATE_ROLES = [...ADMIN_ROLES, 'sales'];
-const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory'];
+const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory', 'leadCost'];
+const LEAD_DOCUMENT_TYPES = ['site_images', 'psf', 'boq', 'estimation'];
 
 function canManageLeads(user) {
-  return ADMIN_ROLES.includes(user.role);
+  return userRoles(user).some((role) => [...ADMIN_ROLES, 'sales'].includes(role));
 }
 
 function forbidden(res) {
@@ -19,6 +20,10 @@ function forbidden(res) {
 
 function leadQueryFor(user, extra = {}) {
   return canManageLeads(user) ? extra : { ...extra, owner: user._id };
+}
+
+function canDeleteLeads(user) {
+  return userRoles(user).some((role) => ADMIN_ROLES.includes(role));
 }
 
 function escapeRegex(value) {
@@ -41,6 +46,7 @@ async function leadData(lead) {
       attachments: await signAttachmentUrls(note.attachments || []),
     })),
   );
+  data.documents = await signAttachmentUrls(data.documents || []);
   return data;
 }
 
@@ -52,6 +58,17 @@ function cleanAttachments(attachments) {
     .map(({ key, contentType, originalName, size, checksum }) => ({ key, contentType, originalName, size, checksum }));
 }
 
+function cleanDocuments(documents) {
+  return (Array.isArray(documents) ? documents : [])
+    .map((document) => {
+      const attachment = trustedAttachment(document);
+      return attachment && LEAD_DOCUMENT_TYPES.includes(document.type) ? { type: document.type, ...attachment } : null;
+    })
+    .filter(Boolean)
+    .slice(0, 20)
+    .map(({ type, key, contentType, originalName, size, checksum }) => ({ type, key, contentType, originalName, size, checksum }));
+}
+
 function applyLeadPatch(lead, patch) {
   for (const field of LEAD_UPDATE_FIELDS) {
     if (patch[field] !== undefined) lead[field] = patch[field];
@@ -59,6 +76,7 @@ function applyLeadPatch(lead, patch) {
 
   if (patch.email !== undefined) lead.normalizedEmail = undefined;
   if (patch.phone !== undefined) lead.normalizedPhone = undefined;
+  if (patch.documents !== undefined) lead.documents = cleanDocuments(patch.documents);
 }
 
 function notificationMetadata(user, type, leadId) {
@@ -77,7 +95,7 @@ export async function createLead(req, res) {
   }
 
   const {
-    owner,
+    owner: requestedOwner,
     sharedWith,
     assignmentException,
     assignmentHistory,
@@ -89,11 +107,24 @@ export async function createLead(req, res) {
   if (!String(payload.phone || '').trim()) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
+  if (payload.leadCost !== undefined && (!Number.isFinite(Number(payload.leadCost)) || Number(payload.leadCost) < 0)) {
+    return res.status(400).json({ error: { message: 'Lead cost must be a valid non-negative amount' } });
+  }
+  if (payload.leadCost !== undefined) payload.leadCost = Number(payload.leadCost);
+  if (payload.documents !== undefined) payload.documents = cleanDocuments(payload.documents);
+
+  let owner;
+  if (requestedOwner) {
+    owner = await User.findOne({ _id: requestedOwner, status: 'active', $or: [{ role: 'sales' }, { additionalRoles: 'sales' }] });
+    if (!owner) return res.status(400).json({ error: { message: 'Assign leads to an active salesperson' } });
+  }
 
   const lead = await Lead.create({
     ...payload,
-    status: 'NEW',
-    assignmentException: true,
+    owner: owner?._id,
+    status: owner ? 'ASSIGNED' : 'NEW',
+    assignmentException: !owner,
+    ...(owner ? { assignmentHistory: [{ newOwner: owner._id, reason: 'Assigned on creation', rule: 'manual', actor: req.user._id }], statusHistory: [{ to: 'ASSIGNED', reason: 'Assigned on creation', actor: req.user._id }] } : {}),
   });
   res.status(201).json({ data: lead });
 }
@@ -103,6 +134,7 @@ export async function listLeads(req, res) {
   const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 50);
   const query = leadQueryFor(req.user);
   if (LEAD_STATUSES.includes(req.query.status)) query.status = req.query.status;
+  if (req.query.closed === 'true') query.status = { $in: ['WON', 'LOST', 'ON_HOLD'] };
   if (req.query.assignmentException === 'true') query.assignmentException = true;
   if (req.query.hasMeeting === 'true') query['meetingHistory.startsAt'] = { $exists: true };
   if (req.query.upcomingMeeting === 'true') query['meetingHistory.startsAt'] = { $gte: new Date() };
@@ -131,6 +163,11 @@ export async function listLeads(req, res) {
   ]);
 
   res.json({ data: leads.map(withCurrentMeeting), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
+}
+
+export async function listLeadAssignees(req, res) {
+  const users = await User.find({ status: 'active', $or: [{ role: 'sales' }, { additionalRoles: 'sales' }] }).select('name email role additionalRoles status').sort({ name: 1 }).limit(1000);
+  return res.json({ data: users });
 }
 
 export async function getLead(req, res) {
@@ -162,6 +199,10 @@ export async function updateLead(req, res) {
   if (patch.phone !== undefined && !String(patch.phone).trim()) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
+  if (patch.leadCost !== undefined && (!Number.isFinite(Number(patch.leadCost)) || Number(patch.leadCost) < 0)) {
+    return res.status(400).json({ error: { message: 'Lead cost must be a valid non-negative amount' } });
+  }
+  if (patch.leadCost !== undefined) patch.leadCost = Number(patch.leadCost);
 
   if (owner !== undefined) {
     if (!canManageLeads(req.user)) {
@@ -315,7 +356,7 @@ export async function updateLead(req, res) {
 }
 
 export async function deleteLead(req, res) {
-  if (!canManageLeads(req.user)) {
+  if (!canDeleteLeads(req.user)) {
     return forbidden(res);
   }
 

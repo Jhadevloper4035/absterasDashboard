@@ -7,7 +7,7 @@ import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { UploadFileType } from '@/types/component-props'
 import type { UserType } from '@/types/auth'
-import type { LeadAttachment, LeadOwner, LeadType } from '@/types/lead'
+import type { LeadAttachment, LeadDocument, LeadOwner, LeadType } from '@/types/lead'
 import { formatFileSize } from '@/utils/other'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
@@ -21,6 +21,7 @@ const roleBadge = (role?: string) => (role === 'sales' ? 'info' : role === 'admi
 const attachmentName = (file: LeadAttachment) => (file.originalName || file.key).replace(/^\.?\//, '')
 const attachmentExtension = (file: LeadAttachment) => attachmentName(file).split('.').pop()?.toUpperCase() || 'FILE'
 const attachmentIcon = (file: LeadAttachment) => file.contentType?.startsWith('image/') ? 'bx:image' : 'bx:paperclip'
+const documentLabel = (type: LeadDocument['type']) => ({ site_images: 'Site images', psf: 'PSF', boq: 'BOQ', estimation: 'Estimation' })[type]
 
 const AttachmentDownloadList = ({ attachments, onRemove }: { attachments?: LeadAttachment[]; onRemove?: (key: string) => void }) => (
   attachments?.length ? (
@@ -66,7 +67,9 @@ const LeadDetailPage = () => {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
+  const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
+  const canAssign = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
+  const canDelete = roles.includes('superadmin') || roles.includes('admin')
   const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
 
   useEffect(() => {
@@ -77,7 +80,7 @@ const LeadDetailPage = () => {
       try {
         const [leadRes, userRes] = await Promise.all([
           apiFetch<{ data: LeadType }>(`/leads/${leadId}`, { token }),
-          canAssign ? apiFetch<{ data: UserType[] }>('/users', { token }) : Promise.resolve({ data: [] }),
+          canAssign ? apiFetch<{ data: UserType[] }>('/leads/assignees', { token }) : Promise.resolve({ data: [] }),
         ])
         setLead(leadRes.data)
         setUsers(userRes.data)
@@ -168,7 +171,7 @@ const LeadDetailPage = () => {
   }
 
   const deleteLead = async () => {
-    if (!token || !leadId || !lead || !canAssign) return
+    if (!token || !leadId || !lead || !canDelete) return
 
     setDeleting(true)
     try {
@@ -204,7 +207,7 @@ const LeadDetailPage = () => {
           <IconifyIcon icon="bx:left-arrow-alt" className="me-1" />
           Back
         </Link>
-        {canAssign && (
+        {canDelete && (
           <Button type="button" size="sm" variant="outline-danger" className="text-nowrap" onClick={() => setDeleteOpen(true)}>
             Delete lead
           </Button>
@@ -232,6 +235,20 @@ const LeadDetailPage = () => {
                     <div className="fw-medium text-break">{lead.phone || '-'}</div>
                   </div>
                 </Col>
+                <Col md={6}>
+                  <div className="border rounded p-3 h-100">
+                    <div className="text-muted fs-13">Lead cost</div>
+                    <div className="fw-medium">{lead.leadCost === undefined ? '-' : lead.leadCost.toLocaleString()}</div>
+                  </div>
+                </Col>
+                {!!lead.documents?.length && (
+                  <Col xs={12}>
+                    <div className="border rounded p-3">
+                      <div className="text-muted fs-13 mb-2">Lead documents</div>
+                      {lead.documents.map((document) => <div className="mb-2" key={document.key}><Badge bg="light" text="dark" className="me-2">{documentLabel(document.type)}</Badge><AttachmentDownloadList attachments={[document]} /></div>)}
+                    </div>
+                  </Col>
+                )}
                 <Col md={6}>
                   <div className="border rounded p-3 h-100">
                     <div className="text-muted fs-13">Email</div>

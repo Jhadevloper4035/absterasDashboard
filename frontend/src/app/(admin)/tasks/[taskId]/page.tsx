@@ -179,9 +179,7 @@ const TaskDetail = () => {
               <div className="text-muted">{task.ticketNumber ? `${task.ticketNumber} · ` : ''}Assignee: {personName(task.assignee)}</div>
             </div>
             <div className="d-flex gap-2">
-              <Link to={`/tasks/${task._id}/edit`} className="btn btn-primary">
-                Update
-              </Link>
+              {task.status !== 'Done' && <Link to={`/tasks/${task._id}/edit`} className="btn btn-primary">Update</Link>}
               <Link to="/tasks/all" className="btn btn-outline-secondary">
                 Back
               </Link>
@@ -246,7 +244,7 @@ const TaskDetail = () => {
               </Card>
             </Col>
             <Col xl={4}>
-              <Card>
+              {task.status !== 'Done' && <Card>
                 <CardBody>
                   <h4 className="card-title mb-3">Add note</h4>
                   <Form onSubmit={addNote}>
@@ -289,7 +287,7 @@ const TaskDetail = () => {
                     <Button type="submit" disabled={saving || uploadingNote}>{uploadingNote ? 'Uploading...' : saving ? 'Saving...' : 'Add note'}</Button>
                   </Form>
                 </CardBody>
-              </Card>
+              </Card>}
               <Card>
                 <CardBody>
                   <h4 className="card-title mb-3">Notes</h4>

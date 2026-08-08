@@ -1,8 +1,13 @@
 import PageMetaData from '@/components/PageTitle'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
+import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
-import { ChangeEvent, FormEvent, useState } from 'react'
+import type { UploadFileType } from '@/types/component-props'
+import type { LeadAttachment } from '@/types/lead'
+import type { UserType } from '@/types/auth'
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, ButtonGroup, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
 import { toast } from 'react-toastify'
 
@@ -10,6 +15,8 @@ type FormMode = 'lead' | 'architect'
 type CreateMode = 'single' | 'csv'
 
 const sourceTypes = ['manual', 'csv', 'api', 'webhook', 'integration'] as const
+const documentTypes = [{ value: 'site_images', label: 'Site images' }, { value: 'psf', label: 'PSF' }, { value: 'boq', label: 'BOQ' }, { value: 'estimation', label: 'Estimation' }] as const
+type LeadDocument = LeadAttachment & { type: (typeof documentTypes)[number]['value'] }
 
 const emptyLeadForm = {
   name: '',
@@ -23,6 +30,9 @@ const emptyLeadForm = {
   phone: '',
   productInterest: '',
   territory: '',
+  leadCost: '',
+  documents: [] as LeadDocument[],
+  owner: '',
 }
 
 const emptyArchitectForm = {
@@ -47,6 +57,9 @@ const dummyLeadForm = {
   phone: '+919820000201',
   productInterest: 'Metal facade cladding',
   territory: 'India - Mumbai',
+  leadCost: '',
+  documents: [] as LeadDocument[],
+  owner: '',
 }
 
 const dummyArchitectForm = {
@@ -144,10 +157,19 @@ const CreateLeadPage = () => {
   const [architectForm, setArchitectForm] = useState(emptyArchitectForm)
   const [csvFile, setCsvFile] = useState<File>()
   const [saving, setSaving] = useState(false)
+  const [salespeople, setSalespeople] = useState<UserType[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [documentType, setDocumentType] = useState<LeadDocument['type']>('site_images')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const canCreate = user?.role === 'superadmin' || user?.role === 'admin'
+  const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
+  const canCreate = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
   const isArchitect = mode === 'architect'
+
+  useEffect(() => {
+    if (!token || !canCreate) return
+    apiFetch<{ data: UserType[] }>('/leads/assignees', { token }).then((response) => setSalespeople(response.data)).catch((e) => setError(e instanceof Error ? e.message : 'Unable to load salespeople'))
+  }, [canCreate, token])
 
   const createRecord = async (event: FormEvent) => {
     event.preventDefault()
@@ -204,6 +226,20 @@ const CreateLeadPage = () => {
       toast.error(message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const uploadDocuments = async (files: UploadFileType[]) => {
+    if (!token || !files.length) return
+    setUploading(true)
+    setError('')
+    try {
+      const documents = await uploadMultipartFiles<LeadAttachment>(files, token)
+      setLeadForm((form) => ({ ...form, documents: [...form.documents, ...documents.map((document) => ({ ...document, type: documentType }))] }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to upload documents')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -360,10 +396,32 @@ const CreateLeadPage = () => {
                   <Form.Label>Territory</Form.Label>
                   <Form.Control value={leadForm.territory} onChange={(event) => setLeadForm({ ...leadForm, territory: event.target.value })} placeholder="City, region, or territory" />
                 </Form.Group>
+                <Form.Group as={Col} md={6}>
+                  <Form.Label>Lead cost</Form.Label>
+                  <Form.Control min="0" step="0.01" type="number" value={leadForm.leadCost} onChange={(event) => setLeadForm({ ...leadForm, leadCost: event.target.value })} placeholder="0.00" />
+                </Form.Group>
+                <Form.Group as={Col} md={6}>
+                  <Form.Label>Assign lead</Form.Label>
+                  <Form.Select value={leadForm.owner} onChange={(event) => setLeadForm({ ...leadForm, owner: event.target.value })}>
+                    <option value="">Unassigned</option>
+                    {user?._id && <option value={user._id}>Assign to me</option>}
+                    {salespeople.filter((person) => person._id !== user?._id).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}
+                  </Form.Select>
+                </Form.Group>
                 <Form.Group as={Col} md={3}>
                   <Form.Label>Lead source</Form.Label>
                   <Form.Control required value={leadForm.source} onChange={(event) => setLeadForm({ ...leadForm, source: event.target.value })} placeholder="Expo, website, call..." />
                 </Form.Group>
+                <Col xs={12}>
+                  <Form.Label>Lead documents</Form.Label>
+                  <div className="d-flex gap-2 mb-2" style={{ maxWidth: 260 }}>
+                    <Form.Select value={documentType} onChange={(event) => setDocumentType(event.target.value as LeadDocument['type'])}>
+                      {documentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </Form.Select>
+                  </div>
+                  <DropzoneFormInput label="" text="Upload files" showPreview={false} helpText="Upload up to 5 files at a time. PDF, images, CSV, or TXT." onFileUpload={uploadDocuments} />
+                  {!!leadForm.documents.length && <div className="mt-2 small">{leadForm.documents.map((document) => <div key={document.key}>{documentTypes.find((type) => type.value === document.type)?.label}: {document.originalName || document.key}</div>)}</div>}
+                </Col>
                 <Form.Group as={Col} md={3}>
                   <Form.Label>Source type</Form.Label>
                   <Form.Select value={leadForm.sourceType} onChange={(event) => setLeadForm({ ...leadForm, sourceType: event.target.value })}>
@@ -381,9 +439,9 @@ const CreateLeadPage = () => {
               <Button type="button" variant="outline-secondary" className="me-2" onClick={loadDummy}>
                 Use dummy
               </Button>
-              <Button type="submit" className="px-4" disabled={saving}>
+              <Button type="submit" className="px-4" disabled={saving || uploading}>
                 <IconifyIcon icon="bx:plus" className="me-1" />
-                {saving ? 'Creating...' : isArchitect ? 'Create Architect Lead' : 'Create Lead'}
+                {uploading ? 'Uploading...' : saving ? 'Creating...' : isArchitect ? 'Create Architect Lead' : 'Create Lead'}
               </Button>
             </div>
           </Form>

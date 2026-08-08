@@ -600,7 +600,7 @@ const TODO = () => {
           </div>
         </CardBody>
         <div className="table-responsive table-centered">
-          <Table hover className="mb-0 align-middle" style={{ minWidth: 1280 }}>
+          <Table hover className="mb-0 align-middle" style={{ minWidth: 1680 }}>
             <thead className="bg-light bg-opacity-50">
               <tr>
                 <th className="border-0 py-2 text-center" style={{ width: 48 }}>Done</th>
@@ -633,6 +633,7 @@ const TODO = () => {
                       <Form.Check
                         type="checkbox"
                         checked={todo.status === 'Completed' || todo.status === 'Done'}
+                        disabled={!isTodoPage && todo.status === 'Done'}
                         aria-label={`Mark ${todo.title} complete`}
                         onChange={(event) => updateStatus(todo, event.target.checked ? 'Completed' : 'Pending')}
                       />
@@ -649,7 +650,7 @@ const TODO = () => {
                     {!isTodoPage && <td>{todo.projectEpic || '-'}</td>}
                     <td>
                       {canAssign && !isTodoPage ? (
-                        <Form.Select size="sm" value={personId(todo.assignee) || ''} onChange={(event) => reassignTask(todo, event.target.value)}>
+                        <Form.Select className="task-table-select" size="sm" disabled={todo.status === 'Done'} value={personId(todo.assignee) || ''} onChange={(event) => reassignTask(todo, event.target.value)}>
                           {users.map((person) => (
                             <option key={person._id} value={person._id}>
                               {person.name}
@@ -667,7 +668,7 @@ const TODO = () => {
                     </td>
                     <td>
                       {!isTodoPage ? (
-                        <Form.Select size="sm" value={todo.status} onChange={(event) => updateStatus(todo, event.target.value as TaskStatus)}>
+                        <Form.Select className="task-table-select" size="sm" disabled={todo.status === 'Done'} value={todo.status} onChange={(event) => updateStatus(todo, event.target.value as TaskStatus)}>
                           {taskStatuses.map((status) => (
                             <option key={status}>{status}</option>
                           ))}
@@ -679,7 +680,7 @@ const TODO = () => {
                     </td>
                     <td className={`text-${priorityColor(todo.priority)}`}>
                       {!isTodoPage ? (
-                        <Form.Select size="sm" value={todo.priority} onChange={(event) => updatePriority(todo, event.target.value as TodoPriority)}>
+                        <Form.Select className="task-table-select" size="sm" disabled={todo.status === 'Done'} value={todo.priority} onChange={(event) => updatePriority(todo, event.target.value as TodoPriority)}>
                           <option>Low</option>
                           <option>Medium</option>
                           <option>High</option>
@@ -707,9 +708,7 @@ const TODO = () => {
                           <IconifyIcon icon="bx:edit" className="fs-16" />
                         </Button>
                       ) : (
-                        <Link to={`/tasks/${todo._id}/edit`} className="btn btn-soft-secondary btn-sm">
-                          <IconifyIcon icon="bx:edit" className="fs-16" />
-                        </Link>
+                        todo.status !== 'Done' && <Link to={`/tasks/${todo._id}/edit`} className="btn btn-soft-secondary btn-sm"><IconifyIcon icon="bx:edit" className="fs-16" /></Link>
                       )}
                     </td>
                     <td className="text-center">

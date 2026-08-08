@@ -71,7 +71,7 @@ const UsersPage = () => {
   const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
   const isSuperadmin = currentAccessTypes.includes('superadmin')
   const canManageUsers = isSuperadmin || currentAccessTypes.includes('admin')
-  const canManageProfile = (profile: UserType) => isSuperadmin || profile.role !== 'superadmin'
+  const canManageProfile = (profile: UserType) => isSuperadmin || ![profile.role, ...(profile.additionalRoles || []), ...(profile.accessTypes || [])].includes('superadmin') && ![profile.role, ...(profile.additionalRoles || []), ...(profile.accessTypes || [])].includes('admin')
   useEffect(() => {
     const query = new URLSearchParams({ page: String(page), limit: '25' })
     if (filters.q.trim()) query.set('q', filters.q.trim())
@@ -198,7 +198,7 @@ const UsersPage = () => {
     )
   }
 
-  const accessTypeOptions = [...new Set([...accessTypes, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]), ...editForm.accessTypes])].filter((type) => type !== 'superadmin').map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }))
+  const accessTypeOptions = [...new Set([...accessTypes, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]), ...editForm.accessTypes])].filter((type) => type !== 'superadmin' && (isSuperadmin || type !== 'admin')).map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }))
 
   return (
     <>

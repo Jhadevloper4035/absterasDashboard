@@ -15,7 +15,7 @@ const AuthLayout = ({ children }: ChildrenType) => {
         <Container>
           <Row className="justify-content-center">
             <Col xl={12}>
-              <Suspense fallback={<Preloader />}>{children}</Suspense>
+              <Suspense fallback={<Preloader fullScreen />}>{children}</Suspense>
             </Col>
           </Row>
         </Container>

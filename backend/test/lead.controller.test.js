@@ -50,7 +50,6 @@ test('created leads always enter the admin assignment queue', async () => {
         name: 'Acme',
         source: 'website',
         phone: '9876543210',
-        owner: 'sales-1',
         status: 'ASSIGNED',
       },
       user: { _id: 'sales-1', role: 'sales' },
@@ -81,6 +80,39 @@ test('lead creation requires mobile number', async () => {
   assert.equal(response.body.error.message, 'Mobile number is required');
 });
 
+test('salespeople can assign a lead when creating it', async () => {
+  User.findOne = async () => ({ _id: 'sales-2' });
+  let payload;
+  Lead.create = async (body) => {
+    payload = body;
+    return body;
+  };
+
+  const response = res();
+  await createLead({ user: { _id: 'sales-1', role: 'sales' }, body: { name: 'Acme', source: 'website', phone: '9876543210', owner: 'sales-2' } }, response);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(payload.owner, 'sales-2');
+  assert.equal(payload.status, 'ASSIGNED');
+});
+
+test('lead creation stores lead cost and trusted categorized documents', async () => {
+  const document = { key: 'uploads/document/boq.pdf', checksum: 'boq123', originalName: 'boq.pdf' };
+  document.attachmentToken = createAttachmentToken(document);
+  let payload;
+  Lead.create = async (body) => {
+    payload = body;
+    return body;
+  };
+
+  const response = res();
+  await createLead({ user: { _id: 'admin-1', role: 'admin' }, body: { name: 'Acme', source: 'website', phone: '9876543210', leadCost: '125000', documents: [{ ...document, type: 'boq' }, { key: 'uploads/document/fake.pdf', type: 'psf', attachmentToken: 'bad' }] } }, response);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(payload.leadCost, 125000);
+  assert.deepEqual(payload.documents, [{ type: 'boq', key: 'uploads/document/boq.pdf', contentType: undefined, originalName: 'boq.pdf', size: undefined, checksum: 'boq123' }]);
+});
+
 test('non-sales team roles cannot create leads directly', async () => {
   const response = res();
   await createLead(
@@ -98,7 +130,7 @@ test('non-sales team roles cannot create leads directly', async () => {
   assert.equal(response.statusCode, 403);
 });
 
-test('salespeople only list their assigned leads', async () => {
+test('salespeople can list all leads', async () => {
   let query;
   Lead.find = (filter) => {
     query = filter;
@@ -121,7 +153,7 @@ test('salespeople only list their assigned leads', async () => {
 
   await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: {} }, res());
 
-  assert.deepEqual(query, { owner: 'sales-1' });
+  assert.deepEqual(query, {});
 });
 
 test('lead list supports status and upcoming meeting filters', async () => {
@@ -219,9 +251,10 @@ test('lead detail populates meeting schedule history', async () => {
   assert.ok(populated.includes('meetingHistory.scheduledBy'));
 });
 
-test('salespeople cannot assign leads', async () => {
-  Lead.findOne = async () => ({ _id: 'lead-1', owner: 'sales-1' });
+test('salespeople can assign leads', async () => {
+  Lead.findOne = async () => ({ _id: 'lead-1', owner: 'sales-1', status: 'NEW', assignmentHistory: [], statusHistory: [], save: async () => {}, populate: async () => {} });
 
+  User.findOne = async () => ({ _id: 'sales-2', role: 'sales', status: 'active' });
   const response = res();
   await updateLead(
     {
@@ -232,7 +265,7 @@ test('salespeople cannot assign leads', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 403);
+  assert.equal(response.statusCode, 200);
 });
 
 test('only admins can delete leads', async () => {
@@ -284,7 +317,7 @@ test('admin and assigned salespeople can add lead notes', async () => {
     res(),
   );
 
-  assert.deepEqual(queries, [{ _id: 'lead-1' }, { _id: 'lead-1', owner: 'sales-1' }]);
+  assert.deepEqual(queries, [{ _id: 'lead-1' }, { _id: 'lead-1' }]);
   assert.deepEqual(
     lead.notes.map((note) => [note.text, note.createdBy]),
     [

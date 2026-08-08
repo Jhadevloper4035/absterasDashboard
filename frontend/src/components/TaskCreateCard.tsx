@@ -187,6 +187,8 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
             <Spinner className="spinner-border-sm me-2" tag="span" />
             <span className="text-muted">Loading team members...</span>
           </div>
+        ) : taskId && form.status === 'Done' ? (
+          <Alert variant="secondary" className="mb-0">This task is closed and cannot be edited.</Alert>
         ) : (
           <Form onSubmit={saveTask}>
             <Row className="g-3 align-items-start">

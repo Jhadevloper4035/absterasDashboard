@@ -1,5 +1,5 @@
 import LeadsPage from '../page'
 
-const WonLeadsPage = () => <LeadsPage title="Won Leads" apiPath="/leads?limit=50&status=WON" />
+const WonLeadsPage = () => <LeadsPage title="Closed Leads" apiPath="/leads?limit=50&closed=true" />
 
 export default WonLeadsPage

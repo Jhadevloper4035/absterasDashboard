@@ -43,7 +43,7 @@ const Challans = lazy(() => import('@/app/(admin)/challans/page'))
 const CreateChallan = lazy(() => import('@/app/(admin)/challans/create/page'))
 const ChallanDetail = lazy(() => import('@/app/(admin)/challans/[challanId]/page'))
 const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
-const WonLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
+const ClosedLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
 const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
 const CreateTask = lazy(() => import('@/app/(admin)/tasks/create/page'))
 const WorkTypes = lazy(() => import('@/app/(admin)/tasks/work-types/page'))
@@ -288,7 +288,7 @@ const generalRoutes: RoutesProps[] = [
     path: '/leads/create',
     name: 'Create Lead',
     element: <CreateLead />,
-    roles: ['superadmin', 'admin'],
+    roles: ['superadmin', 'admin', 'sales'],
   },
   {
     path: '/leads/pending',
@@ -308,9 +308,9 @@ const generalRoutes: RoutesProps[] = [
     element: <ScheduledLeads />,
   },
   {
-    path: '/leads/won',
-    name: 'Won Leads',
-    element: <WonLeads />,
+    path: '/leads/closed',
+    name: 'Closed Leads',
+    element: <ClosedLeads />,
   },
   {
     path: '/leads/:leadId',

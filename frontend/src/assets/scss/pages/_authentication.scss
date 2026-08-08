@@ -13,6 +13,11 @@
         }
 }
 
+.authentication-bg:has(.auth-sign-in-page) {
+    height: 100dvh;
+    overflow: hidden;
+}
+
 .auth-sign-in-page {
     min-height: 100dvh;
     overflow: hidden;

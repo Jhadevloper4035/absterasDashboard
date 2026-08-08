@@ -252,6 +252,9 @@ export async function updateTask(req, res) {
   if (!task) {
     return res.status(404).json({ error: { message: 'Task not found' } });
   }
+  if (task.status === 'Done') {
+    return res.status(409).json({ error: { message: 'Closed tasks cannot be edited' } });
+  }
 
   if (req.body.assignee !== undefined) {
     if (!canManageTasks(req.user)) {
@@ -286,6 +289,9 @@ export async function addTaskNote(req, res) {
   const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
   if (!task) {
     return res.status(404).json({ error: { message: 'Task not found' } });
+  }
+  if (task.status === 'Done') {
+    return res.status(409).json({ error: { message: 'Closed tasks cannot be edited' } });
   }
 
   if (!req.body.title?.trim() || !req.body.description?.trim()) {

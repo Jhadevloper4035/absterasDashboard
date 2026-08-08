@@ -3,6 +3,22 @@
 //
 
 // Forms
+
+.task-table-select {
+  min-width: 150px;
+  color: #313b5e;
+  font-weight: 500;
+
+  option {
+    color: #212529;
+    background: #fff;
+  }
+}
+
+[data-bs-theme='dark'] .task-table-select {
+  color: #f1f5f9;
+  background-color: #26313b;
+}
 label {
     font-weight: $font-weight-medium;
 }

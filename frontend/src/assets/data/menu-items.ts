@@ -56,7 +56,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'sales-create-lead',
     icon: 'iconamoon:send-duotone',
     label: 'Create Lead',
-    url: '/leads/sales-create',
+    url: '/leads/create',
     roles: ['sales'],
   },
   {
@@ -70,7 +70,7 @@ export const MENU_ITEMS: MenuItemType[] = [
         label: 'Create Lead',
         url: '/leads/create',
         parentKey: 'leads',
-        roles: ['superadmin', 'admin'],
+        roles: ['superadmin', 'admin', 'sales'],
       },
       {
         key: 'leads-list',
@@ -99,9 +99,9 @@ export const MENU_ITEMS: MenuItemType[] = [
         parentKey: 'leads',
       },
       {
-        key: 'leads-won',
-        label: 'Won Leads',
-        url: '/leads/won',
+        key: 'leads-closed',
+        label: 'Closed Leads',
+        url: '/leads/closed',
         parentKey: 'leads',
       },
     ],

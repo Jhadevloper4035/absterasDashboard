@@ -222,8 +222,9 @@ test('admin lists all user profiles', async () => {
   assert.deepEqual(response.body.data, []);
 });
 
-test('access types update a business user primary and secondary access', async () => {
+test('superadmin can assign the single admin access', async () => {
   User.findById = async () => ({ _id: 'sales-1', role: 'sales', additionalRoles: [] });
+  User.exists = async () => null;
   User.findByIdAndUpdate = async (id, update) => {
     assert.equal(id, 'sales-1');
     assert.deepEqual(update, { role: 'accounts', additionalRoles: ['sales', 'admin'], accessTypes: ['hr'] });
@@ -231,9 +232,34 @@ test('access types update a business user primary and secondary access', async (
   };
 
   const response = res();
-  await updateUser({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'sales-1' }, body: { accessTypes: ['accounts', 'sales', 'admin', 'hr'] } }, response);
+  await updateUser({ user: { _id: 'superadmin-1', role: 'superadmin' }, params: { id: 'sales-1' }, body: { accessTypes: ['accounts', 'sales', 'admin', 'hr'] } }, response);
 
   assert.equal(response.statusCode, 200);
+});
+
+test('admin cannot assign admin access', async () => {
+  User.findById = async () => ({ _id: 'sales-1', role: 'sales', additionalRoles: [] });
+
+  const response = res();
+  await updateUser({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'sales-1' }, body: { accessTypes: ['sales', 'admin'] } }, response);
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only Superadmin can assign or manage Admin access');
+});
+
+test('only superadmin can create the single admin access user', async () => {
+  const body = { name: 'Admin User', email: 'admin@example.com', phone: '9876543210', password: 'Secret123', role: 'sales', accessTypes: ['sales', 'admin'] };
+
+  const adminResponse = res();
+  await createUser({ user: { role: 'admin' }, body }, adminResponse);
+  assert.equal(adminResponse.statusCode, 403);
+  assert.equal(adminResponse.body.error.message, 'Only Superadmin can assign Admin access');
+
+  User.exists = async (filter) => filter.$or ? { _id: 'admin-1' } : null;
+  const superadminResponse = res();
+  await createUser({ user: { role: 'superadmin' }, body }, superadminResponse);
+  assert.equal(superadminResponse.statusCode, 400);
+  assert.equal(superadminResponse.body.error.message, 'Only one admin is allowed');
 });
 
 test('admin login history can include every user role', async () => {

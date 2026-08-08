@@ -39,7 +39,9 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const [deleteTarget, setDeleteTarget] = useState<LeadType>()
   const [meeting, setMeeting] = useState({ owner: '', startsAt: '', title: '', notes: '' })
   const [deleting, setDeleting] = useState(false)
-  const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
+  const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
+  const canAssign = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
+  const canDelete = roles.includes('superadmin') || roles.includes('admin')
 
   const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
   const visibleLeads = useMemo(() => (architectOnly ? leads.filter(isArchitectLead) : leads), [architectOnly, leads])
@@ -63,7 +65,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   }
 
   const deleteLead = async () => {
-    if (!token || !canAssign || !deleteTarget) return
+    if (!token || !canDelete || !deleteTarget) return
 
     setDeleting(true)
     try {
@@ -209,7 +211,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
                 View details
               </Button>
             </Link>
-            {canAssign && (
+            {canDelete && (
               <Button size="sm" variant="outline-danger" type="button" className="text-nowrap" onClick={() => setDeleteTarget(original)}>
                 Delete
               </Button>
@@ -238,7 +240,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         })
         const [leadRes, userRes] = await Promise.all([
           apiFetch<{ data: LeadType[]; meta?: PageMeta }>(`${path}?${query}`, { token }),
-          canAssign ? apiFetch<{ data: UserType[] }>('/users?limit=100&role=sales&status=active', { token }) : Promise.resolve({ data: [] }),
+          canAssign ? apiFetch<{ data: UserType[] }>('/leads/assignees', { token }) : Promise.resolve({ data: [] }),
         ])
         setLeads(leadRes.data)
         setMeta(leadRes.meta || { page, limit: leadRes.data.length, total: leadRes.data.length, totalPages: 1 })
@@ -263,7 +265,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
       <Card>
         <CardBody>
           <div className="d-flex align-items-center justify-content-between mb-3">
-            <h4 className="card-title mb-0">{title || (architectOnly ? 'Architect Leads' : canAssign ? 'Lead Assignment' : 'My Leads')}</h4>
+            <h4 className="card-title mb-0">{title || (architectOnly ? 'Architect Leads' : 'All Leads')}</h4>
             <Badge bg="light" text="dark">
               {loading ? 'Loading' : `${meta.total} leads`}
             </Badge>

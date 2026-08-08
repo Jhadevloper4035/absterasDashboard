@@ -8,11 +8,16 @@
   <title>Absteras Company CRM</title>
 
   <style>
+    html, body {
+      margin: 0;
+      background: #282f36;
+    }
+
     #splash-screen {
       position: fixed;
       top: 50%;
       left: 50%;
-      background: white;
+      background: #282f36;
       display: flex;
       height: 100%;
       width: 100%;
@@ -22,6 +27,16 @@
       z-index: 9999;
       opacity: 1;
       overflow: hidden;
+    }
+
+    #splash-screen::after {
+      content: '';
+      width: 36px;
+      height: 36px;
+      border: 4px solid rgba(42, 133, 255, 0.25);
+      border-top-color: #2a85ff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
     }
 
     #splash-screen.remove {
@@ -36,17 +51,17 @@
       }
     }
 
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
   </style>
 
 </head>
 
 <body>
   <div id="root"></div>
-  <div id="splash-screen">
-    <strong style="font: 700 24px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #202939;">
-      Absteras Company CRM
-    </strong>
-  </div>
+  <div id="splash-screen" aria-label="Loading"></div>
   <script type="module" src="/src/main"></script>
   <script>
     const rootEl = document.querySelector('#root')

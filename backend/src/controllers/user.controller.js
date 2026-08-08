@@ -70,6 +70,17 @@ function adminCanManage(actor, targetUser) {
   return userRoles(actor).includes(SUPERADMIN_ROLE) || !userRoles(targetUser).includes(SUPERADMIN_ROLE);
 }
 
+function hasAdminAccess(user) {
+  return user?.role === 'admin' || user?.additionalRoles?.includes('admin') || user?.accessTypes?.includes('admin');
+}
+
+async function adminAccessLimitError(user, currentUserId) {
+  if (!hasAdminAccess(user)) return '';
+  const filter = { $or: [{ role: 'admin' }, { additionalRoles: 'admin' }, { accessTypes: 'admin' }] };
+  if (currentUserId) filter._id = { $ne: currentUserId };
+  return (await User.exists(filter)) ? 'Only one admin is allowed' : '';
+}
+
 function escapeRegex(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -92,11 +103,6 @@ export async function createUser(req, res) {
     return res.status(403).json({ error: { message: 'Only initial setup can create the Superadmin account' } });
   }
 
-  const roleError = await roleLimitError(req.body.role);
-  if (roleError) {
-    return res.status(400).json({ error: { message: roleError } });
-  }
-
   const requestedAccessTypes = cleanAccessTypes(req.body.accessTypes) || [];
   const employment = employmentDetails(req.body);
   if (employment === undefined) return res.status(400).json({ error: { message: 'Employee type, department, designation and joining date are required' } });
@@ -105,6 +111,14 @@ export async function createUser(req, res) {
 
   const userFields = allowedUserUpdate(stripPassword(req.body));
   userFields.additionalRoles = cleanAdditionalRoles(userFields.additionalRoles, userFields.role);
+  if (hasAdminAccess(userFields) && !userRoles(req.user).includes(SUPERADMIN_ROLE)) {
+    return res.status(403).json({ error: { message: 'Only Superadmin can assign Admin access' } });
+  }
+  const roleError = await roleLimitError(userFields.role);
+  const adminError = await adminAccessLimitError(userFields);
+  if (roleError || adminError) {
+    return res.status(400).json({ error: { message: roleError || adminError } });
+  }
   userFields.accessTypes = requestedAccessTypes.filter((type) => !SYSTEM_ACCESS_TYPES.includes(type));
   const user = await User.create({
     ...userFields,
@@ -303,6 +317,15 @@ export async function updateUser(req, res) {
       }
     }
     update.accessTypes = accessTypes.filter((type) => !SYSTEM_ACCESS_TYPES.includes(type));
+  }
+
+  const nextUser = { ...currentUser, ...update };
+  if ((hasAdminAccess(currentUser) || hasAdminAccess(nextUser)) && !actorIsSuperadmin) {
+    return res.status(403).json({ error: { message: 'Only Superadmin can assign or manage Admin access' } });
+  }
+  if (!hasAdminAccess(currentUser)) {
+    const adminError = await adminAccessLimitError(nextUser, currentUser._id);
+    if (adminError) return res.status(400).json({ error: { message: adminError } });
   }
 
   if (update.phone !== undefined && !String(update.phone).trim()) {

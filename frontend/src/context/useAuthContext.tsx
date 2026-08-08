@@ -1,7 +1,7 @@
 import type { AuthSessionType, UserType } from '@/types/auth'
 import { useAuthStore } from '@/store/authStore'
 import { createContext, useContext, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { ChildrenType } from '../types/component-props'
 
 const ACTIVE_TAB_KEY = 'sales_crm_active_tab'
@@ -37,6 +37,7 @@ export function useAuthContext() {
 
 export function AuthProvider({ children }: ChildrenType) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const loading = useAuthStore((state) => state.loading)
@@ -46,6 +47,10 @@ export function AuthProvider({ children }: ChildrenType) {
   const clearSession = useAuthStore((state) => state.clearSession)
 
   useEffect(() => {
+    if (pathname.startsWith('/auth/')) {
+      if (!token) clearSession()
+      return
+    }
     if (token || sessionStorage.getItem(DUPLICATE_TAB_KEY) === 'true') return
 
     const activeTab = localStorage.getItem(ACTIVE_TAB_KEY)
@@ -57,7 +62,7 @@ export function AuthProvider({ children }: ChildrenType) {
     }
 
     refresh().catch(() => {})
-  }, [clearSession, refresh, token])
+  }, [clearSession, pathname, refresh, token])
 
   useEffect(() => {
     if (!token) return

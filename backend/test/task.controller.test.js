@@ -301,6 +301,21 @@ test('assigned user only lists assigned tasks and can mark done', async () => {
   assert.ok(task.completedAt instanceof Date);
 });
 
+test('closed tasks cannot be updated or receive notes', async () => {
+  const task = { _id: 'task-1', status: 'Done' };
+  Task.findOne = async () => task;
+
+  const updateResponse = res();
+  await updateTask({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { title: 'Changed' } }, updateResponse);
+  assert.equal(updateResponse.statusCode, 409);
+  assert.equal(updateResponse.body.error.message, 'Closed tasks cannot be edited');
+
+  const noteResponse = res();
+  await addTaskNote({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { title: 'Note', description: 'Should fail' } }, noteResponse);
+  assert.equal(noteResponse.statusCode, 409);
+  assert.equal(noteResponse.body.error.message, 'Closed tasks cannot be edited');
+});
+
 test('deadline filter lists only open tasks before today', async () => {
   let query;
   Task.find = (filter) => {
