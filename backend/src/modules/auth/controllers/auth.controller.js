@@ -3,6 +3,7 @@ import { LoginHistory } from '../models/login-history.model.js';
 import { requestIp } from '../../../helpers/request-ip.js';
 import { verifyPassword } from '../services/password.service.js';
 import { createSession, revokeActiveUserSessions, rotateSession, revokeSession } from '../services/auth-session.service.js';
+import { clearFailedLoginAttempts, LOGIN_ATTEMPT_WINDOW_SECONDS, MAX_LOGIN_ATTEMPTS, recordFailedLoginAttempt } from '../services/login-attempt.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
 
 const REFRESH_COOKIE = 'sales_crm_refresh';
@@ -90,13 +91,32 @@ export async function login(req, res) {
 
   const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
 
+  if (user?.loginLockedAt && user.loginLockedAt > new Date()) {
+    logAuth('auth.login.locked', req, { userId: String(user._id) });
+    return res.status(429).json({ error: { message: 'Too many login attempts. Try again later.' } });
+  }
+  if (user?.loginLockedAt) {
+    await User.updateOne({ _id: user._id }, { $set: { loginLockedAt: null } });
+    user.loginLockedAt = null;
+  }
+
   if (!user || user.status !== 'active' || !(await verifyPassword(password, user.passwordHash))) {
+    let loginLockedAt;
+    if (user?.status === 'active') {
+      const failedLoginAttempts = await recordFailedLoginAttempt(user._id);
+      loginLockedAt = failedLoginAttempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOGIN_ATTEMPT_WINDOW_SECONDS * 1000) : null;
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { ...(loginLockedAt && { loginLockedAt }) } },
+      );
+    }
     logAuth('auth.login.failed', req, { email: normalizedEmail });
-    return res.status(401).json({ error: { message: 'Invalid email or password' } });
+    return res.status(loginLockedAt ? 429 : 401).json({ error: { message: loginLockedAt ? 'Too many login attempts. Try again later.' : 'Invalid email or password' } });
   }
 
   const lastLoginAt = new Date();
-  await User.updateOne({ _id: user._id }, { $set: { lastLoginAt } });
+  await User.updateOne({ _id: user._id }, { $set: { lastLoginAt, failedLoginAttempts: 0, loginLockedAt: null } });
+  await clearFailedLoginAttempts(user._id);
   user.lastLoginAt = lastLoginAt;
 
   await revokeActiveUserSessions(user._id);

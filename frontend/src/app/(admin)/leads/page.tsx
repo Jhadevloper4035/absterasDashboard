@@ -14,6 +14,7 @@ import { toast } from 'react-toastify'
 
 const ownerId = (owner: LeadType['owner']) => (typeof owner === 'string' ? owner : owner?._id || '')
 const ownerName = (owner: LeadType['owner']) => (typeof owner === 'object' ? owner.name : '')
+const creatorName = (creator: LeadType['createdBy']) => (typeof creator === 'object' ? creator.name : '')
 
 type LeadsPageProps = {
   architectOnly?: boolean
@@ -174,7 +175,7 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
         ),
       },
       {
-        header: canAssign ? 'Assign to' : 'Owner',
+        header: 'Assigned To',
         cell: ({ row: { original } }) =>
           canAssign ? (
             <div style={{ minWidth: 210 }}>
@@ -190,6 +191,10 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
           ) : (
             ownerName(original.owner) || user?.name || '-'
           ),
+      },
+      {
+        header: 'Created By',
+        cell: ({ row: { original } }) => creatorName(original.createdBy) || '-',
       },
       {
         header: 'Created',

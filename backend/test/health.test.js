@@ -55,7 +55,8 @@ test('health reports degraded before MongoDB connects', async () => {
 
     assert.equal(response.statusCode, 503);
     assert.equal(body.status, 'degraded');
-    assert.equal(body.database.state, 'disconnected');
+    assert.equal(body.database, undefined);
+    assert.equal(body.email, undefined);
   } finally {
     await mongoose.disconnect();
   }

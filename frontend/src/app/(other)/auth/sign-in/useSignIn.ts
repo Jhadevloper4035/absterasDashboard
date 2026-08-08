@@ -13,6 +13,7 @@ const useSignIn = () => {
   const [searchParams] = useSearchParams()
   const loginUser = useAuthStore((state) => state.login)
   const loading = useAuthStore((state) => state.loading)
+  const error = useAuthStore((state) => state.error)
 
   const { showNotification } = useNotificationContext()
 
@@ -47,7 +48,7 @@ const useSignIn = () => {
     }
   })
 
-  return { loading, login, control }
+  return { loading, error, login, control }
 }
 
 export default useSignIn

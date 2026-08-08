@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "worker": "node src/worker.js",
     "db:seed": "node src/seed.js",
     "hr:migrate-users": "node scripts/migrate-users-to-employees.mjs",
     "hr:seed-employees": "node scripts/seed-dummy-employees.mjs",
@@ -26,10 +27,12 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
     "@aws-sdk/s3-request-presigner": "^3.864.0",
+    "bullmq": "^6.0.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.2.0",
     "helmet": "^8.0.0",
+    "ioredis": "^6.0.0",
     "mongoose": "^9.0.1",
     "multer": "^2.0.2",
     "nodemailer": "^9.0.3",

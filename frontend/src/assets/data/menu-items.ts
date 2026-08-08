@@ -53,13 +53,6 @@ export const MENU_ITEMS: MenuItemType[] = [
     roles: ['superadmin'],
   },
   {
-    key: 'sales-create-lead',
-    icon: 'iconamoon:send-duotone',
-    label: 'Create Lead',
-    url: '/leads/create',
-    roles: ['sales'],
-  },
-  {
     key: 'leads',
     icon: 'iconamoon:send-duotone',
     label: 'Lead Management',
@@ -77,6 +70,14 @@ export const MENU_ITEMS: MenuItemType[] = [
         label: 'All Leads',
         url: '/leads',
         parentKey: 'leads',
+        roles: adminRoles,
+      },
+      {
+        key: 'leads-mine',
+        label: 'My Leads',
+        url: '/leads/mine',
+        parentKey: 'leads',
+        roles: ['sales'],
       },
       {
         key: 'leads-pending',
@@ -94,7 +95,7 @@ export const MENU_ITEMS: MenuItemType[] = [
       },
       {
         key: 'leads-scheduled',
-        label: 'Meeting Scheduled Leads',
+        label: 'Meeting Scheduled',
         url: '/leads/scheduled',
         parentKey: 'leads',
       },
@@ -117,7 +118,7 @@ export const MENU_ITEMS: MenuItemType[] = [
         label: 'Create Task',
         url: '/tasks/create',
         parentKey: 'tasks',
-        roles: ['superadmin', 'admin'],
+        roles: teamRoles,
       },
       {
         key: 'tasks-all',
@@ -127,9 +128,16 @@ export const MENU_ITEMS: MenuItemType[] = [
         roles: ['superadmin', 'admin'],
       },
       {
-        key: 'tasks-mine',
-        label: 'My Tasks',
-        url: '/tasks/all',
+        key: 'tasks-assigned-by-me',
+        label: 'Tasks Assigned By Me',
+        url: '/tasks/assigned-by-me',
+        parentKey: 'tasks',
+        roles: teamRoles,
+      },
+      {
+        key: 'tasks-assigned-to-me',
+        label: 'Tasks Assigned To Me',
+        url: '/tasks/assigned-to-me',
         parentKey: 'tasks',
         roles: teamRoles,
       },

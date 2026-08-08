@@ -62,6 +62,15 @@
 
         .scrollbar {
             height: calc(100% - $topbar-height);
+            overflow-x: hidden;
+
+            .simplebar-content-wrapper {
+                overflow-x: hidden !important;
+            }
+
+            .simplebar-track.simplebar-horizontal {
+                display: none;
+            }
         }
 
         .menu-title {

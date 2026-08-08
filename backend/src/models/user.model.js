@@ -59,6 +59,12 @@ const userSchema = new mongoose.Schema(
       enum: USER_STATUSES,
       default: 'active',
     },
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    loginLockedAt: Date,
     manager: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

@@ -36,7 +36,7 @@ const AppRouter = (props: RouteProps) => {
             ) : !route.roles || accessRoles(user).some((role) => route.roles?.includes(role)) ? (
               <AdminLayout {...props}>{route.element}</AdminLayout>
             ) : (
-              <Navigate to={dashboardPath(accessRoles(user))} replace />
+              <Navigate to="/access-denied" replace />
             )
           }
         />

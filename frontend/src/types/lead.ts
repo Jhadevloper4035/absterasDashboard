@@ -57,6 +57,7 @@ export type LeadType = {
   documents?: LeadDocument[]
   status: string
   owner?: string | LeadOwner
+  createdBy?: string | LeadOwner
   assignmentException?: boolean
   createdAt?: string
   nextMeeting?: LeadMeeting

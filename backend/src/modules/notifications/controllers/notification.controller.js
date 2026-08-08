@@ -1,6 +1,7 @@
 import { Notification } from '../models/notification.model.js';
 import { Lead } from '../../leads/models/lead.model.js';
 import { Task } from '../../tasks/models/task.model.js';
+import { cachedJson, invalidateCache } from '../../../services/redis-cache.service.js';
 
 function senderFrom(user) {
   if (!user) return null;
@@ -87,16 +88,19 @@ async function withSenderMetadata(notifications) {
 }
 
 export async function listUnreadNotifications(req, res) {
-  const notifications = await Notification.find({
-    user: req.user._id,
-    channel: 'in-app',
-    status: { $ne: 'read' },
-  })
-    .sort({ createdAt: 1 })
-    .limit(20)
-    .lean();
+  const data = await cachedJson('unread-notifications', String(req.user._id), async () => {
+    const notifications = await Notification.find({
+      user: req.user._id,
+      channel: 'in-app',
+      status: { $ne: 'read' },
+    })
+      .sort({ createdAt: 1 })
+      .limit(20)
+      .lean();
+    return { data: await withSenderMetadata(notifications) };
+  }, req.query.fresh === 'true');
 
-  return res.json({ data: await withSenderMetadata(notifications) });
+  return res.json(data);
 }
 
 export async function markNotificationsRead(req, res) {
@@ -107,6 +111,8 @@ export async function markNotificationsRead(req, res) {
     { _id: { $in: ids }, user: req.user._id },
     { status: 'read', readAt: new Date() },
   );
+
+  await invalidateCache('unread-notifications');
 
   return res.json({ data: { modifiedCount: result.modifiedCount } });
 }

@@ -103,12 +103,14 @@ const TODO = () => {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const isTodoPage = pathname.includes('/apps/todo')
-  const canAssign = !isTodoPage && (user?.role === 'superadmin' || user?.role === 'admin')
+  const canAssign = !isTodoPage && ['sales', 'operations', 'accounts', 'designers'].includes(user?.role || '')
   const isPendingPage = pathname.includes('/tasks/pending')
   const isExceededDeadlinePage = pathname.includes('/tasks/exceeded-deadline')
+  const isAssignedByMePage = pathname.includes('/tasks/assigned-by-me')
+  const isAssignedToMePage = pathname.includes('/tasks/assigned-to-me')
   const isCreatePage = pathname.includes('/tasks/create')
   const itemName = isTodoPage ? 'Todo' : 'Task'
-  const pageTitle = isTodoPage ? 'Todo' : isCreatePage ? 'Create Task' : isExceededDeadlinePage ? 'Exceeded Deadline Tasks' : isPendingPage ? 'Pending Tasks' : canAssign ? 'All Tasks' : 'My Tasks'
+  const pageTitle = isTodoPage ? 'Todo' : isCreatePage ? 'Create Task' : isAssignedByMePage ? 'Tasks Assigned By Me' : isAssignedToMePage ? 'Tasks Assigned To Me' : isExceededDeadlinePage ? 'Exceeded Deadline Tasks' : isPendingPage ? 'Pending Tasks' : 'All Tasks'
   const apiPath = isTodoPage ? '/todos' : '/tasks'
   const resetForm = () => {
     setForm({ ...emptyForm, status: isTodoPage ? 'Pending' : 'To Do' })
@@ -136,6 +138,8 @@ const TODO = () => {
       const query = new URLSearchParams({ page: String(page), limit: '25' })
       if (!isTodoPage && isExceededDeadlinePage) query.set('deadline', 'exceeded')
       if (!isTodoPage && isPendingPage) query.set('status', 'To Do')
+      if (!isTodoPage && isAssignedByMePage) query.set('assignedByMe', 'true')
+      if (!isTodoPage && isAssignedToMePage) query.set('assignedToMe', 'true')
       if (search.trim()) query.set('q', search.trim())
       if (!isTodoPage && assigneeFilter) query.set('assignee', assigneeFilter)
       if (!isTodoPage && groupFilter) query.set('group', groupFilter)
@@ -162,7 +166,7 @@ const TODO = () => {
 
   useEffect(() => {
     load()
-  }, [apiPath, assigneeFilter, canAssign, fromDateFilter, groupFilter, isExceededDeadlinePage, isPendingPage, isTodoPage, itemName, page, priorityFilter, search, statusFilter, toDateFilter, token, workTypeFilter])
+  }, [apiPath, assigneeFilter, canAssign, fromDateFilter, groupFilter, isAssignedByMePage, isAssignedToMePage, isExceededDeadlinePage, isPendingPage, isTodoPage, itemName, page, priorityFilter, search, statusFilter, toDateFilter, token, workTypeFilter])
 
   useEffect(() => {
     setPage(1)
@@ -600,14 +604,15 @@ const TODO = () => {
           </div>
         </CardBody>
         <div className="table-responsive table-centered">
-          <Table hover className="mb-0 align-middle" style={{ minWidth: 1680 }}>
+          <Table hover className="mb-0 align-middle" style={{ minWidth: 1850 }}>
             <thead className="bg-light bg-opacity-50">
               <tr>
                 <th className="border-0 py-2 text-center" style={{ width: 48 }}>Done</th>
                 {!isTodoPage && <th className="border-0 py-2" style={{ width: 120 }}>Ticket</th>}
                 <th className="border-0 py-2" style={{ minWidth: 360 }}>{itemName}</th>
                 {!isTodoPage && <th className="border-0 py-2" style={{ width: 150 }}>Work Type</th>}
-                <th className="border-0 py-2" style={{ width: 170 }}>Assignee</th>
+                <th className="border-0 py-2" style={{ width: 170 }}>Assigned To</th>
+                {!isTodoPage && <th className="border-0 py-2" style={{ width: 170 }}>Created By</th>}
                 <th className="border-0 py-2" style={{ width: 180 }}>Created on</th>
                 <th className="border-0 py-2" style={{ width: 160 }}>Deadline</th>
                 <th className="border-0 py-2" style={{ width: 130 }}>Status</th>
@@ -620,7 +625,7 @@ const TODO = () => {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={isTodoPage ? 10 : 12} className="text-center py-5">
+                  <td colSpan={isTodoPage ? 10 : 13} className="text-center py-5">
                     <Spinner className="spinner-border-sm me-2" tag="span" />
                     <span className="text-muted">Loading {itemName.toLowerCase()}s...</span>
                   </td>
@@ -649,8 +654,8 @@ const TODO = () => {
                     </td>
                     {!isTodoPage && <td>{todo.projectEpic || '-'}</td>}
                     <td>
-                      {canAssign && !isTodoPage ? (
-                        <Form.Select className="task-table-select" size="sm" disabled={todo.status === 'Done'} value={personId(todo.assignee) || ''} onChange={(event) => reassignTask(todo, event.target.value)}>
+                      {canAssign && !isTodoPage && todo.status !== 'Done' ? (
+                        <Form.Select className="task-table-select" size="sm" value={personId(todo.assignee) || ''} onChange={(event) => reassignTask(todo, event.target.value)}>
                           {users.map((person) => (
                             <option key={person._id} value={person._id}>
                               {person.name}
@@ -661,14 +666,15 @@ const TODO = () => {
                         personName(todo.assignee || todo.assignedTo) || user?.name || '-'
                       )}
                     </td>
+                    {!isTodoPage && <td>{personName(todo.createdBy) || '-'}</td>}
                     <td>{todo.createdAt ? new Date(todo.createdAt).toLocaleString() : '-'}</td>
                     <td>
                       {todo.dueDate ? new Date(todo.dueDate).toLocaleDateString() : '-'}
                       {isOverdue(todo) && <Badge bg="danger" className="ms-2">Exceeded Deadline</Badge>}
                     </td>
                     <td>
-                      {!isTodoPage ? (
-                        <Form.Select className="task-table-select" size="sm" disabled={todo.status === 'Done'} value={todo.status} onChange={(event) => updateStatus(todo, event.target.value as TaskStatus)}>
+                      {!isTodoPage && todo.status !== 'Done' ? (
+                        <Form.Select className="task-table-select" size="sm" value={todo.status} onChange={(event) => updateStatus(todo, event.target.value as TaskStatus)}>
                           {taskStatuses.map((status) => (
                             <option key={status}>{status}</option>
                           ))}
@@ -676,11 +682,11 @@ const TODO = () => {
                       ) : (
                         <Badge bg={statusVariant(todo.status)}>{todo.status}</Badge>
                       )}
-                      {todo.completedAt && <span className="text-muted fs-13 ms-2">{new Date(todo.completedAt).toLocaleDateString()}</span>}
+                      {!isTodoPage && todo.status === 'Done' && todo.completedAt && <div className="text-muted fs-13 mt-1">Completed: {new Date(todo.completedAt).toLocaleString()}</div>}
                     </td>
                     <td className={`text-${priorityColor(todo.priority)}`}>
-                      {!isTodoPage ? (
-                        <Form.Select className="task-table-select" size="sm" disabled={todo.status === 'Done'} value={todo.priority} onChange={(event) => updatePriority(todo, event.target.value as TodoPriority)}>
+                      {!isTodoPage && todo.status !== 'Done' ? (
+                        <Form.Select className="task-table-select" size="sm" value={todo.priority} onChange={(event) => updatePriority(todo, event.target.value as TodoPriority)}>
                           <option>Low</option>
                           <option>Medium</option>
                           <option>High</option>
@@ -712,7 +718,7 @@ const TODO = () => {
                       )}
                     </td>
                     <td className="text-center">
-                      {isTodoPage || canAssign ? (
+                      {isTodoPage || (canAssign && personId(todo.createdBy) === user?._id) ? (
                         <Button variant="soft-danger" size="sm" type="button" onClick={() => setDeleteTarget(todo)}>
                           <IconifyIcon icon="bx:trash" className="fs-16" />
                         </Button>

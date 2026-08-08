@@ -1,6 +1,7 @@
 import { AuthSession } from '../models/auth-session.model.js';
 import { BlockedToken } from '../models/blocked-token.model.js';
 import { requestIp } from '../../../helpers/request-ip.js';
+import { redisCommand } from '../../../services/redis-cache.service.js';
 import { ACCESS_TOKEN_TTL_SECONDS, createAccessToken, createRefreshToken, hashRefreshToken } from './token.service.js';
 
 export function createAccessTokenPair(user) {
@@ -62,6 +63,8 @@ export async function createSession(user, req) {
 export async function blockAccessToken(claims) {
   if (!claims?.jti || !claims.exp) return;
 
+  const expiresIn = Math.max(1, claims.exp - Math.floor(Date.now() / 1000));
+
   await BlockedToken.updateOne(
     { jti: claims.jti },
     {
@@ -73,10 +76,18 @@ export async function blockAccessToken(claims) {
     },
     { upsert: true },
   );
+  await redisCommand((connection) => connection.set(`auth:blocked-token:${claims.jti}`, '1', 'EX', expiresIn));
 }
 
 export async function isAccessTokenBlocked(claims) {
-  return Boolean(claims?.jti && (await BlockedToken.exists({ jti: claims.jti })));
+  if (!claims?.jti) return false;
+  const expiresIn = Math.max(1, Number(claims.exp || 0) - Math.floor(Date.now() / 1000));
+  const cached = await redisCommand((connection) => connection.get(`auth:blocked-token:${claims.jti}`));
+  if (cached !== undefined) return cached === '1';
+
+  const blocked = Boolean(await BlockedToken.exists({ jti: claims.jti }));
+  await redisCommand((connection) => connection.set(`auth:blocked-token:${claims.jti}`, blocked ? '1' : '0', 'EX', expiresIn));
+  return blocked;
 }
 
 export async function rotateSession(refreshToken, req) {
@@ -95,7 +106,7 @@ export async function rotateSession(refreshToken, req) {
   if (!session) {
     const reused = await AuthSession.findOne({ tokenHash }).populate('user');
     if (reused?.revokedAt && reused.user?._id) {
-      await AuthSession.updateMany({ user: reused.user._id, revokedAt: null }, { revokedAt: new Date() });
+      await revokeActiveUserSessions(reused.user._id);
     }
     return null;
   }

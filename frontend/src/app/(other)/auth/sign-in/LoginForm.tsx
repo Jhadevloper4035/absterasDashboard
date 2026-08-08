@@ -2,7 +2,7 @@ import * as yup from 'yup'
 
 import PasswordFormInput from '@/components/form/PasswordFormInput'
 import TextFormInput from '@/components/form/TextFormInput'
-import { Button } from 'react-bootstrap'
+import { Alert, Button } from 'react-bootstrap'
 import useSignIn from './useSignIn'
 
 export const loginSchema = yup.object({
@@ -11,10 +11,11 @@ export const loginSchema = yup.object({
 })
 
 const LoginForm = () => {
-  const { loading, login, control } = useSignIn()
+  const { loading, error, login, control } = useSignIn()
 
   return (
     <form onSubmit={login} className="authentication-form">
+      {error && <Alert variant="danger" className="py-2">{error}</Alert>}
       <TextFormInput control={control} name="email" containerClassName="mb-3" label="Email" id="email-id" placeholder="Enter your email" />
 
       <PasswordFormInput

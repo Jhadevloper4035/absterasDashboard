@@ -70,6 +70,7 @@ const LeadDetailPage = () => {
   const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
   const canAssign = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
   const canDelete = roles.includes('superadmin') || roles.includes('admin')
+  const canClose = typeof lead?.owner === 'string' ? lead.owner === user?._id : lead?.owner?._id === user?._id
   const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
 
   useEffect(() => {
@@ -293,6 +294,12 @@ const LeadDetailPage = () => {
                 </Col>
                 <Col md={6}>
                   <div className="border rounded p-3 h-100">
+                    <div className="text-muted fs-13">Created by</div>
+                    <div className="fw-medium text-break">{personName(lead.createdBy) || '-'}</div>
+                  </div>
+                </Col>
+                <Col md={6}>
+                  <div className="border rounded p-3 h-100">
                     <div className="text-muted fs-13">Created</div>
                     <div className="fw-medium">{lead.createdAt ? new Date(lead.createdAt).toLocaleString() : '-'}</div>
                   </div>
@@ -395,6 +402,14 @@ const LeadDetailPage = () => {
               )}
             </CardBody>
           </Card>
+          {canClose && !['WON', 'LOST', 'ON_HOLD'].includes(lead.status) && (
+            <Card className="mb-4">
+              <CardBody>
+                <h4 className="card-title mb-2">Close lead</h4>
+                <Button size="sm" variant="success" onClick={() => updateLead({ status: 'WON' })}>Mark as Won</Button>
+              </CardBody>
+            </Card>
+          )}
           <Card className="mb-4">
             <CardBody>
               <h4 className="card-title mb-3">Meeting schedule</h4>

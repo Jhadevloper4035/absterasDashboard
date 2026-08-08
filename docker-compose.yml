@@ -5,6 +5,9 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  redis:
+    image: redis:7-alpine
+
   backend:
     build:
       context: ./backend
@@ -22,6 +25,22 @@ services:
       - backend_node_modules:/app/node_modules
     depends_on:
       - mailpit
+      - redis
+
+  email-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    command: npm run worker
+    env_file:
+      - ./.env.development
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+    depends_on:
+      - mailpit
+      - redis
 
   frontend:
     build:

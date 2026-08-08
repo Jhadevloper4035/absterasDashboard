@@ -59,6 +59,7 @@ test('created leads always enter the admin assignment queue', async () => {
 
   assert.equal(response.statusCode, 201);
   assert.equal(payload.owner, undefined);
+  assert.equal(payload.createdBy, 'sales-1');
   assert.equal(payload.status, 'NEW');
   assert.equal(payload.assignmentException, true);
 });
@@ -130,7 +131,7 @@ test('non-sales team roles cannot create leads directly', async () => {
   assert.equal(response.statusCode, 403);
 });
 
-test('salespeople can list all leads', async () => {
+test('salespeople can list only their assigned leads', async () => {
   let query;
   Lead.find = (filter) => {
     query = filter;
@@ -153,7 +154,33 @@ test('salespeople can list all leads', async () => {
 
   await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: {} }, res());
 
-  assert.deepEqual(query, {});
+  assert.deepEqual(query, { owner: 'sales-1' });
+});
+
+test('closed leads filter can be limited to the salesperson who closed them', async () => {
+  let query;
+  Lead.find = (filter) => {
+    query = filter;
+    return { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return Promise.resolve([]); } };
+  };
+  Lead.countDocuments = async () => 0;
+
+  await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: { closed: 'true', closedByMe: 'true' } }, res());
+
+  assert.deepEqual(query, { owner: 'sales-1', status: { $in: ['WON', 'LOST', 'ON_HOLD'] }, statusHistory: { $elemMatch: { actor: 'sales-1', to: { $in: ['WON', 'LOST', 'ON_HOLD'] } } } });
+});
+
+test('my leads filter always uses the signed-in salesperson', async () => {
+  let query;
+  Lead.find = (filter) => {
+    query = filter;
+    return { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return Promise.resolve([]); } };
+  };
+  Lead.countDocuments = async () => 0;
+
+  await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: { mine: 'true', owner: 'sales-2' } }, res());
+
+  assert.deepEqual(query, { owner: 'sales-1' });
 });
 
 test('lead list supports status and upcoming meeting filters', async () => {
@@ -268,6 +295,31 @@ test('salespeople can assign leads', async () => {
   assert.equal(response.statusCode, 200);
 });
 
+test('assigned salesperson closing a lead records the closure', async () => {
+  const lead = {
+    _id: 'lead-1',
+    name: 'Acme',
+    owner: 'sales-1',
+    createdBy: 'admin-1',
+    status: 'NEGOTIATION',
+    assignmentHistory: [{ newOwner: 'sales-1', actor: 'admin-1' }],
+    statusHistory: [],
+    notes: [],
+    meetingHistory: [],
+    save: async () => {},
+    populate: async () => {},
+  };
+  Lead.findOne = async () => lead;
+
+  const response = res();
+  await updateLead({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'lead-1' }, body: { status: 'WON' } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(lead.status, 'WON');
+  assert.ok(lead.closedAt instanceof Date);
+  assert.deepEqual(lead.statusHistory, [{ from: 'NEGOTIATION', to: 'WON', reason: undefined, actor: 'sales-1' }]);
+});
+
 test('only admins can delete leads', async () => {
   let deletedFilter;
   Lead.findOneAndDelete = async (filter) => {
@@ -317,7 +369,7 @@ test('admin and assigned salespeople can add lead notes', async () => {
     res(),
   );
 
-  assert.deepEqual(queries, [{ _id: 'lead-1' }, { _id: 'lead-1' }]);
+  assert.deepEqual(queries, [{ _id: 'lead-1' }, { _id: 'lead-1', owner: 'sales-1' }]);
   assert.deepEqual(
     lead.notes.map((note) => [note.text, note.createdBy]),
     [
@@ -516,7 +568,6 @@ test('lead update ignores append-only history and system fields', async () => {
         name: 'Updated',
         email: 'new@example.com',
         phone: '+1 555 1111',
-        status: 'WON',
         statusHistory: [{ to: 'WON', actor: 'attacker' }],
         meetingHistory: [],
         assignmentHistory: [],

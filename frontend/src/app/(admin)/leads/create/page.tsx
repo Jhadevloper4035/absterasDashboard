@@ -412,16 +412,6 @@ const CreateLeadPage = () => {
                   <Form.Label>Lead source</Form.Label>
                   <Form.Control required value={leadForm.source} onChange={(event) => setLeadForm({ ...leadForm, source: event.target.value })} placeholder="Expo, website, call..." />
                 </Form.Group>
-                <Col xs={12}>
-                  <Form.Label>Lead documents</Form.Label>
-                  <div className="d-flex gap-2 mb-2" style={{ maxWidth: 260 }}>
-                    <Form.Select value={documentType} onChange={(event) => setDocumentType(event.target.value as LeadDocument['type'])}>
-                      {documentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                    </Form.Select>
-                  </div>
-                  <DropzoneFormInput label="" text="Upload files" showPreview={false} helpText="Upload up to 5 files at a time. PDF, images, CSV, or TXT." onFileUpload={uploadDocuments} />
-                  {!!leadForm.documents.length && <div className="mt-2 small">{leadForm.documents.map((document) => <div key={document.key}>{documentTypes.find((type) => type.value === document.type)?.label}: {document.originalName || document.key}</div>)}</div>}
-                </Col>
                 <Form.Group as={Col} md={3}>
                   <Form.Label>Source type</Form.Label>
                   <Form.Select value={leadForm.sourceType} onChange={(event) => setLeadForm({ ...leadForm, sourceType: event.target.value })}>
@@ -432,6 +422,16 @@ const CreateLeadPage = () => {
                     ))}
                   </Form.Select>
                 </Form.Group>
+                <Col xs={12}>
+                  <Form.Label>Supporting documents <span className="text-muted fw-normal">(optional)</span></Form.Label>
+                  <div className="d-flex gap-2 mb-2" style={{ maxWidth: 260 }}>
+                    <Form.Select aria-label="Document category" value={documentType} onChange={(event) => setDocumentType(event.target.value as LeadDocument['type'])}>
+                      {documentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </Form.Select>
+                  </div>
+                  <DropzoneFormInput label="" text="Drop site images or PDF documents here" showPreview={false} helpText="Choose a category first, then upload up to 5 files at a time." onFileUpload={uploadDocuments} />
+                  {!!leadForm.documents.length && <div className="mt-2 small">{leadForm.documents.map((document) => <div key={document.key}>{documentTypes.find((type) => type.value === document.type)?.label}: {document.originalName || document.key}</div>)}</div>}
+                </Col>
               </Row>
             )}
 

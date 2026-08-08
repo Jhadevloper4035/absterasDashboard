@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { Notification } from '../src/modules/notifications/models/notification.model.js';
 import { User } from '../src/models/user.model.js';
 import { renderNotificationEmail, setEmailSenderForTest } from '../src/services/email.service.js';
+import { setEmailQueueForTest } from '../src/services/email-queue.service.js';
 import { notifyUsers } from '../src/modules/notifications/services/notification.service.js';
 
 const originalInsertMany = Notification.insertMany;
@@ -13,52 +14,32 @@ function setMongoReady() {
   Object.defineProperty(mongoose.connection, 'readyState', { configurable: true, value: 1 });
 }
 
-function waitForEmailJob() {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
 afterEach(() => {
   Notification.insertMany = originalInsertMany;
   User.find = originalUserFind;
   setEmailSenderForTest(undefined);
+  setEmailQueueForTest(undefined);
   delete mongoose.connection.readyState;
 });
 
-test('notifyUsers stores dashboard notification and sends email to user email', async () => {
+test('notifyUsers stores dashboard notification and queues email delivery', async () => {
   setMongoReady();
   const userId = new mongoose.Types.ObjectId();
   const inserts = [];
-  const sent = [];
+  const queued = [];
 
   Notification.insertMany = (docs) => {
     inserts.push(docs);
-    return Promise.resolve(docs);
+    return Promise.resolve(docs.map((doc, index) => ({ ...doc, _id: `notification-${index + 1}` })));
   };
-  User.find = (query) => {
-    assert.deepEqual(query, { _id: { $in: [String(userId)] }, status: 'active' });
-    return {
-      select(field) {
-        assert.equal(field, 'email');
-        return Promise.resolve([{ _id: userId, email: 'sales@example.com' }]);
-      },
-    };
-  };
-  setEmailSenderForTest((message) => {
-    sent.push(message);
-    return Promise.resolve({ messageId: 'ok' });
-  });
+  setEmailSenderForTest(() => Promise.resolve({ messageId: 'ok' }));
+  setEmailQueueForTest((job) => { queued.push(job); return Promise.resolve({ id: job.notificationId }); });
 
   await notifyUsers([userId], { title: 'Task assigned', body: 'Call client', metadata: { type: 'task.created' } });
-  await waitForEmailJob();
-  await waitForEmailJob();
 
-  assert.equal(inserts.length, 2);
+  assert.equal(inserts.length, 1);
   assert.equal(inserts[0][0].channel, 'in-app');
-  assert.equal(inserts[1][0].channel, 'email');
-  assert.equal(inserts[1][0].status, 'sent');
-  assert.equal(sent[0].to, 'sales@example.com');
-  assert.equal(sent[0].template, 'task.created');
-  assert.equal(sent[0].subject, 'Task assigned');
+  assert.deepEqual(queued, [{ notificationId: 'notification-1', attachments: [] }]);
 });
 
 test('notifyUsers does not notify the actor who triggered the event', async () => {
@@ -86,12 +67,38 @@ test('renderNotificationEmail selects template by notification scenario', () => 
   const email = renderNotificationEmail({
     title: 'Lead assigned',
     body: 'Skyline Tower',
-    metadata: { type: 'lead.assigned', fromName: 'Admin User', fromRole: 'admin' },
+    metadata: { type: 'lead.assigned', leadId: 'lead-1', leadName: 'Skyline Tower', leadCompany: 'Skyline', leadPhone: '9876543210', leadEmail: 'lead@example.com', leadSource: 'Website', assigneeName: 'Sales User', fromName: 'Admin User', fromRole: 'admin' },
   });
 
   assert.equal(email.template, 'lead.assigned');
-  assert.match(email.text, /A lead has been assigned to you/);
-  assert.match(email.text, /From: Admin User \(admin\)/);
+  assert.match(email.text, /A new lead has been assigned to you by Admin User/);
+  assert.match(email.html, /Skyline Tower/);
+  assert.match(email.html, /View Lead in Dashboard/);
+});
+
+test('lead closure email uses the supplied closure template fields', () => {
+  const email = renderNotificationEmail({
+    metadata: { type: 'lead.closed', leadId: 'lead-1', leadName: 'Skyline Tower', leadCompany: 'Skyline', assigneeName: 'Admin User', fromName: 'Sales User', closureStatus: 'WON', closureRemarks: 'Signed', closedAt: '2026-08-08T10:00:00.000Z' },
+  });
+
+  assert.equal(email.template, 'lead.closed');
+  assert.match(email.text, /Sales User has closed a lead/);
+  assert.match(email.html, /Closure Status/);
+  assert.match(email.html, /Skyline Tower/);
+});
+
+test('task assignment and update emails use the supplied task template fields', () => {
+  const assigned = renderNotificationEmail({
+    metadata: { type: 'task.created', taskId: 'task-1', taskTitle: 'Prepare proposal', taskPriority: 'High', taskAssigneeName: 'Sales User', taskCreatedBy: 'Admin User', taskDeadline: '2026-08-09T10:00:00.000Z', recipientName: 'Sales User' },
+  });
+  const updated = renderNotificationEmail({ metadata: { type: 'task.updated', taskTitle: 'Prepare proposal', recipientName: 'Admin User', fromName: 'Sales User' } });
+
+  assert.equal(assigned.template, 'task.created');
+  assert.match(assigned.html, /New Task Assigned/);
+  assert.match(assigned.html, /Created By/);
+  assert.match(assigned.html, /Prepare proposal/);
+  assert.equal(updated.template, 'task.updated');
+  assert.match(updated.html, /Task Updated/);
 });
 
 test('salary slip email uses the payroll template', () => {

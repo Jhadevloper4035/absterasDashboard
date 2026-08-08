@@ -31,6 +31,9 @@ export const env = {
   mongoUri: process.env.MONGODB_URI || (isTestEnv ? 'mongodb://127.0.0.1:27017/absteras_test' : undefined),
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 4000),
+  redis: {
+    url: process.env.REDIS_URL,
+  },
   setupToken: process.env.SETUP_TOKEN,
   attendance: {
     shiftStart: process.env.HR_SHIFT_START || '10:30',

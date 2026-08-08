@@ -10,12 +10,30 @@ import { apiFetch } from '@/helpers/api'
 import { useAuthStore } from '@/store/authStore'
 import type { LeadOwner, LeadType } from '@/types/lead'
 
+type DashboardTask = {
+  _id: string
+  title: string
+  status: string
+  priority: string
+  dueDate?: string
+  createdBy?: string | { _id: string }
+}
+
+type DashboardUpdate = {
+  _id: string
+  title?: string
+  body?: string
+  createdAt?: string
+  metadata?: { taskId?: string; leadId?: string }
+}
+
 const ownerName = (owner?: string | LeadOwner) => (typeof owner === 'object' ? owner.name : '')
 const dayKey = (value: string | Date, timezone: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
 const timeText = (value: string, timezone: string) => new Intl.DateTimeFormat(undefined, { timeZone: timezone, hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 const dateText = (value: string, timezone: string) => new Intl.DateTimeFormat(undefined, { timeZone: timezone, month: 'short', day: 'numeric' }).format(new Date(value))
 const statusVariant = (status: string) => (status === 'WON' ? 'success' : status === 'MEETING_SCHEDULED' ? 'info' : 'secondary')
+const taskStatusVariant = (status: string) => (status === 'Done' ? 'success' : status === 'Blocked' ? 'danger' : ['In Progress', 'Review', 'Testing'].includes(status) ? 'warning' : 'primary')
 const dashboardTitles = {
   sales: 'My Sales Dashboard',
   operations: 'My Operations Dashboard',
@@ -58,6 +76,8 @@ const Profile = () => {
   const user = useAuthStore((state) => state.user)
   const [leads, setLeads] = useState<LeadType[]>([])
   const [meetingLeads, setMeetingLeads] = useState<LeadType[]>([])
+  const [tasks, setTasks] = useState<DashboardTask[]>([])
+  const [updates, setUpdates] = useState<DashboardUpdate[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const timezone = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -68,12 +88,16 @@ const Profile = () => {
     setLoading(true)
     setError('')
     Promise.all([
-      apiFetch<{ data: LeadType[] }>('/leads?limit=50', { token }),
-      apiFetch<{ data: LeadType[] }>('/leads?limit=50&upcomingMeeting=true', { token }),
+      apiFetch<{ data: LeadType[] }>('/leads?limit=50&fresh=true', { token }),
+      apiFetch<{ data: LeadType[] }>('/leads?limit=50&upcomingMeeting=true&fresh=true', { token }),
+      apiFetch<{ data: DashboardTask[] }>('/tasks?limit=50&fresh=true', { token }),
+      apiFetch<{ data: DashboardUpdate[] }>('/notifications/unread?fresh=true', { token }),
     ])
-      .then(([leadRes, meetingRes]) => {
+      .then(([leadRes, meetingRes, taskRes, updateRes]) => {
         setLeads(leadRes.data)
         setMeetingLeads(meetingRes.data)
+        setTasks(taskRes.data)
+        setUpdates(updateRes.data)
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Unable to load dashboard data'))
       .finally(() => setLoading(false))
@@ -100,12 +124,21 @@ const Profile = () => {
   const activeLeads = leads.filter((lead) => !['WON', 'LOST', 'ON_HOLD'].includes(lead.status))
   const wonLeads = leads.filter((lead) => lead.status === 'WON')
   const recentLeads = [...leads].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 8)
+  const openTasks = tasks.filter((task) => task.status !== 'Done')
+  const overdueTasks = openTasks.filter((task) => task.dueDate && new Date(task.dueDate).getTime() < Date.now())
+  const assignedByMe = tasks.filter((task) => String(typeof task.createdBy === 'object' ? task.createdBy?._id : task.createdBy) === String(user?._id))
+  const openTasksAssignedByMe = assignedByMe.filter((task) => task.status !== 'Done')
+  const overdueTasksAssignedByMe = openTasksAssignedByMe.filter((task) => task.dueDate && new Date(task.dueDate).getTime() < Date.now())
   const title = dashboardTitles[user?.role as keyof typeof dashboardTitles] || 'Team Dashboard'
   const stats = [
     { label: 'Total Leads', value: leads.length, variant: 'primary' },
     { label: 'Active Leads', value: activeLeads.length, variant: 'info' },
     { label: 'Today Meetings', value: todayMeetings.length, variant: 'warning' },
     { label: 'Won Leads', value: wonLeads.length, variant: 'success' },
+    { label: 'Open Tasks', value: openTasks.length, variant: 'info' },
+    { label: 'Overdue Tasks', value: overdueTasks.length, variant: overdueTasks.length ? 'danger' : 'success' },
+    { label: 'Open Tasks Assigned By Me', value: openTasksAssignedByMe.length, variant: 'info' },
+    { label: 'Overdue Tasks Assigned By Me', value: overdueTasksAssignedByMe.length, variant: overdueTasksAssignedByMe.length ? 'danger' : 'success' },
   ]
 
   return (
@@ -122,6 +155,7 @@ const Profile = () => {
           <Badge bg="light" text="dark">
             {timezone}
           </Badge>
+          {user?.role === 'sales' && <Link to="/leads/mine"><Button size="sm">My Leads</Button></Link>}
         </CardBody>
       </Card>
 
@@ -197,6 +231,58 @@ const Profile = () => {
           ) : null}
         </CardBody>
       </Card>
+
+      <Row className="g-3 mb-4">
+        <Col xl={7}>
+          <Card className="h-100">
+            <CardBody>
+              <div className="d-flex align-items-center justify-content-between mb-3 gap-3">
+                <div>
+                  <h4 className="card-title mb-1">My Open Tasks</h4>
+                  <div className="text-muted">Tasks created by you or assigned to you.</div>
+                </div>
+                <div className="d-flex gap-2">
+                  <Link to="/tasks/assigned-by-me"><Button size="sm" variant="outline-primary">Assigned By Me</Button></Link>
+                  <Link to="/tasks/assigned-to-me"><Button size="sm" variant="outline-primary">Assigned To Me</Button></Link>
+                </div>
+              </div>
+              {!openTasks.length && !loading && !error ? <Alert variant="info" className="mb-0">No open tasks.</Alert> : null}
+              {openTasks.slice(0, 5).map((task) => (
+                <div key={task._id} className="d-flex align-items-center justify-content-between border-top py-3 gap-3">
+                  <div>
+                    <Link to={`/tasks/${task._id}`} className="fw-medium">{task.title}</Link>
+                    <div className="text-muted fs-13">Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Not set'}</div>
+                  </div>
+                  <Badge bg={taskStatusVariant(task.status)}>{task.status}</Badge>
+                </div>
+              ))}
+            </CardBody>
+          </Card>
+        </Col>
+        <Col xl={5}>
+          <Card className="h-100">
+            <CardBody>
+              <div className="d-flex align-items-center justify-content-between mb-3 gap-3">
+                <div>
+                  <h4 className="card-title mb-1">Important Updates</h4>
+                  <div className="text-muted">Unread lead and task changes.</div>
+                </div>
+                <Link to="/notifications"><Button size="sm" variant="outline-primary">View Updates</Button></Link>
+              </div>
+              {!updates.length && !loading && !error ? <Alert variant="info" className="mb-0">You are up to date.</Alert> : null}
+              {updates.slice(0, 5).map((update) => {
+                const href = update.metadata?.taskId ? `/tasks/${update.metadata.taskId}` : update.metadata?.leadId ? `/leads/${update.metadata.leadId}` : '/notifications'
+                return (
+                  <div key={update._id} className="border-top py-3">
+                    <Link to={href} className="fw-medium d-block">{update.title || 'Update'}</Link>
+                    {update.body && <div className="text-muted fs-13 text-truncate">{update.body}</div>}
+                  </div>
+                )
+              })}
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
 
       <div className="mb-4">
         <TodoCompletedList />

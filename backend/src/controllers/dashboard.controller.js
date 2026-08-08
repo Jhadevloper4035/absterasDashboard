@@ -32,8 +32,8 @@ function withCurrentMeeting(lead) {
   return { ...data, nextMeeting: meetings.sort((a, b) => new Date(b.startsAt || 0) - new Date(a.startsAt || 0))[0] };
 }
 
-function csvValue(value) {
-  const text = String(value ?? '');
+export function csvValue(value) {
+  const text = String(value ?? '').replace(/^[=+\-@\t\r]/, "'$&");
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

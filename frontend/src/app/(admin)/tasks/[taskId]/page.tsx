@@ -91,6 +91,7 @@ const AttachmentDownloadList = ({ attachments }: { attachments?: TaskAttachment[
 const TaskDetail = () => {
   const { taskId } = useParams()
   const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
   const [task, setTask] = useState<Task>()
   const [note, setNote] = useState({ title: '', description: '', attachments: [] as TaskAttachment[] })
   const [loading, setLoading] = useState(false)
@@ -99,6 +100,8 @@ const TaskDetail = () => {
   const [uploadNoteProgress, setUploadNoteProgress] = useState(0)
   const [uploadNoteFailed, setUploadNoteFailed] = useState(false)
   const [error, setError] = useState('')
+  const canCloseTask = ['sales', 'operations', 'accounts', 'designers'].includes(user?.role || '')
+  const backPath = ['superadmin', 'admin'].includes(user?.role || '') ? '/tasks/all' : '/tasks/assigned-to-me'
 
   useEffect(() => {
     if (!token || !taskId) return
@@ -143,6 +146,23 @@ const TaskDetail = () => {
     }
   }
 
+  const closeTask = async () => {
+    if (!token || !taskId || !window.confirm('Close this task? It cannot be edited afterwards.')) return
+    setSaving(true)
+    setError('')
+    try {
+      const res = await apiFetch<{ data: Task }>(`/tasks/${taskId}`, { method: 'PATCH', token, body: JSON.stringify({ status: 'Done' }) })
+      setTask(res.data)
+      toast.success('Task closed')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to close task'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const uploadNoteFiles = async (files: UploadFileType[]) => {
     if (!token || !files.length) return
     setUploadingNote(true)
@@ -179,8 +199,9 @@ const TaskDetail = () => {
               <div className="text-muted">{task.ticketNumber ? `${task.ticketNumber} · ` : ''}Assignee: {personName(task.assignee)}</div>
             </div>
             <div className="d-flex gap-2">
-              {task.status !== 'Done' && <Link to={`/tasks/${task._id}/edit`} className="btn btn-primary">Update</Link>}
-              <Link to="/tasks/all" className="btn btn-outline-secondary">
+              {task.status !== 'Done' && canCloseTask && <Link to={`/tasks/${task._id}/edit`} className="btn btn-primary">Update</Link>}
+              {task.status !== 'Done' && canCloseTask && <Button variant="success" onClick={closeTask} disabled={saving}>{saving ? 'Closing...' : 'Close Task'}</Button>}
+              <Link to={backPath} className="btn btn-outline-secondary">
                 Back
               </Link>
             </div>
@@ -214,10 +235,14 @@ const TaskDetail = () => {
                       <div className="small text-muted">Deadline</div>
                       <div className="fw-semibold text-nowrap">{dateText(task.dueDate)}</div>
                     </Col>
-                    <Col md={6} lg={4}>
-                      <div className="small text-muted">Work type</div>
-                      <div className="fw-semibold">{text(task.projectEpic)}</div>
-                    </Col>
+                      <Col md={6} lg={4}>
+                        <div className="small text-muted">Work type</div>
+                        <div className="fw-semibold">{text(task.projectEpic)}</div>
+                      </Col>
+                      {task.completedAt && <Col md={6} lg={4}>
+                        <div className="small text-muted">Completed on</div>
+                        <div className="fw-semibold text-nowrap">{dateText(task.completedAt)}</div>
+                      </Col>}
                   </Row>
 
                   <div className="border-top pt-3">

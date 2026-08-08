@@ -3,14 +3,20 @@ import { User } from '../../../models/user.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
+import { cachedJson, invalidateCache } from '../../../services/redis-cache.service.js';
 import { userRoles } from '../../auth/middleware/auth.middleware.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
 const LEAD_CREATE_ROLES = [...ADMIN_ROLES, 'sales'];
 const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory', 'leadCost'];
 const LEAD_DOCUMENT_TYPES = ['site_images', 'psf', 'boq', 'estimation'];
+const CLOSED_LEAD_STATUSES = ['WON', 'LOST', 'ON_HOLD'];
 
-function canManageLeads(user) {
+function canViewAllLeads(user) {
+  return userRoles(user).some((role) => ADMIN_ROLES.includes(role));
+}
+
+function canAssignLeads(user) {
   return userRoles(user).some((role) => [...ADMIN_ROLES, 'sales'].includes(role));
 }
 
@@ -19,7 +25,7 @@ function forbidden(res) {
 }
 
 function leadQueryFor(user, extra = {}) {
-  return canManageLeads(user) ? extra : { ...extra, owner: user._id };
+  return canViewAllLeads(user) ? extra : { ...extra, owner: user._id };
 }
 
 function canDeleteLeads(user) {
@@ -79,13 +85,22 @@ function applyLeadPatch(lead, patch) {
   if (patch.documents !== undefined) lead.documents = cleanDocuments(patch.documents);
 }
 
-function notificationMetadata(user, type, leadId) {
+function notificationMetadata(user, type, lead) {
   return {
     type,
-    leadId,
+    leadId: lead._id || lead,
     fromUserId: user._id,
     fromName: user.name || user.email || 'User',
     fromRole: user.role || 'user',
+    ...(['lead.assigned', 'lead.closed'].includes(type) && typeof lead === 'object' ? {
+      leadName: lead.name,
+      leadCompany: lead.company,
+      ...(type === 'lead.assigned' ? { leadPhone: lead.phone, leadEmail: lead.email, leadSource: lead.source, assignedAt: new Date().toISOString() } : {
+        closureStatus: lead.status,
+        closureRemarks: lead.lossComment || lead.statusReason,
+        closedAt: lead.closedAt,
+      }),
+    } : {}),
   };
 }
 
@@ -97,6 +112,7 @@ export async function createLead(req, res) {
   const {
     owner: requestedOwner,
     sharedWith,
+    createdBy,
     assignmentException,
     assignmentHistory,
     status,
@@ -121,11 +137,20 @@ export async function createLead(req, res) {
 
   const lead = await Lead.create({
     ...payload,
+    createdBy: req.user._id,
     owner: owner?._id,
     status: owner ? 'ASSIGNED' : 'NEW',
     assignmentException: !owner,
     ...(owner ? { assignmentHistory: [{ newOwner: owner._id, reason: 'Assigned on creation', rule: 'manual', actor: req.user._id }], statusHistory: [{ to: 'ASSIGNED', reason: 'Assigned on creation', actor: req.user._id }] } : {}),
   });
+  if (owner && String(owner._id) !== String(req.user._id)) {
+    await notifyUsers([owner._id], {
+      title: 'Lead assigned',
+      body: lead.name,
+      metadata: notificationMetadata(req.user, 'lead.assigned', lead),
+    });
+  }
+  await invalidateCache('lead-lists');
   res.status(201).json({ data: lead });
 }
 
@@ -135,13 +160,15 @@ export async function listLeads(req, res) {
   const query = leadQueryFor(req.user);
   if (LEAD_STATUSES.includes(req.query.status)) query.status = req.query.status;
   if (req.query.closed === 'true') query.status = { $in: ['WON', 'LOST', 'ON_HOLD'] };
+  if (req.query.closedByMe === 'true') query.statusHistory = { $elemMatch: { actor: req.user._id, to: { $in: CLOSED_LEAD_STATUSES } } };
   if (req.query.assignmentException === 'true') query.assignmentException = true;
   if (req.query.hasMeeting === 'true') query['meetingHistory.startsAt'] = { $exists: true };
   if (req.query.upcomingMeeting === 'true') query['meetingHistory.startsAt'] = { $gte: new Date() };
   if (req.query.name) query.name = { $regex: escapeRegex(req.query.name), $options: 'i' };
   if (req.query.phone) query.phone = { $regex: escapeRegex(req.query.phone), $options: 'i' };
   if (req.query.email) query.email = { $regex: escapeRegex(req.query.email), $options: 'i' };
-  if (canManageLeads(req.user) && req.query.owner) {
+  if (req.query.mine === 'true') query.owner = req.user._id;
+  if (canViewAllLeads(req.user) && req.query.owner && req.query.mine !== 'true') {
     if (req.query.owner === 'unassigned') query.owner = null;
     else query.owner = req.query.owner;
   }
@@ -152,17 +179,21 @@ export async function listLeads(req, res) {
   }
   if (req.query.meeting === 'scheduled') query['meetingHistory.0'] = { $exists: true };
   if (req.query.meeting === 'none') query['meetingHistory.0'] = { $exists: false };
-  const [leads, total] = await Promise.all([
-    Lead.find(query)
-      .populate('owner', 'name email role status')
-      .populate('meetingHistory.scheduledBy', 'name email role status')
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit),
-    Lead.countDocuments(query),
-  ]);
+  const data = await cachedJson('lead-lists', `${req.user._id}:${JSON.stringify(req.query)}`, async () => {
+    const [leads, total] = await Promise.all([
+      Lead.find(query)
+        .populate('owner', 'name email role status')
+        .populate('createdBy', 'name email role status')
+        .populate('meetingHistory.scheduledBy', 'name email role status')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Lead.countDocuments(query),
+    ]);
+    return { data: leads.map(withCurrentMeeting), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } };
+  }, req.query.fresh === 'true');
 
-  res.json({ data: leads.map(withCurrentMeeting), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
+  res.json(data);
 }
 
 export async function listLeadAssignees(req, res) {
@@ -173,6 +204,7 @@ export async function listLeadAssignees(req, res) {
 export async function getLead(req, res) {
   const lead = await Lead.findOne(leadQueryFor(req.user, { _id: req.params.id }))
     .populate('owner', 'name email role status')
+    .populate('createdBy', 'name email role status')
     .populate('meetingHistory.scheduledBy', 'name email role status')
     .populate('notes.createdBy', 'name email role status')
     .populate('assignmentHistory.previousOwner', 'name email role status')
@@ -186,7 +218,7 @@ export async function getLead(req, res) {
 }
 
 export async function updateLead(req, res) {
-  const { owner, ...patch } = req.body;
+  const { owner, status, statusReason, lossReason, lossComment, ...patch } = req.body;
   const lead = await Lead.findOne(leadQueryFor(req.user, { _id: req.params.id }));
   const notifications = [];
   const previousStatus = lead?.status;
@@ -204,8 +236,34 @@ export async function updateLead(req, res) {
   }
   if (patch.leadCost !== undefined) patch.leadCost = Number(patch.leadCost);
 
+  if (status !== undefined) {
+    if (!LEAD_STATUSES.includes(status)) {
+      return res.status(400).json({ error: { message: 'Invalid lead status' } });
+    }
+    const wasClosed = CLOSED_LEAD_STATUSES.includes(lead.status);
+    const isClosed = CLOSED_LEAD_STATUSES.includes(status);
+    if (isClosed && !wasClosed && String(lead.owner || '') !== String(req.user._id)) {
+      return res.status(403).json({ error: { message: 'Only the assigned salesperson can close this lead' } });
+    }
+    if (wasClosed && !isClosed && !ADMIN_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: { message: 'Only an administrator can reopen a closed lead' } });
+    }
+    if (status !== lead.status) {
+      lead.statusHistory.push({ from: lead.status, to: status, reason: statusReason, actor: req.user._id });
+      lead.status = status;
+      lead.closedAt = isClosed ? new Date() : undefined;
+      if (isClosed && !wasClosed) {
+        const assignedBy = [...lead.assignmentHistory].reverse().find((item) => String(item.newOwner || '') === String(lead.owner || ''))?.actor || lead.createdBy;
+        notifications.push({ users: [assignedBy], title: 'Lead closed', body: lead.name, type: 'lead.closed' });
+      }
+    }
+    if (statusReason !== undefined) lead.statusReason = statusReason;
+    if (lossReason !== undefined) lead.lossReason = lossReason;
+    if (lossComment !== undefined) lead.lossComment = lossComment;
+  }
+
   if (owner !== undefined) {
-    if (!canManageLeads(req.user)) {
+    if (!canAssignLeads(req.user)) {
       return forbidden(res);
     }
 
@@ -330,6 +388,7 @@ export async function updateLead(req, res) {
   applyLeadPatch(lead, patch);
 
   await lead.save();
+  await invalidateCache('lead-lists');
   if (String(previousOwner || '') !== String(lead.owner || '')) {
     await auditEvent(req, { action: 'lead.assign', entity: 'lead', entityId: lead._id, before: { owner: previousOwner }, after: { owner: lead.owner } });
   }
@@ -338,6 +397,7 @@ export async function updateLead(req, res) {
   }
   await lead.populate([
     { path: 'owner', select: 'name email role status' },
+    { path: 'createdBy', select: 'name email role status' },
     { path: 'meetingHistory.scheduledBy', select: 'name email role status' },
     { path: 'notes.createdBy', select: 'name email role status' },
     { path: 'assignmentHistory.previousOwner', select: 'name email role status' },
@@ -348,7 +408,7 @@ export async function updateLead(req, res) {
     await notifyUsers(notification.users.filter((id) => String(id || '') !== String(req.user._id)), {
       title: notification.title,
       body: notification.body,
-      metadata: notificationMetadata(req.user, notification.type, lead._id),
+      metadata: notificationMetadata(req.user, notification.type, lead),
     });
   }
 
@@ -366,5 +426,6 @@ export async function deleteLead(req, res) {
   }
 
   await auditEvent(req, { action: 'lead.delete', entity: 'lead', entityId: lead._id, before: { owner: lead.owner, status: lead.status } });
+  await invalidateCache('lead-lists');
   return res.json({ data: { id: req.params.id } });
 }

@@ -10,6 +10,7 @@ import { cleanIpAddress } from '../src/helpers/request-ip.js';
 import { allowFirstSuperadminOrUserManager, authorizeHrModule, authorizeRoles } from '../src/modules/auth/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
 import { login, logout } from '../src/modules/auth/controllers/auth.controller.js';
+import { setLoginAttemptStoreForTest } from '../src/modules/auth/services/login-attempt.service.js';
 import { createAccessTokenPair, createSession, isAccessTokenBlocked, rotateSession } from '../src/modules/auth/services/auth-session.service.js';
 import { hashPassword, verifyPassword } from '../src/modules/auth/services/password.service.js';
 import { createAccessToken, hashRefreshToken, verifyAccessToken } from '../src/modules/auth/services/token.service.js';
@@ -37,6 +38,13 @@ const originals = {
   userUpdateOne: User.updateOne,
 };
 
+const loginAttemptStore = {
+  increment: async () => 1,
+  delete: async () => {},
+};
+
+setLoginAttemptStoreForTest(loginAttemptStore);
+
 afterEach(() => {
   AuthSession.create = originals.authCreate;
   AuthSession.exists = originals.authExists;
@@ -53,6 +61,7 @@ afterEach(() => {
   RateLimit.findOneAndUpdate = originals.rateFindOneAndUpdate;
   User.findOne = originals.userFindOne;
   User.updateOne = originals.userUpdateOne;
+  setLoginAttemptStoreForTest(loginAttemptStore);
 });
 
 test('password hashing verifies only the original password', async () => {
@@ -271,6 +280,36 @@ test('login revokes an existing active session instead of blocking the user', as
   assert.ok(response.cookies.sales_crm_refresh);
 });
 
+test('third failed login creates a temporary lock without suspending the account', async () => {
+  const user = {
+    _id: 'user-1',
+    email: 'codex.sales@example.com',
+    status: 'active',
+    passwordHash: await hashPassword('Correct123!'),
+  };
+  let userUpdate;
+
+  User.findOne = () => ({ select: () => Promise.resolve(user) });
+  let attempts = 2;
+  setLoginAttemptStoreForTest({
+    increment: async () => ++attempts,
+    delete: async () => { attempts = 0; },
+  });
+  User.updateOne = async (_filter, update) => { userUpdate = update; };
+
+  const response = {
+    statusCode: 200,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  await login({ body: { email: user.email, password: 'wrong-password' }, ...testReq() }, response);
+
+  assert.equal(response.statusCode, 429);
+  assert.equal(userUpdate.$set.status, undefined);
+  assert.ok(userUpdate.$set.loginLockedAt instanceof Date);
+  assert.ok(userUpdate.$set.loginLockedAt > new Date());
+});
+
 test('logout closes the current login history row', async () => {
   const token = createAccessToken({ id: 'user-1', role: 'admin' });
   let logoutUpdate;
@@ -396,6 +435,7 @@ test('refresh token reuse revokes active user sessions', async () => {
 
   AuthSession.findOneAndUpdate = () => ({ populate: async () => null });
   AuthSession.findOne = () => ({ populate: async () => session });
+  AuthSession.find = () => ({ select() { return this; }, lean() { return Promise.resolve([]); } });
   AuthSession.updateMany = async (filter) => {
     revokeFilter = filter;
   };

@@ -4,16 +4,23 @@ import { User } from '../../../models/user.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
+import { userRoles } from '../../auth/middleware/auth.middleware.js';
+import { cachedJson, invalidateCache } from '../../../services/redis-cache.service.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
 const TASK_ASSIGNEE_ROLES = ['sales', 'operations', 'accounts', 'designers'];
 
-function canManageTasks(user) {
-  return ADMIN_ROLES.includes(user.role);
+function canAssignTasks(user) {
+  return userRoles(user).some((role) => TASK_ASSIGNEE_ROLES.includes(role));
+}
+
+function canManageTaskWorkTypes(user) {
+  return userRoles(user).some((role) => ADMIN_ROLES.includes(role));
 }
 
 function taskQueryFor(user, extra = {}) {
-  return canManageTasks(user) ? extra : { ...extra, assignee: user._id };
+  if (canManageTaskWorkTypes(user)) return extra;
+  return { $and: [extra, { $or: [{ createdBy: user._id }, { assignee: user._id }] }] };
 }
 
 function escapeRegex(value) {
@@ -89,8 +96,24 @@ function notificationMetadata(type, taskId, actor) {
   };
 }
 
+function taskNotificationMetadata(type, task, actor) {
+  return {
+    ...notificationMetadata(type, task._id, actor),
+    taskTitle: task.title,
+    taskScopeOfWork: task.description,
+    taskPriority: task.priority,
+    taskDeadline: task.dueDate,
+    taskWorkType: task.projectEpic,
+    taskAssigneeName: task.assignee?.name,
+    taskCreatedBy: task.createdBy?.name || actor.name || actor.email,
+    taskCreatedOn: task.createdAt,
+    taskDependencies: task.dependenciesBlockers,
+    taskAttachments: (task.attachments || []).map((attachment) => attachment.originalName).filter(Boolean).join(', '),
+  };
+}
+
 export async function listTaskAssignees(req, res) {
-  if (!canManageTasks(req.user)) {
+  if (!canAssignTasks(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
@@ -115,7 +138,7 @@ export async function listTaskWorkTypes(req, res) {
 }
 
 export async function createTaskWorkType(req, res) {
-  if (!canManageTasks(req.user)) {
+  if (!canManageTaskWorkTypes(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
@@ -143,7 +166,7 @@ export async function createTaskWorkType(req, res) {
 }
 
 export async function deleteTaskWorkType(req, res) {
-  if (!canManageTasks(req.user)) {
+  if (!canManageTaskWorkTypes(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
@@ -177,11 +200,13 @@ export async function listTasks(req, res) {
     extra.status = { $ne: 'Done' };
     extra.dueDate = { $lt: today };
   }
-  if (canManageTasks(req.user) && req.query.group) {
+  if (req.query.group) {
     const users = await User.find({ status: 'active', $or: [{ role: req.query.group }, { additionalRoles: req.query.group }] }).select('_id').limit(1000);
     extra.assignee = { $in: users.map((user) => user._id) };
   }
-  if (canManageTasks(req.user) && req.query.assignee) extra.assignee = req.query.assignee;
+  if (req.query.assignee) extra.assignee = req.query.assignee;
+  if (req.query.assignedByMe === 'true') extra.createdBy = req.user._id;
+  if (req.query.assignedToMe === 'true') extra.assignee = req.user._id;
   if (req.query.workType) extra.projectEpic = req.query.workType;
   if (req.query.priority) extra.priority = req.query.priority;
   if (req.query.q) {
@@ -195,18 +220,21 @@ export async function listTasks(req, res) {
   }
 
   const query = taskQueryFor(req.user, extra);
-  const [tasks, total] = await Promise.all([
-    Task.find(query)
-      .populate('assignee', 'name email role status')
-      .populate('createdBy', 'name email role status')
-      .populate('completedBy', 'name email role status')
-      .sort({ dueDate: 1, createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit),
-    Task.countDocuments(query),
-  ]);
+  const data = await cachedJson('task-lists', `${req.user._id}:${JSON.stringify(req.query)}`, async () => {
+    const [tasks, total] = await Promise.all([
+      Task.find(query)
+        .populate('assignee', 'name email role status')
+        .populate('createdBy', 'name email role status')
+        .populate('completedBy', 'name email role status')
+        .sort({ dueDate: 1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Task.countDocuments(query),
+    ]);
+    return { data: await Promise.all(tasks.map(taskData)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } };
+  }, req.query.fresh === 'true');
 
-  return res.json({ data: await Promise.all(tasks.map(taskData)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
+  return res.json(data);
 }
 
 export async function getTask(req, res) {
@@ -220,7 +248,7 @@ export async function getTask(req, res) {
 }
 
 export async function createTask(req, res) {
-  if (!canManageTasks(req.user)) {
+  if (!canAssignTasks(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
@@ -236,16 +264,20 @@ export async function createTask(req, res) {
   const task = new Task({ createdBy: req.user._id, assignee: assignee._id });
   patchTask(task, req.body, req.user._id);
   await task.save();
+  await invalidateCache('task-lists');
   await populateTask(task);
   await notifyUsers([task.assignee], {
     title: `Task assigned: ${task.ticketNumber}`,
     body: task.title,
-    metadata: notificationMetadata('task.created', task._id, req.user),
+    metadata: taskNotificationMetadata('task.created', task, req.user),
   });
   return res.status(201).json({ data: await taskData(task) });
 }
 
 export async function updateTask(req, res) {
+  if (!canAssignTasks(req.user)) {
+    return res.status(403).json({ error: { message: 'Admins can view tasks only' } });
+  }
   const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
   const previousStatus = task?.status;
   const previousAssignee = task?.assignee;
@@ -257,10 +289,6 @@ export async function updateTask(req, res) {
   }
 
   if (req.body.assignee !== undefined) {
-    if (!canManageTasks(req.user)) {
-      return res.status(403).json({ error: { message: 'Forbidden' } });
-    }
-
     const assignee = await findAssignee(req.body.assignee);
     if (!assignee) {
       return res.status(400).json({ error: { message: 'Assign task to an active sales, operations, accounts, or designers user' } });
@@ -270,6 +298,7 @@ export async function updateTask(req, res) {
 
   patchTask(task, req.body, req.user._id);
   await task.save();
+  await invalidateCache('task-lists');
   if (previousStatus !== task.status) {
     await auditEvent(req, { action: 'task.status', entity: 'task', entityId: task._id, before: { status: previousStatus }, after: { status: task.status } });
   }
@@ -280,12 +309,15 @@ export async function updateTask(req, res) {
   await notifyUsers([task.assignee, task.createdBy].filter((id) => String(id || '') !== String(req.user._id)), {
     title: `${task.status === 'Done' ? 'Task completed' : 'Task updated'}: ${task.ticketNumber}`,
     body: task.title,
-    metadata: notificationMetadata('task.updated', task._id, req.user),
+    metadata: taskNotificationMetadata('task.updated', task, req.user),
   });
   return res.json({ data: await taskData(task) });
 }
 
 export async function addTaskNote(req, res) {
+  if (!canAssignTasks(req.user)) {
+    return res.status(403).json({ error: { message: 'Admins can view tasks only' } });
+  }
   const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
   if (!task) {
     return res.status(404).json({ error: { message: 'Task not found' } });
@@ -305,6 +337,7 @@ export async function addTaskNote(req, res) {
     createdBy: req.user._id,
   });
   await task.save();
+  await invalidateCache('task-lists');
   await populateTask(task);
   await notifyUsers([task.assignee, task.createdBy].filter((id) => String(id || '') !== String(req.user._id)), {
     title: `Task note added: ${task.ticketNumber}`,
@@ -315,15 +348,16 @@ export async function addTaskNote(req, res) {
 }
 
 export async function deleteTask(req, res) {
-  if (!canManageTasks(req.user)) {
+  if (!canAssignTasks(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const task = await Task.findOneAndDelete({ _id: req.params.id });
+  const task = await Task.findOneAndDelete({ _id: req.params.id, createdBy: req.user._id });
   if (!task) {
-    return res.status(404).json({ error: { message: 'Task not found' } });
+    return res.status(403).json({ error: { message: 'Only the task creator can delete it' } });
   }
 
   await auditEvent(req, { action: 'task.delete', entity: 'task', entityId: task._id, before: { assignee: task.assignee, status: task.status } });
+  await invalidateCache('task-lists');
   return res.json({ data: { id: req.params.id } });
 }

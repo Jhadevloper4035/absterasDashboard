@@ -31,6 +31,7 @@ const Expenses = lazy(() => import('@/app/(admin)/hr/expenses/page'))
 const ExpenseApprovals = lazy(() => import('@/app/(admin)/hr/expenses/approvals/page'))
 const HrReports = lazy(() => import('@/app/(admin)/hr/reports/page'))
 const Leads = lazy(() => import('@/app/(admin)/leads/page'))
+const MyLeads = lazy(() => import('@/app/(admin)/leads/mine/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
 const SalesCreateLead = lazy(() => import('@/app/(admin)/leads/sales-create/page'))
 const PendingLeads = lazy(() => import('@/app/(admin)/leads/pending/page'))
@@ -83,6 +84,7 @@ const TimelinePage = lazy(() => import('@/app/(admin)/pages/timeline/page'))
 const Pricing = lazy(() => import('@/app/(admin)/pages/pricing/page'))
 const Maintenance = lazy(() => import('@/app/(other)/maintenance/page'))
 const Widgets = lazy(() => import('@/app/(admin)/widgets/page'))
+const AccessDenied = lazy(() => import('@/app/(admin)/access-denied'))
 
 // Base UI Routes
 const Accordions = lazy(() => import('@/app/(admin)/ui/accordions/page'))
@@ -200,6 +202,11 @@ const initialRoutes: RoutesProps[] = [
     element: <DashboardRedirect />,
   },
   {
+    path: '/access-denied',
+    name: 'access-denied',
+    element: <AccessDenied />,
+  },
+  {
     path: '*',
     name: 'not-found',
     element: <NotFound />,
@@ -283,6 +290,19 @@ const generalRoutes: RoutesProps[] = [
     path: '/leads',
     name: 'Leads',
     element: <Leads />,
+    roles: adminRoles,
+  },
+  {
+    path: '/leads/all-leads',
+    name: 'All Leads',
+    element: <Navigate to="/leads" replace />,
+    roles: adminRoles,
+  },
+  {
+    path: '/leads/mine',
+    name: 'My Leads',
+    element: <MyLeads />,
+    roles: ['sales'],
   },
   {
     path: '/leads/create',
@@ -304,7 +324,7 @@ const generalRoutes: RoutesProps[] = [
   },
   {
     path: '/leads/scheduled',
-    name: 'Meeting Scheduled Leads',
+    name: 'Meeting Scheduled',
     element: <ScheduledLeads />,
   },
   {
@@ -426,13 +446,25 @@ const appsRoutes: RoutesProps[] = [
     name: 'Create Task',
     path: '/tasks/create',
     element: <CreateTask />,
-    roles: ['superadmin', 'admin'],
+    roles: teamRoles,
   },
   {
     name: 'All Tasks',
     path: '/tasks/all',
     element: <Todo />,
-    roles: [...adminRoles, ...teamRoles],
+    roles: adminRoles,
+  },
+  {
+    name: 'Tasks Assigned By Me',
+    path: '/tasks/assigned-by-me',
+    element: <Todo />,
+    roles: teamRoles,
+  },
+  {
+    name: 'Tasks Assigned To Me',
+    path: '/tasks/assigned-to-me',
+    element: <Todo />,
+    roles: teamRoles,
   },
   {
     name: 'Pending Tasks',

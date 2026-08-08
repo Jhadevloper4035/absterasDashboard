@@ -65,7 +65,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   const [uploadFailed, setUploadFailed] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const canAssign = user?.role === 'superadmin' || user?.role === 'admin'
+  const canAssign = ['sales', 'operations', 'accounts', 'designers'].includes(user?.role || '')
   const uploading = pendingUploads > 0
   const selectedAssignee = users.find((person) => person._id === form.assignee)
   const selectedRole = selectedAssignee?.role || user?.role || ''

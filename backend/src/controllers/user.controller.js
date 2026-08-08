@@ -6,6 +6,8 @@ import { LoginHistory } from '../modules/auth/models/login-history.model.js';
 import { cleanIpAddress } from '../helpers/request-ip.js';
 import { auditEvent } from '../services/audit.service.js';
 import { revokeActiveUserSessions, revokeAllActiveSessions } from '../modules/auth/services/auth-session.service.js';
+import { clearFailedLoginAttempts } from '../modules/auth/services/login-attempt.service.js';
+import { invalidateCache } from '../services/redis-cache.service.js';
 import { hashPassword, passwordPolicyError } from '../modules/auth/services/password.service.js';
 import { userRoles } from '../modules/auth/middleware/auth.middleware.js';
 
@@ -351,6 +353,13 @@ export async function updateUser(req, res) {
     update.passwordHash = await hashPassword(req.body.password);
   }
 
+  if (update.status === 'active') {
+    update.failedLoginAttempts = 0;
+    update.loginLockedAt = null;
+  }
+
+  const securityChanged = Boolean(req.body.password) || ['status', 'role', 'additionalRoles', 'accessTypes'].some((field) => update[field] !== undefined && JSON.stringify(update[field]) !== JSON.stringify(currentUser[field]));
+
   const user = await User.findByIdAndUpdate(req.params.id, update, {
     new: true,
     runValidators: true,
@@ -358,6 +367,12 @@ export async function updateUser(req, res) {
 
   if (!user) {
     return res.status(404).json({ error: { message: 'User not found' } });
+  }
+
+  if (update.status === 'active') await clearFailedLoginAttempts(user._id);
+  if (securityChanged) {
+    await revokeActiveUserSessions(user._id);
+    await Promise.all([invalidateCache('lead-lists'), invalidateCache('task-lists')]);
   }
 
   await auditEvent(req, {

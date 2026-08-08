@@ -4,15 +4,9 @@ import { emailHealth, sendNotificationEmail } from '../services/email.service.js
 
 export async function getHealth(req, res) {
   const database = databaseHealth();
-  const email = await emailHealth();
 
   res.status(database.state === 'connected' ? 200 : 503).json({
     status: database.state === 'connected' ? 'ok' : 'degraded',
-    service: env.appName,
-    environment: env.nodeEnv,
-    uptimeSeconds: Math.floor(process.uptime()),
-    database,
-    email,
   });
 }
 
