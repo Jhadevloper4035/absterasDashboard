@@ -2,7 +2,7 @@ import Redis from 'ioredis';
 import { env } from '../../../config/env.js';
 
 export const MAX_LOGIN_ATTEMPTS = 3;
-export const LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60;
+export const LOGIN_ATTEMPT_WINDOW_SECONDS = 60 * 60;
 
 let redis;
 let storeForTest;

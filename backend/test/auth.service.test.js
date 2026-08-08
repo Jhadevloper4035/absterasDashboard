@@ -310,6 +310,30 @@ test('third failed login creates a temporary lock without suspending the account
   assert.ok(userUpdate.$set.loginLockedAt > new Date());
 });
 
+test('failed login tells an active user how many attempts remain', async () => {
+  const user = { _id: 'user-1', email: 'codex.sales@example.com', status: 'active', passwordHash: await hashPassword('Correct123!') };
+  User.findOne = () => ({ select: () => Promise.resolve(user) });
+  User.updateOne = async () => {};
+  setLoginAttemptStoreForTest({ increment: async () => 1, delete: async () => {} });
+  const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+
+  await login({ body: { email: user.email, password: 'wrong-password' }, ...testReq() }, response);
+
+  assert.equal(response.statusCode, 401);
+  assert.match(response.body.error.message, /2 attempts remaining/);
+});
+
+test('locked login tells the user how long to wait', async () => {
+  const user = { _id: 'user-1', email: 'codex.sales@example.com', status: 'active', loginLockedAt: new Date(Date.now() + 59 * 60_000), passwordHash: await hashPassword('Correct123!') };
+  User.findOne = () => ({ select: () => Promise.resolve(user) });
+  const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+
+  await login({ body: { email: user.email, password: 'wrong-password' }, ...testReq() }, response);
+
+  assert.equal(response.statusCode, 429);
+  assert.match(response.body.error.message, /59 minute/);
+});
+
 test('logout closes the current login history row', async () => {
   const token = createAccessToken({ id: 'user-1', role: 'admin' });
   let logoutUpdate;

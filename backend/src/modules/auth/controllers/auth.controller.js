@@ -93,7 +93,8 @@ export async function login(req, res) {
 
   if (user?.loginLockedAt && user.loginLockedAt > new Date()) {
     logAuth('auth.login.locked', req, { userId: String(user._id) });
-    return res.status(429).json({ error: { message: 'Too many login attempts. Try again later.' } });
+    const minutesRemaining = Math.ceil((user.loginLockedAt.getTime() - Date.now()) / 60_000);
+    return res.status(429).json({ error: { message: `Too many login attempts. Try again in ${minutesRemaining} minute${minutesRemaining === 1 ? '' : 's'}.` } });
   }
   if (user?.loginLockedAt) {
     await User.updateOne({ _id: user._id }, { $set: { loginLockedAt: null } });
@@ -102,16 +103,18 @@ export async function login(req, res) {
 
   if (!user || user.status !== 'active' || !(await verifyPassword(password, user.passwordHash))) {
     let loginLockedAt;
+    let attemptsRemaining;
     if (user?.status === 'active') {
       const failedLoginAttempts = await recordFailedLoginAttempt(user._id);
       loginLockedAt = failedLoginAttempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOGIN_ATTEMPT_WINDOW_SECONDS * 1000) : null;
+      attemptsRemaining = Math.max(0, MAX_LOGIN_ATTEMPTS - failedLoginAttempts);
       await User.updateOne(
         { _id: user._id },
         { $set: { ...(loginLockedAt && { loginLockedAt }) } },
       );
     }
     logAuth('auth.login.failed', req, { email: normalizedEmail });
-    return res.status(loginLockedAt ? 429 : 401).json({ error: { message: loginLockedAt ? 'Too many login attempts. Try again later.' : 'Invalid email or password' } });
+    return res.status(loginLockedAt ? 429 : 401).json({ error: { message: loginLockedAt ? 'Too many login attempts. Try again later.' : attemptsRemaining === undefined ? 'Invalid email or password' : `Invalid email or password. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining.` } });
   }
 
   const lastLoginAt = new Date();
