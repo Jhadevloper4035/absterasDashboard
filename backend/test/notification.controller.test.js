@@ -65,7 +65,7 @@ test('old task-note notifications infer sender from the task note author', async
   };
 
   const response = res();
-  await listUnreadNotifications({ user: { _id: 'user-1' } }, response);
+  await listUnreadNotifications({ user: { _id: 'user-1' }, query: {} }, response);
 
   assert.deepEqual(taskQuery, { _id: { $in: ['task-1'] } });
   assert.equal(response.body.data[0].metadata.fromName, 'Rohan Mehta');
@@ -114,7 +114,7 @@ test('old lead-assignment notifications infer sender from assignment history', a
   };
 
   const response = res();
-  await listUnreadNotifications({ user: { _id: 'user-1' } }, response);
+  await listUnreadNotifications({ user: { _id: 'user-1' }, query: {} }, response);
 
   assert.deepEqual(leadQuery, { _id: { $in: ['lead-1'] } });
   assert.equal(response.body.data[0].metadata.fromName, 'Admin User');

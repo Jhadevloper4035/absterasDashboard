@@ -113,7 +113,7 @@ test('employment details require Employee access type', async () => {
     {
       body: {
         name: 'Sales User', email: 'sales@example.com', phone: '9876543210', password: 'Secret123', role: 'sales',
-        employment: { employeeType: 'office', department: 'department-1', designation: 'designation-1', joiningDate: '2026-08-01' },
+        employment: { employeeType: 'office', department: 'department-1', designation: 'designation-1', joiningDate: '2026-08-01', monthlySalary: 50000 },
       },
     },
     response,
@@ -232,6 +232,8 @@ test('superadmin can assign the single admin access', async () => {
     assert.deepEqual(update, { role: 'accounts', additionalRoles: ['sales', 'admin'], accessTypes: ['hr'] });
     return { _id: id, ...update, status: 'active' };
   };
+  AuthSession.find = () => ({ select() { return this; }, lean: async () => [] });
+  AuthSession.updateMany = async () => {};
 
   const response = res();
   await updateUser({ user: { _id: 'superadmin-1', role: 'superadmin' }, params: { id: 'sales-1' }, body: { accessTypes: ['accounts', 'sales', 'admin', 'hr'] } }, response);
