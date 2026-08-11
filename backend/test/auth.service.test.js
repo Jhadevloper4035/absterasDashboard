@@ -10,7 +10,7 @@ import { cleanIpAddress } from '../src/helpers/request-ip.js';
 import { allowFirstSuperadminOrUserManager, authorizeHrModule, authorizeRoles } from '../src/modules/auth/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
 import { login, logout } from '../src/modules/auth/controllers/auth.controller.js';
-import { setLoginAttemptStoreForTest } from '../src/modules/auth/services/login-attempt.service.js';
+import { clearFailedLoginAttempts, recordFailedLoginAttempt, setLoginAttemptStoreForTest } from '../src/modules/auth/services/login-attempt.service.js';
 import { createAccessTokenPair, createSession, isAccessTokenBlocked, rotateSession } from '../src/modules/auth/services/auth-session.service.js';
 import { hashPassword, verifyPassword } from '../src/modules/auth/services/password.service.js';
 import { createAccessToken, hashRefreshToken, verifyAccessToken } from '../src/modules/auth/services/token.service.js';
@@ -34,6 +34,7 @@ const originals = {
   loginHistoryUpdateMany: LoginHistory.updateMany,
   rateFindOne: RateLimit.findOne,
   rateFindOneAndUpdate: RateLimit.findOneAndUpdate,
+  rateDeleteOne: RateLimit.deleteOne,
   userFindOne: User.findOne,
   userUpdateOne: User.updateOne,
 };
@@ -59,6 +60,7 @@ afterEach(() => {
   LoginHistory.updateMany = originals.loginHistoryUpdateMany;
   RateLimit.findOne = originals.rateFindOne;
   RateLimit.findOneAndUpdate = originals.rateFindOneAndUpdate;
+  RateLimit.deleteOne = originals.rateDeleteOne;
   User.findOne = originals.userFindOne;
   User.updateOne = originals.userUpdateOne;
   setLoginAttemptStoreForTest(loginAttemptStore);
@@ -511,4 +513,19 @@ test('rate limiter blocks after the configured attempt count', async () => {
   assert.ok(Array.isArray(update));
   assert.equal(res.statusCode, 429);
   assert.equal(res.body.error.message, 'Too many attempts. Try again later.');
+});
+
+test('failed-login tracking uses the database fallback', async () => {
+  let deletedKey;
+  setLoginAttemptStoreForTest(undefined);
+  RateLimit.findOneAndUpdate = async (filter, _update, options) => {
+    assert.equal(filter.key, 'auth:failed-login:user-1');
+    assert.equal(options.updatePipeline, true);
+    return { count: 2 };
+  };
+  RateLimit.deleteOne = async (filter) => { deletedKey = filter.key; };
+
+  assert.equal(await recordFailedLoginAttempt('user-1'), 2);
+  await clearFailedLoginAttempts('user-1');
+  assert.equal(deletedKey, 'auth:failed-login:user-1');
 });

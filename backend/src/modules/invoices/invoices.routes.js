@@ -6,7 +6,7 @@ import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware
 export const invoiceRouter = Router();
 invoiceRouter.use(asyncHandler(authenticate), authorizeRoles('superadmin', 'admin', 'operations'));
 invoiceRouter.get('/', asyncHandler(listInvoices));
-invoiceRouter.post('/', authorizeRoles('superadmin', 'admin'), asyncHandler(createInvoice));
+invoiceRouter.post('/', authorizeRoles('superadmin', 'admin', 'operations'), asyncHandler(createInvoice));
 invoiceRouter.get('/:id/pdf', asyncHandler(downloadInvoicePdf));
 invoiceRouter.get('/:id', asyncHandler(getInvoice));
 invoiceRouter.patch('/:id', asyncHandler(updateInvoice));

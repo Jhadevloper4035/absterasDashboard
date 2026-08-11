@@ -44,8 +44,19 @@ const CreateUserPage = () => {
   const isSuperadmin = currentAccessTypes.includes('superadmin')
   const canManageUsers = currentAccessTypes.includes('superadmin') || currentAccessTypes.includes('admin')
   const createRoles = teamRoles
-  const accessTypeOptions = useMemo(() => [...new Set([...defaultAccessTypes, ...createRoles, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])])])].filter((type) => type !== 'superadmin' && (isSuperadmin || type !== 'admin'))
-    .map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) })), [createRoles, isSuperadmin, users])
+  const accessTypeOptions = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...defaultAccessTypes,
+          ...createRoles,
+          ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]),
+        ]),
+      ]
+        .filter((type) => type !== 'superadmin' && (isSuperadmin || type !== 'admin'))
+        .map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) })),
+    [createRoles, isSuperadmin, users],
+  )
 
   useEffect(() => {
     if (canManageUsers) fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
@@ -55,7 +66,10 @@ const CreateUserPage = () => {
   useEffect(() => {
     if (!canManageUsers) return
     Promise.all([apiFetch<{ data: OrganizationItem[] }>('/hr/departments'), apiFetch<{ data: OrganizationItem[] }>('/hr/designations')])
-      .then(([departmentResponse, designationResponse]) => { setDepartments(departmentResponse.data); setDesignations(designationResponse.data) })
+      .then(([departmentResponse, designationResponse]) => {
+        setDepartments(departmentResponse.data)
+        setDesignations(designationResponse.data)
+      })
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load employment options'))
   }, [canManageUsers])
 
@@ -78,11 +92,20 @@ const CreateUserPage = () => {
         return
       }
       const employment = form.accessTypes?.includes('employee') ? form.employment : undefined
-      if (form.accessTypes?.includes('employee') && (!employment?.department || !employment.designation || !employment.joiningDate)) {
-        setError('Department, designation, and joining date are required')
+      if (
+        form.accessTypes?.includes('employee') &&
+        (!employment?.department || !employment.designation || !employment.joiningDate || !Number(employment.monthlySalary))
+      ) {
+        setError('Department, designation, joining date, and monthly salary are required')
         return
       }
-      await createUserInStore({ ...form, role: primaryRole, additionalRoles: selectedRoles.filter((type) => type !== primaryRole && type !== 'superadmin'), accessTypes: (form.accessTypes || []).filter((type) => !roles.includes(type as UserType['role'])), employment })
+      await createUserInStore({
+        ...form,
+        role: primaryRole,
+        additionalRoles: selectedRoles.filter((type) => type !== primaryRole && type !== 'superadmin'),
+        accessTypes: (form.accessTypes || []).filter((type) => !roles.includes(type as UserType['role'])),
+        employment,
+      })
       setForm(emptyForm)
       setMessage('User created')
     } catch (e) {
@@ -119,42 +142,237 @@ const CreateUserPage = () => {
               <Col xl={6}>
                 <Form.Group>
                   <Form.Label>Name</Form.Label>
-                  <Form.Control required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Full name" />
+                  <Form.Control
+                    required
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    placeholder="Full name"
+                  />
                 </Form.Group>
               </Col>
               <Col xl={6}>
                 <Form.Group>
                   <Form.Label>Email</Form.Label>
-                  <Form.Control required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@company.com" />
+                  <Form.Control
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setForm({ ...form, email: event.target.value })}
+                    placeholder="name@company.com"
+                  />
                 </Form.Group>
               </Col>
               <Col xl={6}>
                 <Form.Group>
                   <Form.Label>Mobile Number</Form.Label>
-                  <Form.Control required type="tel" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="10-digit mobile number" />
+                  <Form.Control
+                    required
+                    type="tel"
+                    inputMode="tel"
+                    value={form.phone}
+                    onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                    placeholder="10-digit mobile number"
+                  />
                 </Form.Group>
               </Col>
               <Col xl={6}>
                 <Form.Group>
                   <Form.Label>Password</Form.Label>
-                  <Form.Control required minLength={8} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="At least 8 characters" />
+                  <Form.Control
+                    required
+                    minLength={8}
+                    type="password"
+                    value={form.password}
+                    onChange={(event) => setForm({ ...form, password: event.target.value })}
+                    placeholder="At least 8 characters"
+                  />
                   <Form.Text>Letters and numbers required.</Form.Text>
                 </Form.Group>
               </Col>
               <Col xl={12}>
                 <Form.Group>
                   <Form.Label>Access types</Form.Label>
-                  <ReactSelect isMulti classNamePrefix="react-select" options={accessTypeOptions} placeholder="Select access types" value={accessTypeOptions.filter((option) => form.accessTypes?.includes(option.value))} onChange={(options) => { const accessTypes = options.map((option) => option.value); setForm({ ...form, accessTypes, employment: accessTypes.includes('employee') ? form.employment : undefined }) }} />
+                  <ReactSelect
+                    isMulti
+                    classNamePrefix="react-select"
+                    options={accessTypeOptions}
+                    placeholder="Select access types"
+                    value={accessTypeOptions.filter((option) => form.accessTypes?.includes(option.value))}
+                    onChange={(options) => {
+                      const accessTypes = options.map((option) => option.value)
+                      setForm({ ...form, accessTypes, employment: accessTypes.includes('employee') ? form.employment : undefined })
+                    }}
+                  />
                   <Form.Text>Select all applicable types. Options already assigned to users appear here automatically.</Form.Text>
                 </Form.Group>
               </Col>
-              {form.accessTypes?.includes('employee') && <><Col xs={12}><hr className="my-2" /><h5 className="mb-0">Employment details</h5><Form.Text>Choose the department (for example Accounts, Operations, or Designers) and optional starting monthly salary.</Form.Text></Col>
-                <Col xl={3}><Form.Group><Form.Label>Employee Type</Form.Label><Form.Select value={form.employment?.employeeType || 'office'} onChange={(event) => setForm({ ...form, employment: { ...form.employment, employeeType: event.target.value as 'office' | 'site', department: form.employment?.department || '', designation: form.employment?.designation || '', joiningDate: form.employment?.joiningDate || '', manager: form.employment?.manager, monthlySalary: form.employment?.monthlySalary } })}><option value="office">Office</option><option value="site">Site</option></Form.Select></Form.Group></Col>
-                <Col xl={3}><Form.Group><Form.Label>Department</Form.Label><Form.Select required value={form.employment?.department || ''} onChange={(event) => setForm({ ...form, employment: { employeeType: form.employment?.employeeType || 'office', department: event.target.value, designation: form.employment?.designation || '', joiningDate: form.employment?.joiningDate || '', manager: form.employment?.manager, monthlySalary: form.employment?.monthlySalary } })}><option value="">Select department</option>{departments.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</Form.Select></Form.Group></Col>
-                <Col xl={3}><Form.Group><Form.Label>Designation</Form.Label><Form.Select required value={form.employment?.designation || ''} onChange={(event) => setForm({ ...form, employment: { employeeType: form.employment?.employeeType || 'office', department: form.employment?.department || '', designation: event.target.value, joiningDate: form.employment?.joiningDate || '', manager: form.employment?.manager, monthlySalary: form.employment?.monthlySalary } })}><option value="">Select designation</option>{designations.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</Form.Select></Form.Group></Col>
-                <Col xl={3}><Form.Group><Form.Label>Joining Date</Form.Label><Form.Control required type="date" value={form.employment?.joiningDate || ''} onChange={(event) => setForm({ ...form, employment: { employeeType: form.employment?.employeeType || 'office', department: form.employment?.department || '', designation: form.employment?.designation || '', joiningDate: event.target.value, manager: form.employment?.manager, monthlySalary: form.employment?.monthlySalary } })} /></Form.Group></Col>
-                <Col xl={3}><Form.Group><Form.Label>Monthly salary <span className="text-muted">(optional)</span></Form.Label><Form.Control min="0" step="0.01" type="number" value={form.employment?.monthlySalary || ''} onChange={(event) => setForm({ ...form, employment: { employeeType: form.employment?.employeeType || 'office', department: form.employment?.department || '', designation: form.employment?.designation || '', joiningDate: form.employment?.joiningDate || '', manager: form.employment?.manager, monthlySalary: event.target.value } })} /></Form.Group></Col>
-              </>}
+              {form.accessTypes?.includes('employee') && (
+                <>
+                  <Col xs={12}>
+                    <hr className="my-2" />
+                    <h5 className="mb-0">Employment details</h5>
+                    <Form.Text>Choose the department, designation, and monthly salary.</Form.Text>
+                  </Col>
+                  <Col xl={3}>
+                    <Form.Group>
+                      <Form.Label>Employee Type</Form.Label>
+                      <Form.Select
+                        value={form.employment?.employeeType || 'office'}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            employment: {
+                              ...form.employment,
+                              employeeType: event.target.value as 'office' | 'site',
+                              department: form.employment?.department || '',
+                              designation: form.employment?.designation || '',
+                              joiningDate: form.employment?.joiningDate || '',
+                              dateOfBirth: form.employment?.dateOfBirth,
+                              manager: form.employment?.manager,
+                              monthlySalary: form.employment?.monthlySalary,
+                            },
+                          })
+                        }>
+                        <option value="office">Office</option>
+                        <option value="site">Site</option>
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col xl={3}>
+                    <Form.Group>
+                      <Form.Label>Department</Form.Label>
+                      <Form.Select
+                        required
+                        value={form.employment?.department || ''}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            employment: {
+                              employeeType: form.employment?.employeeType || 'office',
+                              department: event.target.value,
+                              designation: '',
+                              joiningDate: form.employment?.joiningDate || '',
+                              dateOfBirth: form.employment?.dateOfBirth,
+                              manager: form.employment?.manager,
+                              monthlySalary: form.employment?.monthlySalary,
+                            },
+                          })
+                        }>
+                        <option value="">Select department</option>
+                        {departments.map((item) => (
+                          <option key={item._id} value={item._id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col xl={3}>
+                    <Form.Group>
+                      <Form.Label>Designation</Form.Label>
+                      <Form.Select
+                        required
+                        disabled={!form.employment?.department}
+                        value={form.employment?.designation || ''}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            employment: {
+                              employeeType: form.employment?.employeeType || 'office',
+                              department: form.employment?.department || '',
+                              designation: event.target.value,
+                              joiningDate: form.employment?.joiningDate || '',
+                              dateOfBirth: form.employment?.dateOfBirth,
+                              manager: form.employment?.manager,
+                              monthlySalary: form.employment?.monthlySalary,
+                            },
+                          })
+                        }>
+                        <option value="">{form.employment?.department ? 'Select designation' : 'Select department first'}</option>
+                        {designations.filter((item) => item.department === form.employment?.department).map((item) => (
+                          <option key={item._id} value={item._id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col xl={3}>
+                    <Form.Group>
+                      <Form.Label>Joining Date</Form.Label>
+                      <Form.Control
+                        required
+                        type="date"
+                        value={form.employment?.joiningDate || ''}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            employment: {
+                              employeeType: form.employment?.employeeType || 'office',
+                              department: form.employment?.department || '',
+                              designation: form.employment?.designation || '',
+                              joiningDate: event.target.value,
+                              dateOfBirth: form.employment?.dateOfBirth,
+                              manager: form.employment?.manager,
+                              monthlySalary: form.employment?.monthlySalary,
+                            },
+                          })
+                        }
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xl={3}>
+                    <Form.Group>
+                      <Form.Label>Date of Birth</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={form.employment?.dateOfBirth || ''}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            employment: {
+                              employeeType: form.employment?.employeeType || 'office',
+                              department: form.employment?.department || '',
+                              designation: form.employment?.designation || '',
+                              joiningDate: form.employment?.joiningDate || '',
+                              dateOfBirth: event.target.value,
+                              manager: form.employment?.manager,
+                              monthlySalary: form.employment?.monthlySalary,
+                            },
+                          })
+                        }
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xl={3}>
+                    <Form.Group>
+                      <Form.Label>Monthly salary</Form.Label>
+                      <Form.Control
+                        required
+                        min="0.01"
+                        step="0.01"
+                        type="number"
+                        value={form.employment?.monthlySalary || ''}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            employment: {
+                              employeeType: form.employment?.employeeType || 'office',
+                              department: form.employment?.department || '',
+                              designation: form.employment?.designation || '',
+                              joiningDate: form.employment?.joiningDate || '',
+                              dateOfBirth: form.employment?.dateOfBirth,
+                              manager: form.employment?.manager,
+                              monthlySalary: event.target.value,
+                            },
+                          })
+                        }
+                      />
+                      <Form.Text>Enter the full amount, for example 50,000.</Form.Text>
+                    </Form.Group>
+                  </Col>
+                </>
+              )}
               <Col xl={4}>
                 <Form.Group>
                   <Form.Label>Status</Form.Label>

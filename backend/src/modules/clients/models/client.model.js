@@ -1,8 +1,11 @@
 import mongoose from 'mongoose';
 
+const { ObjectId } = mongoose.Schema.Types;
+
 const clientSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
+    parentClient: { type: ObjectId, ref: 'Client' },
     gstin: { type: String, trim: true, uppercase: true },
     billingAddress: { type: String, trim: true },
     shippingAddress: { type: String, trim: true },
@@ -21,5 +24,6 @@ const clientSchema = new mongoose.Schema(
 );
 
 clientSchema.index({ status: 1, createdAt: -1 });
+clientSchema.index({ parentClient: 1, createdAt: -1 });
 
 export const Client = mongoose.models.Client || mongoose.model('Client', clientSchema);

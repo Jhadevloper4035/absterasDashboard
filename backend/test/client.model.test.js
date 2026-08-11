@@ -3,11 +3,13 @@ import { test } from 'node:test';
 import { Client } from '../src/modules/clients/models/client.model.js';
 
 test('client combines billing and site details in one record', async () => {
-  const client = new Client({ name: 'Kishori Lal Goel', gstin: '09abcde1234f1z5', billingAddress: 'Lucknow', shippingAddress: 'Lucknow', state: 'Uttar Pradesh', stateCode: '09', siteName: 'Emaar Gomti Green A2-19', siteAddress: 'Gomti Nagar', status: 'on hold', estimatedValue: 250000 });
+  const parentClient = new Client({ name: 'Kishori Lal Goel' });
+  const client = new Client({ name: 'Kishori Lal Goel - Tower A', parentClient: parentClient._id, gstin: '09abcde1234f1z5', billingAddress: 'Lucknow', shippingAddress: 'Lucknow', state: 'Uttar Pradesh', stateCode: '09', siteName: 'Emaar Gomti Green A2-19', siteAddress: 'Gomti Nagar', status: 'on hold', estimatedValue: 250000 });
 
   await client.validate();
   assert.equal(client.gstin, '09ABCDE1234F1Z5');
   assert.equal(client.siteName, 'Emaar Gomti Green A2-19');
+  assert.equal(String(client.parentClient), String(parentClient._id));
   assert.equal(client.status, 'on hold');
 });
 

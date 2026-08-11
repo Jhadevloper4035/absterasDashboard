@@ -1,16 +1,17 @@
 import PageMetaData from '@/components/PageTitle'
+import PdfActionButton from '@/components/PdfActionButton'
 import { apiFetch } from '@/helpers/api'
-import { generateIdCardPdf } from '@/helpers/idCard'
+import { downloadIdCardPdf } from '@/helpers/idCard'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { EmployeeType } from '@/types/hr'
 import { ChangeEvent, useEffect, useState } from 'react'
-import { Alert, Badge, Button, Card, CardBody, Form, Table } from 'react-bootstrap'
+import { Alert, Badge, Card, CardBody, Form, Table } from 'react-bootstrap'
 import Swal from 'sweetalert2'
 import { useParams } from 'react-router-dom'
 
 type Upload = { key: string; contentType: string; originalName?: string; size: number; checksum: string; attachmentToken: string }
-const documentTypes = ['Aadhaar Card', 'PAN Card', 'Degree Certificate', 'Passport', 'Driving Licence', 'Other']
+const documentTypes = ['Offer Letter', 'Aadhaar Card', 'PAN Card', 'Degree Certificate', 'Passport', 'Driving Licence', 'Other']
 
 const EmployeeDetailPage = () => {
   const { employeeId = '' } = useParams()
@@ -131,9 +132,9 @@ const EmployeeDetailPage = () => {
                 <Form.Control disabled={saving} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadPhoto} />
                 <Form.Text>Used on the ID card.</Form.Text>
               </div>
-              <Button className="mt-3" variant="outline-primary" onClick={() => generateIdCardPdf(employee)}>
-                Print ID card
-              </Button>
+              <PdfActionButton className="mt-3" variant="outline-primary" action={() => downloadIdCardPdf(employee._id, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to download ID card'))}>
+                Download ID card
+              </PdfActionButton>
             </CardBody>
           </Card>
         </div>
@@ -165,6 +166,8 @@ const EmployeeDetailPage = () => {
                 <dd className="col-sm-8">{employee.designation?.name || '-'}</dd>
                 <dt className="col-sm-4 text-muted">Joining date</dt>
                 <dd className="col-sm-8">{new Date(employee.joiningDate).toLocaleDateString()}</dd>
+                <dt className="col-sm-4 text-muted">Date of birth</dt>
+                <dd className="col-sm-8">{employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : '-'}</dd>
                 <dt className="col-sm-4 text-muted">Manager</dt>
                 <dd className="col-sm-8">{employee.manager?.name || '-'}</dd>
                 <dt className="col-sm-4 text-muted">Account access</dt>

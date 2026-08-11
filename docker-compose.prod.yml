@@ -1,4 +1,11 @@
 services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
     ports:
@@ -15,17 +22,27 @@ services:
     image: ${BACKEND_IMAGE}
     env_file:
       - ./.env
-    expose:
-      - "4000"
     dns:
       - 1.1.1.1
       - 8.8.8.8
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  email-worker:
+    image: ${BACKEND_IMAGE}
+    command: npm run worker
+    env_file:
+      - ./.env
+    depends_on:
+      - redis
     restart: unless-stopped
 
   frontend:
     image: ${FRONTEND_IMAGE}
-    expose:
-      - "8080"
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  redis_data:

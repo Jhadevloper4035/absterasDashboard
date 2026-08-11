@@ -14,7 +14,17 @@ const attendanceSchema = new mongoose.Schema(
     workMinutes: { type: Number, min: 0, default: 0 },
     isShortLeave: { type: Boolean, default: false },
     overtimeMinutes: { type: Number, min: 0, default: 0 },
-    markedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    correctionRequest: {
+      status: { type: String, enum: ['pending', 'approved', 'rejected'] },
+      reason: { type: String, trim: true },
+      requestedStatus: { type: String, enum: ATTENDANCE_STATUSES },
+      requestedCheckIn: { type: String, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+      requestedCheckOut: { type: String, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+      requestedAt: Date,
+      decidedAt: Date,
+      decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    },
+    markedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },
 );

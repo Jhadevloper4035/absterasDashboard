@@ -5,6 +5,7 @@ import { Client } from '../src/modules/clients/models/client.model.js';
 
 const originalCreate = Client.create;
 const originalFindById = Client.findById;
+const originalExists = Client.exists;
 
 function res() {
   return { statusCode: 200, body: undefined, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
@@ -13,6 +14,23 @@ function res() {
 afterEach(() => {
   Client.create = originalCreate;
   Client.findById = originalFindById;
+  Client.exists = originalExists;
+});
+
+test('rejects a site whose parent client does not exist', async () => {
+  Client.exists = async () => null;
+  const response = res();
+  await createClient({ body: { name: 'Tower A', parentClient: '507f1f77bcf86cd799439011' } }, response);
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Parent client not found');
+});
+
+test('requires an address for a child site', async () => {
+  Client.exists = async () => ({ _id: 'parent-1' });
+  const response = res();
+  await createClient({ body: { name: 'Tower A', parentClient: '507f1f77bcf86cd799439011' } }, response);
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Site address is required for a child site');
 });
 
 test('creates and updates only documented client fields', async () => {

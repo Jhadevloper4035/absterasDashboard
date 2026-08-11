@@ -1,14 +1,24 @@
+import { randomUUID } from 'node:crypto';
 import { auditEvent } from '../../../services/audit.service.js';
+import { Client } from '../../clients/models/client.model.js';
 import { Challan } from '../models/challan.model.js';
 import { createChallanPdf } from '../services/challan-pdf.service.js';
 
-const FIELDS = ['challanNumber', 'client', 'challanDate', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'freightCharge', 'taxableAmount', 'gstAmount', 'roundOff', 'totalAmount', 'linkedInvoice', 'pdfFileUrl'];
+const FIELDS = ['client', 'site', 'challanDate', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'freightCharge', 'taxableAmount', 'gstAmount', 'roundOff', 'totalAmount', 'linkedInvoice', 'pdfFileUrl'];
 const payload = (body) => FIELDS.reduce((result, field) => (body?.[field] !== undefined ? { ...result, [field]: body[field] } : result), {});
-const required = (body) => ['challanNumber', 'client', 'challanDate', 'taxableAmount', 'totalAmount'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
+const required = (body) => ['client', 'challanDate', 'taxableAmount', 'totalAmount'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
+const challanNumber = () => `DC-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
+const requestedChallanNumber = (value) => /^DC-[A-F0-9]{10}$/.test(String(value || '')) ? value : undefined;
 
 export async function createChallan(req, res) {
-  if (!required(req.body)) return res.status(400).json({ error: { message: 'Challan number, client, date, taxable amount, and total amount are required' } });
-  const challan = await Challan.create(payload(req.body));
+  if (!required(req.body)) return res.status(400).json({ error: { message: 'Client, date, taxable amount, and total amount are required' } });
+  let challan; const values = payload(req.body); const requestedNumber = requestedChallanNumber(req.body?.challanNumber);
+  if (values.site && !await Client.exists({ _id: values.site, parentClient: values.client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try { challan = await Challan.create({ ...values, challanNumber: attempt === 0 && requestedNumber ? requestedNumber : challanNumber() }); break; }
+    catch (error) { if (error?.code !== 11000) throw error; }
+  }
+  if (!challan) return res.status(409).json({ error: { message: 'Unable to generate a unique challan number. Please try again.' } });
   await auditEvent(req, { action: 'challan.create', entity: 'challan', entityId: challan._id });
   return res.status(201).json({ data: challan });
 }
@@ -25,13 +35,13 @@ export async function listChallans(req, res) {
 }
 
 export async function getChallan(req, res) {
-  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode');
+  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode');
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   return res.json({ data: challan });
 }
 
 export async function downloadChallanPdf(req, res) {
-  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode');
+  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode');
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   const pdf = await createChallanPdf(challan);
   const filename = `challan-${challan.challanNumber.replace(/[^\w-]/g, '_')}.pdf`;
@@ -42,7 +52,10 @@ export async function downloadChallanPdf(req, res) {
 export async function updateChallan(req, res) {
   const challan = await Challan.findById(req.params.id);
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
-  Object.assign(challan, payload(req.body));
+  const values = payload(req.body);
+  const client = values.client || challan.client;
+  if (values.site && !await Client.exists({ _id: values.site, parentClient: client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
+  Object.assign(challan, values);
   await challan.save();
   await auditEvent(req, { action: 'challan.update', entity: 'challan', entityId: challan._id });
   return res.json({ data: challan });

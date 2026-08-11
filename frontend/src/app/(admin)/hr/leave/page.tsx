@@ -1,11 +1,27 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
-import { FormEvent, useEffect, useState } from 'react'
+import type { EventClickArg } from '@fullcalendar/core'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction'
+import FullCalendar from '@fullcalendar/react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Form, Modal, Table } from 'react-bootstrap'
 import Swal from 'sweetalert2'
 
 type LeaveType = { _id: string; name: string; maxBalance: number; isPaid: boolean }
 type Balance = { _id: string; balance: number; leaveType: LeaveType }
+type Holiday = { _id: string; date: string; name: string; type: 'government' | 'festival' | 'private' }
+const sundayEvents = () => {
+  const events = []
+  const sunday = new Date()
+  sunday.setUTCDate(sunday.getUTCDate() - sunday.getUTCDay())
+  for (let index = 0; index < 104; index++) {
+    const date = new Date(sunday)
+    date.setUTCDate(date.getUTCDate() + index * 7)
+    events.push({ id: `sunday-${date.toISOString().slice(0, 10)}`, title: 'Sunday · Weekly off', start: date.toISOString().slice(0, 10), allDay: true, color: '#6c757d' })
+  }
+  return events
+}
 type Request = {
   _id: string
   fromDate: string
@@ -21,14 +37,18 @@ const LeavePage = () => {
   const [types, setTypes] = useState<LeaveType[]>([])
   const [balances, setBalances] = useState<Balance[]>([])
   const [requests, setRequests] = useState<Request[]>([])
+  const [holidays, setHolidays] = useState<Holiday[]>([])
   const [leaveType, setLeaveType] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [reason, setReason] = useState('')
   const [newType, setNewType] = useState('')
   const [showTypeModal, setShowTypeModal] = useState(false)
+  const [holidayForm, setHolidayForm] = useState({ id: '', date: '', name: '', type: 'festival' as Holiday['type'] })
+  const [showHolidayModal, setShowHolidayModal] = useState(false)
   const [error, setError] = useState('')
   const [canManage, setCanManage] = useState(false)
+  const [canManageHolidays, setCanManageHolidays] = useState(false)
   const load = () =>
     Promise.all([
       apiFetch<{ data: LeaveType[] }>('/hr/leave/types'),
@@ -45,7 +65,13 @@ const LeavePage = () => {
   useEffect(() => {
     load()
     apiFetch<{ data: { module: string; access: string }[] }>('/hr/permissions/me')
-      .then((response) => setCanManage(response.data.some((item) => item.module === 'leave' && item.access === 'manage')))
+      .then((response) => {
+        const canManageLeave = response.data.some((item) => item.module === 'leave' && item.access === 'manage')
+        const canManageHoliday = response.data.some((item) => item.module === 'attendance' && item.access === 'manage')
+        setCanManage(canManageLeave)
+        setCanManageHolidays(canManageHoliday)
+        if (canManageHoliday) apiFetch<{ data: Holiday[] }>('/hr/holidays').then((holidayResponse) => setHolidays(holidayResponse.data)).catch(() => {})
+      })
       .catch(() => {})
   }, [])
   const apply = async (event: FormEvent) => {
@@ -72,6 +98,66 @@ const LeavePage = () => {
       setError(value instanceof Error ? value.message : 'Unable to create leave type')
     }
   }
+  const loadHolidays = () => apiFetch<{ data: Holiday[] }>('/hr/holidays').then((response) => setHolidays(response.data))
+  const openHolidayCreate = (arg: DateClickArg) => {
+    if (canManageHolidays && arg.date.getUTCDay() !== 0) {
+      setHolidayForm({ id: '', date: arg.dateStr, name: '', type: 'festival' })
+      setShowHolidayModal(true)
+    }
+  }
+  const openHolidayEdit = (arg: EventClickArg) => {
+    const holiday = holidays.find((item) => item._id === arg.event.id)
+    if (canManageHolidays && holiday) {
+      setHolidayForm({ id: holiday._id, date: holiday.date.slice(0, 10), name: holiday.name, type: holiday.type })
+      setShowHolidayModal(true)
+    }
+  }
+  const saveHoliday = async (event: FormEvent) => {
+    event.preventDefault()
+    try {
+      await apiFetch(holidayForm.id ? `/hr/holidays/${holidayForm.id}` : '/hr/holidays', {
+        method: holidayForm.id ? 'PATCH' : 'POST',
+        body: JSON.stringify({ date: holidayForm.date, name: holidayForm.name, type: holidayForm.type }),
+      })
+      setShowHolidayModal(false)
+      await loadHolidays()
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Unable to save holiday')
+    }
+  }
+  const removeHoliday = async () => {
+    if (!holidayForm.id || !window.confirm('Delete this holiday?')) return
+    try {
+      await apiFetch(`/hr/holidays/${holidayForm.id}`, { method: 'DELETE' })
+      setShowHolidayModal(false)
+      await loadHolidays()
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Unable to delete holiday')
+    }
+  }
+  const calendarEvents = useMemo(
+    () => [
+      ...sundayEvents(),
+      ...holidays.map((holiday) => ({
+        id: holiday._id,
+        title: `Holiday — ${holiday.name}`,
+        start: holiday.date.slice(0, 10),
+        end: new Date(new Date(holiday.date).getTime() + 86400000).toISOString().slice(0, 10),
+        allDay: true,
+        color: holiday.type === 'government' ? '#0d6efd' : holiday.type === 'private' ? '#6f42c1' : '#fd7e14',
+      })),
+      ...requests
+        .filter((request) => request.status === 'approved' && !/^personal leave$/i.test(request.leaveType?.name || ''))
+        .map((request) => ({
+          id: request._id,
+          title: `${request.employee?.user?.name || 'Employee'} — ${request.leaveType?.name || 'Leave'}`,
+          start: request.fromDate.slice(0, 10),
+          end: new Date(new Date(request.toDate).getTime() + 86400000).toISOString().slice(0, 10),
+          allDay: true,
+        })),
+    ],
+    [holidays, requests],
+  )
   const decide = async (request: Request, status: 'approved' | 'rejected') => {
     const result = await Swal.fire({ icon: status === 'approved' ? 'question' : 'warning', title: `${status === 'approved' ? 'Approve' : 'Decline'} leave request?`, text: status === 'approved' ? 'Attendance will be updated for the approved leave dates.' : 'The employee will be notified that this request was declined.', input: status === 'approved' ? 'select' : undefined, inputLabel: status === 'approved' ? 'Payroll treatment' : undefined, inputOptions: status === 'approved' ? { policy: 'Use leave policy', paid: 'Mark full range paid', unpaid: 'Mark full range unpaid' } : undefined, inputValue: 'policy', showCancelButton: true, confirmButtonText: status === 'approved' ? 'Approve leave' : 'Decline leave', confirmButtonColor: status === 'approved' ? undefined : '#dc3545' })
     if (!result.isConfirmed) return
@@ -91,7 +177,7 @@ const LeavePage = () => {
             <div>
               <h4 className="card-title mb-1">Leave</h4>
               <p className="text-muted mb-0">
-                The first Medical Leave day each month is paid. A second Medical Leave request, and every other leave type, is unpaid and deducted from payroll.
+                The first 1.5 Medical Leave days each month are paid. Later Medical Leave and every other leave type are unpaid and deducted from payroll.
               </p>
             </div>
             {canManage && <Button onClick={() => setShowTypeModal(true)}>Create leave type</Button>}
@@ -117,7 +203,7 @@ const LeavePage = () => {
                     </strong>
                   </div>
                 ))}
-                {!balances.length && <span className="text-muted">Medical Leave is available once each month.</span>}
+                {!balances.length && <span className="text-muted">1.5 Medical Leave days are paid each month.</span>}
               </div>
             </CardBody>
           </Card>
@@ -238,6 +324,27 @@ const LeavePage = () => {
           </Table>
         </CardBody>
       </Card>
+      {canManage && (
+        <Card className="mt-3">
+          <CardBody>
+            <div className="d-flex justify-content-between align-items-start gap-2 mb-3">
+              <div>
+                <h5 className="mb-1">Leave & holiday calendar</h5>
+                <small className="text-muted">Sundays are weekly off. HR-created government, festival, and private holidays are shown here.</small>
+              </div>
+              {canManageHolidays && <Button size="sm" onClick={() => { setHolidayForm({ id: '', date: '', name: '', type: 'festival' }); setShowHolidayModal(true) }}>Add holiday</Button>}
+            </div>
+            <FullCalendar
+              plugins={[dayGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              themeSystem="bootstrap"
+              events={calendarEvents}
+              dateClick={openHolidayCreate}
+              eventClick={openHolidayEdit}
+            />
+          </CardBody>
+        </Card>
+      )}
       <Modal show={showTypeModal} onHide={() => setShowTypeModal(false)} centered>
         <Form onSubmit={createType}>
           <Modal.Header closeButton>
@@ -253,7 +360,7 @@ const LeavePage = () => {
                 onChange={(event) => setNewType(event.target.value)}
                 placeholder="Medical Leave or Personal Leave"
               />
-              <Form.Text>Only the first exact “Medical Leave” request each month is paid. All later requests and other types are unpaid.</Form.Text>
+              <Form.Text>Medical Leave provides 1.5 paid days each month. Birthday Leave provides 2.5 paid days each calendar year; all other types are unpaid.</Form.Text>
             </Form.Group>
           </Modal.Body>
           <Modal.Footer>
@@ -261,6 +368,36 @@ const LeavePage = () => {
               Cancel
             </Button>
             <Button type="submit">Create leave type</Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
+      <Modal show={showHolidayModal} onHide={() => setShowHolidayModal(false)} centered>
+        <Form onSubmit={saveHoliday}>
+          <Modal.Header closeButton>
+            <Modal.Title>{holidayForm.id ? 'Update holiday' : 'Add holiday'}</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Form.Group className="mb-3">
+              <Form.Label>Date</Form.Label>
+              <Form.Control required type="date" value={holidayForm.date} onChange={(event) => setHolidayForm({ ...holidayForm, date: event.target.value })} />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Holiday name</Form.Label>
+              <Form.Control required value={holidayForm.name} onChange={(event) => setHolidayForm({ ...holidayForm, name: event.target.value })} placeholder="Diwali" />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Holiday type</Form.Label>
+              <Form.Select value={holidayForm.type} onChange={(event) => setHolidayForm({ ...holidayForm, type: event.target.value as Holiday['type'] })}>
+                <option value="government">Government / national holiday</option>
+                <option value="festival">Festival holiday</option>
+                <option value="private">Private holiday</option>
+              </Form.Select>
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            {holidayForm.id && <Button variant="outline-danger" className="me-auto" type="button" onClick={removeHoliday}>Delete</Button>}
+            <Button variant="light" type="button" onClick={() => setShowHolidayModal(false)}>Cancel</Button>
+            <Button type="submit">Save holiday</Button>
           </Modal.Footer>
         </Form>
       </Modal>

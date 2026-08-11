@@ -7,7 +7,7 @@ import { Attendance } from '../models/attendance.model.js';
 import { PaidLeaveAllocation } from '../models/paid-leave-allocation.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
-import { dayAtMidnight, leaveAttendanceDates, leaveDays } from '../services/leave.service.js';
+import { dayAtMidnight, isBirthdayLeave, leaveAttendanceDates, leaveDays, PAID_BIRTHDAY_LEAVE_DAYS, PAID_MEDICAL_LEAVE_DAYS } from '../services/leave.service.js';
 
 const year = (date) => new Date(date).getUTCFullYear();
 const mine = async (user) => Employee.findOne({ user: user._id }).select('_id');
@@ -16,16 +16,16 @@ export async function listLeaveTypes(req, res) { return res.json({ data: await L
 export async function createLeaveType(req, res) {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: { message: 'Leave type name is required' } });
-  const isPaid = /^medical leave$/i.test(name);
-  const type = await LeaveType.create({ name, isPaid, accrualPerMonth: isPaid ? 1 : 0, maxBalance: isPaid ? 1 : 0 });
+  const paidDays = isBirthdayLeave(name) ? PAID_BIRTHDAY_LEAVE_DAYS : /^medical leave$/i.test(name) ? PAID_MEDICAL_LEAVE_DAYS : 0;
+  const type = await LeaveType.create({ name, isPaid: paidDays > 0, accrualPerMonth: paidDays, maxBalance: paidDays });
   await auditEvent(req, { action: 'hr.leave_type.create', entity: 'leave_type', entityId: type._id, after: { name } });
   return res.status(201).json({ data: type });
 }
 export async function updateLeaveType(req, res) {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: { message: 'Leave type name is required' } });
-  const isPaid = /^medical leave$/i.test(name);
-  const type = await LeaveType.findByIdAndUpdate(req.params.id, { name, isPaid, accrualPerMonth: isPaid ? 1 : 0, maxBalance: isPaid ? 1 : 0 }, { new: true, runValidators: true });
+  const paidDays = isBirthdayLeave(name) ? PAID_BIRTHDAY_LEAVE_DAYS : /^medical leave$/i.test(name) ? PAID_MEDICAL_LEAVE_DAYS : 0;
+  const type = await LeaveType.findByIdAndUpdate(req.params.id, { name, isPaid: paidDays > 0, accrualPerMonth: paidDays, maxBalance: paidDays }, { new: true, runValidators: true });
   if (!type) return res.status(404).json({ error: { message: 'Leave type not found' } });
   await auditEvent(req, { action: 'hr.leave_type.update', entity: 'leave_type', entityId: type._id, after: { name } });
   return res.json({ data: type });
@@ -69,7 +69,7 @@ export async function createLeaveRequest(req, res) {
 }
 
 export async function decideLeaveRequest(req, res) {
-  const request = await LeaveRequest.findById(req.params.id).populate('leaveType', 'isPaid');
+  const request = await LeaveRequest.findById(req.params.id).populate('leaveType', 'isPaid name');
   const status = req.body?.status;
   if (!request) return res.status(404).json({ error: { message: 'Leave request not found' } });
   if (request.status !== 'pending' || !['approved', 'rejected'].includes(status)) return res.status(400).json({ error: { message: 'Only pending requests can be approved or rejected' } });
@@ -77,17 +77,25 @@ export async function decideLeaveRequest(req, res) {
   if (status === 'approved') {
     if (typeof req.body.paid === 'boolean') {
       request.paidDays = req.body.paid ? request.days : 0;
+    } else if (isBirthdayLeave(request.leaveType.name)) {
+      const yearStart = new Date(Date.UTC(request.fromDate.getUTCFullYear(), 0, 1));
+      const nextYearStart = new Date(Date.UTC(request.fromDate.getUTCFullYear() + 1, 0, 1));
+      const [{ paidDays = 0 } = {}] = await LeaveRequest.aggregate([
+        { $match: { employee: request.employee, leaveType: request.leaveType._id, status: 'approved', _id: { $ne: request._id }, fromDate: { $gte: yearStart, $lt: nextYearStart } } },
+        { $group: { _id: null, paidDays: { $sum: '$paidDays' } } },
+      ]);
+      request.paidDays = Math.max(Math.min(PAID_BIRTHDAY_LEAVE_DAYS - paidDays, request.days), 0);
     } else if (request.leaveType.isPaid) {
       const month = request.fromDate.toISOString().slice(0, 7);
       const monthStart = new Date(`${month}-01T00:00:00.000Z`);
       const nextMonthStart = new Date(Date.UTC(request.fromDate.getUTCFullYear(), request.fromDate.getUTCMonth() + 1, 1));
-      const hasExistingPaidLeave = await LeaveRequest.exists({ employee: request.employee, status: 'approved', paidDays: { $gt: 0 }, _id: { $ne: request._id }, fromDate: { $gte: monthStart, $lt: nextMonthStart } });
+      const hasExistingPaidLeave = await LeaveRequest.exists({ employee: request.employee, leaveType: request.leaveType._id, status: 'approved', paidDays: { $gt: 0 }, _id: { $ne: request._id }, fromDate: { $gte: monthStart, $lt: nextMonthStart } });
       if (hasExistingPaidLeave) {
         request.paidDays = 0;
       } else {
         try {
           await PaidLeaveAllocation.create({ employee: request.employee, month, request: request._id });
-          request.paidDays = Math.min(1, request.days);
+          request.paidDays = Math.min(PAID_MEDICAL_LEAVE_DAYS, request.days);
         } catch (error) {
           if (error?.code !== 11000) throw error;
           request.paidDays = 0;

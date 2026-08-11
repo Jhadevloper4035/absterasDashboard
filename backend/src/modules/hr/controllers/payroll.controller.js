@@ -11,6 +11,8 @@ import { calculatePayroll, generateBankFile } from '../services/payroll.service.
 
 const validPeriod = (month, year) => Number.isInteger(Number(month)) && Number(month) >= 1 && Number(month) <= 12 && Number.isInteger(Number(year)) && Number(year) >= 2000;
 const amounts = (body) => ['ctc', 'basic', 'hra'].every((field) => Number.isFinite(Number(body[field])) && Number(body[field]) >= 0);
+export const monthlySalary = (structure) => Number(structure?.basic || 0) + Number(structure?.hra || 0) + (structure?.allowances || []).reduce((total, allowance) => total + Number(allowance.amount || 0), 0);
+async function currentMonthlySalary(employeeId) { const structure = await SalaryStructure.findOne({ employee: employeeId, effectiveFrom: { $lte: new Date() } }).sort({ effectiveFrom: -1 }); return structure ? monthlySalary(structure) : 0; }
 
 function cleanAllowances(allowances) { return (Array.isArray(allowances) ? allowances : []).map((item) => ({ name: String(item?.name || '').trim(), amount: Number(item?.amount) })).filter((item) => item.name && Number.isFinite(item.amount) && item.amount >= 0).slice(0, 20); }
 const storedEntry = ({ expenseClaimIds, ...entry }) => entry;
@@ -20,7 +22,9 @@ async function payrollEntries(month, year, employees, session) { return Promise.
 export async function listSalaryStructures(req, res) { return res.json({ data: await SalaryStructure.find().populate({ path: 'employee', populate: { path: 'user', select: 'name email' } }).sort({ effectiveFrom: -1 }) }); }
 export async function createSalaryStructure(req, res) {
   if (!amounts(req.body) || !req.body.employee || !req.body.effectiveFrom || !await Employee.exists({ _id: req.body.employee })) return res.status(400).json({ error: { message: 'Employee, effective date and non-negative monthly salary values are required' } });
-  const structure = await SalaryStructure.create({ employee: req.body.employee, ctc: Number(req.body.ctc), basic: Number(req.body.basic), hra: Number(req.body.hra), allowances: cleanAllowances(req.body.allowances), effectiveFrom: req.body.effectiveFrom });
+  let structure;
+  try { structure = await SalaryStructure.create({ employee: req.body.employee, ctc: Number(req.body.ctc), basic: Number(req.body.basic), hra: Number(req.body.hra), allowances: cleanAllowances(req.body.allowances), effectiveFrom: req.body.effectiveFrom }); }
+  catch (error) { if (error?.code === 11000) return res.status(409).json({ error: { message: 'A salary structure already exists for this employee and effective date' } }); throw error; }
   await auditEvent(req, { action: 'hr.salary.create', entity: 'salary_structure', entityId: structure._id, after: { employee: structure.employee, effectiveFrom: structure.effectiveFrom } });
   return res.status(201).json({ data: structure });
 }
@@ -32,7 +36,14 @@ export async function updateSalaryStructure(req, res) {
   return res.json({ data: structure });
 }
 
-export async function listAdvances(req, res) { return res.json({ data: await Advance.find().populate({ path: 'employee', populate: { path: 'user', select: 'name email' } }).populate('approvedBy', 'name').sort({ createdAt: -1 }) }); }
+export async function listAdvances(req, res) {
+  const advances = await Advance.find().populate({ path: 'employee', populate: { path: 'user', select: 'name email' } }).populate('approvedBy', 'name').sort({ createdAt: -1 });
+  const employeeIds = advances.map((advance) => advance.employee?._id).filter(Boolean);
+  const structures = await SalaryStructure.find({ employee: { $in: employeeIds }, effectiveFrom: { $lte: new Date() } }).sort({ effectiveFrom: -1 }).lean();
+  const salaries = new Map();
+  for (const structure of structures) if (!salaries.has(String(structure.employee))) salaries.set(String(structure.employee), monthlySalary(structure));
+  return res.json({ data: advances.map((advance) => ({ ...advance.toObject(), monthlySalary: salaries.get(String(advance.employee?._id)) || 0 })) });
+}
 export async function listMyAdvances(req, res) {
   const employee = await Employee.findOne({ user: req.user._id }).select('_id');
   if (!employee) return res.json({ data: [] });
@@ -42,6 +53,8 @@ export async function requestAdvance(req, res) {
   const employee = await Employee.findOne({ user: req.user._id, status: 'active' }).select('_id');
   const amount = Number(req.body?.amount); const monthlyAmount = Number(req.body?.deductionSchedule?.monthlyAmount);
   if (!employee || !String(req.body?.reason || '').trim() || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(monthlyAmount) || monthlyAmount <= 0) return res.status(400).json({ error: { message: 'Reason, amount and monthly deduction are required' } });
+  const salary = await currentMonthlySalary(employee._id);
+  if (!salary || monthlyAmount > salary) return res.status(400).json({ error: { message: 'Monthly deduction must not exceed the employee monthly salary' } });
   const advance = await Advance.create({ employee: employee._id, amount, reason: String(req.body.reason).trim(), deductionSchedule: { monthlyAmount } });
   await auditEvent(req, { action: 'hr.advance.request', entity: 'advance', entityId: advance._id, after: { amount } });
   return res.status(201).json({ data: advance });
@@ -49,6 +62,8 @@ export async function requestAdvance(req, res) {
 export async function createAdvance(req, res) {
   const amount = Number(req.body?.amount); const monthlyAmount = Number(req.body?.deductionSchedule?.monthlyAmount);
   if (!req.body.employee || !String(req.body.reason || '').trim() || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(monthlyAmount) || monthlyAmount <= 0 || !await Employee.exists({ _id: req.body.employee })) return res.status(400).json({ error: { message: 'Employee, reason, amount and monthly deduction are required' } });
+  const salary = await currentMonthlySalary(req.body.employee);
+  if (!salary || monthlyAmount > salary) return res.status(400).json({ error: { message: 'Monthly deduction must not exceed the employee monthly salary' } });
   const advance = await Advance.create({ employee: req.body.employee, amount, reason: String(req.body.reason).trim(), deductionSchedule: { monthlyAmount } });
   await auditEvent(req, { action: 'hr.advance.create', entity: 'advance', entityId: advance._id, after: { employee: advance.employee, amount } });
   return res.status(201).json({ data: advance });
@@ -57,6 +72,7 @@ export async function decideAdvance(req, res) {
   const advance = await Advance.findById(req.params.id); const status = req.body?.status;
   if (!advance) return res.status(404).json({ error: { message: 'Advance not found' } });
   if (advance.status !== 'pending' || !['approved', 'rejected'].includes(status)) return res.status(400).json({ error: { message: 'Only pending advances can be approved or rejected' } });
+  if (status === 'approved' && advance.deductionSchedule.monthlyAmount > await currentMonthlySalary(advance.employee)) return res.status(400).json({ error: { message: 'Monthly deduction exceeds the employee monthly salary' } });
   advance.status = status; advance.approvedBy = req.user._id; await advance.save();
   await auditEvent(req, { action: `hr.advance.${status}`, entity: 'advance', entityId: advance._id, after: { status } });
   if (status === 'approved') {
@@ -87,6 +103,21 @@ export async function getPayrollRun(req, res) {
   const run = await PayrollRun.findById(req.params.id).populate({ path: 'entries.employee', populate: { path: 'user', select: 'name email' } });
   if (!run) return res.status(404).json({ error: { message: 'Payroll run not found' } });
   return res.json({ data: run });
+}
+export async function downloadPayslip(req, res) {
+  const month = Number(req.query.month); const year = Number(req.query.year);
+  if (!validPeriod(month, year)) return res.status(400).json({ error: { message: 'Valid month and year are required' } });
+  const employee = req.hrAccess === 'manage' && req.query.employee
+    ? await Employee.findById(req.query.employee).populate('user', 'name email').populate('department', 'name').populate('designation', 'name')
+    : await Employee.findOne({ user: req.user._id }).populate('user', 'name email').populate('department', 'name').populate('designation', 'name');
+  if (!employee) return res.status(404).json({ error: { message: 'Employee profile not found' } });
+  const run = await PayrollRun.findOne({ month, year, status: 'processed' });
+  const entry = run?.entries.find((item) => String(item.employee) === String(employee._id));
+  if (!entry) return res.status(404).json({ error: { message: 'Processed payslip not found' } });
+  const salary = await SalaryStructure.findOne({ employee: employee._id, effectiveFrom: { $lte: new Date(Date.UTC(year, month, 1)) } }).sort({ effectiveFrom: -1 });
+  const pdf = await createPayslipPdf({ employee, entry, salary, month, year });
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="payslip-${year}-${String(month).padStart(2, '0')}.pdf"` });
+  return res.send(pdf);
 }
 export async function processPayrollRun(req, res) {
   const session = await mongoose.startSession();

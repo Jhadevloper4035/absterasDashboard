@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { createHoliday, deleteHoliday, listAttendance, listHolidays, markAttendance, updateHoliday } from './controllers/attendance.controller.js';
+import { createHoliday, decideAttendanceCorrection, deleteHoliday, downloadAttendanceReport, listAttendance, listHolidays, markAttendance, requestAttendanceCorrection, updateHoliday } from './controllers/attendance.controller.js';
 import { createLeaveRequest, createLeaveType, creditCompOff, decideLeaveRequest, deleteLeaveType, encashLeave, listLeaveBalances, listLeaveRequests, listLeaveTypes, updateLeaveType } from './controllers/leave.controller.js';
 import { createExpenseClaim, decideExpenseClaim, listExpenseClaims } from './controllers/expense.controller.js';
 import { attendanceLeaveReport, headcountAttritionReport, payrollCostReport } from './controllers/reports.controller.js';
 import { employeeMonthlyOverview } from './controllers/employee-overview.controller.js';
 import { hrDashboard } from './controllers/dashboard.controller.js';
-import { createAdvance, createPayrollRun, createSalaryStructure, decideAdvance, downloadBankFile, getPayrollRun, listAdvances, listMyAdvances, listPayrollRuns, listSalaryStructures, previewPayroll, previewSettlement, processPayrollRun, requestAdvance, updateSalaryStructure } from './controllers/payroll.controller.js';
-import { createDepartment, createDesignation, createEmployee, deleteDepartment, deleteDesignation, deleteEmployee, getEmployee, listDepartments, listDesignations, listEmployees, updateDepartment, updateDesignation, updateEmployee } from './controllers/employee.controller.js';
+import { createAdvance, createPayrollRun, createSalaryStructure, decideAdvance, downloadBankFile, downloadPayslip, getPayrollRun, listAdvances, listMyAdvances, listPayrollRuns, listSalaryStructures, previewPayroll, previewSettlement, processPayrollRun, requestAdvance, updateSalaryStructure } from './controllers/payroll.controller.js';
+import { createDepartment, createDesignation, createEmployee, deleteDepartment, deleteDesignation, deleteEmployee, downloadEmployeeIdCard, getEmployee, getMyEmployee, listDepartments, listDesignations, listEmployees, updateDepartment, updateDesignation, updateEmployee } from './controllers/employee.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeHrModule, authorizeRoles } from '../auth/middleware/auth.middleware.js';
+import { authenticate, authorizeHrModule } from '../auth/middleware/auth.middleware.js';
 
 export const hrRouter = Router();
 hrRouter.use(asyncHandler(authenticate));
@@ -16,17 +16,23 @@ hrRouter.get('/dashboard', authorizeHrModule('employees', 'manage'), asyncHandle
 
 for (const [path, list, create, update, remove] of [['/departments', listDepartments, createDepartment, updateDepartment, deleteDepartment], ['/designations', listDesignations, createDesignation, updateDesignation, deleteDesignation]]) {
   hrRouter.get(path, authorizeHrModule('employees', 'view'), asyncHandler(list));
-  hrRouter.post(path, authorizeRoles('superadmin', 'admin'), asyncHandler(create));
-  hrRouter.patch(`${path}/:id`, authorizeRoles('superadmin', 'admin'), asyncHandler(update));
-  hrRouter.delete(`${path}/:id`, authorizeRoles('superadmin', 'admin'), asyncHandler(remove));
+  hrRouter.post(path, authorizeHrModule('employees', 'manage'), asyncHandler(create));
+  hrRouter.patch(`${path}/:id`, authorizeHrModule('employees', 'manage'), asyncHandler(update));
+  hrRouter.delete(`${path}/:id`, authorizeHrModule('employees', 'manage'), asyncHandler(remove));
 }
 hrRouter.get('/employees', authorizeHrModule('employees', 'view'), asyncHandler(listEmployees));
 hrRouter.get('/employee-overview', authorizeHrModule('employee-overview', 'view'), asyncHandler(employeeMonthlyOverview));
 hrRouter.post('/employees', authorizeHrModule('employees', 'manage'), asyncHandler(createEmployee));
+hrRouter.get('/employees/me', authorizeHrModule('employees', 'view'), asyncHandler(getMyEmployee));
+hrRouter.get('/employees/:id/id-card', authorizeHrModule('employees', 'view'), asyncHandler(downloadEmployeeIdCard));
 hrRouter.get('/employees/:id', authorizeHrModule('employees', 'view'), asyncHandler(getEmployee));
 hrRouter.patch('/employees/:id', authorizeHrModule('employees', 'manage'), asyncHandler(updateEmployee));
 hrRouter.delete('/employees/:id', authorizeHrModule('employees', 'manage'), asyncHandler(deleteEmployee));
 hrRouter.get('/attendance', authorizeHrModule('attendance', 'view'), asyncHandler(listAttendance));
+hrRouter.get('/attendance/report.pdf', authorizeHrModule('attendance', 'manage'), asyncHandler(downloadAttendanceReport));
+hrRouter.post('/attendance/correction', authorizeHrModule('attendance', 'view'), asyncHandler(requestAttendanceCorrection));
+hrRouter.post('/attendance/:id/correction', authorizeHrModule('attendance', 'view'), asyncHandler(requestAttendanceCorrection));
+hrRouter.patch('/attendance/:id/correction', authorizeHrModule('attendance', 'manage'), asyncHandler(decideAttendanceCorrection));
 hrRouter.get('/attendance/employees', authorizeHrModule('attendance', 'manage'), asyncHandler(listEmployees));
 hrRouter.post('/attendance', authorizeHrModule('attendance', 'manage'), asyncHandler(markAttendance));
 hrRouter.get('/holidays', authorizeHrModule('attendance', 'view'), asyncHandler(listHolidays));
@@ -57,6 +63,7 @@ hrRouter.get('/payroll/advances', authorizeHrModule('payroll', 'manage'), asyncH
 hrRouter.post('/payroll/advances', authorizeHrModule('payroll', 'manage'), asyncHandler(createAdvance));
 hrRouter.patch('/payroll/advances/:id', authorizeHrModule('payroll', 'manage'), asyncHandler(decideAdvance));
 hrRouter.post('/payroll/preview', authorizeHrModule('payroll', 'manage'), asyncHandler(previewPayroll));
+hrRouter.get('/payroll/payslip', authorizeHrModule('payroll', 'view'), asyncHandler(downloadPayslip));
 hrRouter.get('/payroll/runs', authorizeHrModule('payroll', 'manage'), asyncHandler(listPayrollRuns));
 hrRouter.post('/payroll/runs', authorizeHrModule('payroll', 'manage'), asyncHandler(createPayrollRun));
 hrRouter.get('/payroll/runs/:id', authorizeHrModule('payroll', 'manage'), asyncHandler(getPayrollRun));

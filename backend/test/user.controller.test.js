@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createUser, getUser, listLoginHistory, listUsers, logoutAllUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
+import { createUser, deleteUser, getUser, listLoginHistory, listUsers, logoutAllUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
 import { AuthSession } from '../src/modules/auth/models/auth-session.model.js';
 import { BlockedToken } from '../src/modules/auth/models/blocked-token.model.js';
 import { LoginHistory } from '../src/modules/auth/models/login-history.model.js';
@@ -15,6 +15,7 @@ const originalCountDocuments = User.countDocuments;
 const originalFindById = User.findById;
 const originalFindByIdAndUpdate = User.findByIdAndUpdate;
 const originalCreate = User.create;
+const originalDeleteOne = User.deleteOne;
 const originalLoginHistoryFind = LoginHistory.find;
 const originalLoginHistoryCountDocuments = LoginHistory.countDocuments;
 const originalLoginHistoryUpdateMany = LoginHistory.updateMany;
@@ -41,6 +42,7 @@ afterEach(() => {
   User.findById = originalFindById;
   User.findByIdAndUpdate = originalFindByIdAndUpdate;
   User.create = originalCreate;
+  User.deleteOne = originalDeleteOne;
   AuthSession.find = originalAuthSessionFind;
   AuthSession.updateMany = originalAuthSessionUpdateMany;
   BlockedToken.updateOne = originalBlockedTokenUpdateOne;
@@ -660,4 +662,27 @@ test('user updates ignore fields outside the editable profile allowlist', async 
   );
 
   assert.equal(response.statusCode, 200);
+});
+
+test('users cannot delete their own account', async () => {
+  User.findById = async () => ({ _id: 'admin-1', role: 'admin', status: 'active' });
+
+  const response = res();
+  await deleteUser({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'admin-1' } }, response);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'You cannot delete your own account');
+});
+
+test('development hard delete removes the requested user', async () => {
+  User.findById = async () => ({ _id: 'sales-1', role: 'sales', status: 'inactive' });
+  User.deleteOne = async (filter) => { assert.deepEqual(filter, { _id: 'sales-1' }); };
+  AuthSession.find = () => ({ select() { return this; }, lean: async () => [] });
+  AuthSession.updateMany = async () => {};
+
+  const response = res();
+  await deleteUser({ user: { _id: 'superadmin-1', role: 'superadmin' }, params: { id: 'sales-1' }, query: { hard: 'true' } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.data.hardDeleted, true);
 });

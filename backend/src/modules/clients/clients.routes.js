@@ -6,6 +6,6 @@ import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware
 export const clientRouter = Router();
 clientRouter.use(asyncHandler(authenticate), authorizeRoles('superadmin', 'admin', 'operations'));
 clientRouter.get('/', asyncHandler(listClients));
-clientRouter.post('/', authorizeRoles('superadmin', 'admin'), asyncHandler(createClient));
+clientRouter.post('/', authorizeRoles('superadmin', 'admin', 'operations'), asyncHandler(createClient));
 clientRouter.get('/:id', asyncHandler(getClient));
 clientRouter.patch('/:id', asyncHandler(updateClient));

@@ -57,7 +57,6 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:send-duotone',
     label: 'Lead Management',
     children: [
-      { key: 'hr-dashboard', label: 'Dashboard', url: '/hr', parentKey: 'hr-management', roles: hrRoles },
       {
         key: 'leads-create',
         label: 'Create Lead',
@@ -186,25 +185,12 @@ export const MENU_ITEMS: MenuItemType[] = [
     roles: [...adminRoles, 'hr-management', 'employee', 'operations'],
   },
   {
-    key: 'employee-panel',
-    icon: 'iconamoon:profile-circle-duotone',
-    label: 'Employee Panel',
-    roles: ['employee'],
-    children: [
-      { key: 'employee-overview', label: 'Dashboard', url: '/hr/my-overview', parentKey: 'employee-panel', roles: ['employee'] },
-      { key: 'employee-id-card', label: 'My ID Card', url: '/hr/my-id-card', parentKey: 'employee-panel', roles: ['employee'] },
-      { key: 'employee-payslips', label: 'My Salary Slips', url: '/hr/my-payslips', parentKey: 'employee-panel', roles: ['employee'] },
-      { key: 'employee-leave', label: 'My Leave', url: '/hr/leave', parentKey: 'employee-panel', roles: ['employee'] },
-      { key: 'employee-reimbursements', label: 'My Reimbursements', url: '/hr/expenses', parentKey: 'employee-panel', roles: ['employee'] },
-      { key: 'employee-advance', label: 'Salary Advance', url: '/hr/advances', parentKey: 'employee-panel', roles: ['employee'] },
-    ],
-  },
-  {
     key: 'hr-management',
     icon: 'iconamoon:profile-circle-duotone',
     label: 'HR Management',
     roles: hrRoles,
     children: [
+      { key: 'hr-dashboard', label: 'Dashboard', url: '/hr', parentKey: 'hr-management', roles: hrRoles },
       {
         key: 'hr-employees',
         label: 'All Employees',
@@ -216,77 +202,11 @@ export const MENU_ITEMS: MenuItemType[] = [
       { key: 'hr-attendance', label: 'Mark Attendance', url: '/hr/attendance', parentKey: 'hr-management', roles: hrRoles },
       { key: 'hr-leave', label: 'Leave', url: '/hr/leave', parentKey: 'hr-management', roles: hrRoles },
       { key: 'hr-payroll', label: 'Payroll', url: '/hr/payroll', parentKey: 'hr-management', roles: hrRoles },
-      { key: 'hr-reports', label: 'HR Reports', url: '/hr/reports', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-advances', label: 'Advances', url: '/hr/payroll/advances', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-settlements', label: 'Settlements', url: '/hr/payroll/settlements', parentKey: 'hr-management', roles: hrRoles },
+      { key: 'hr-expenses', label: 'Expenses', url: '/hr/expenses', parentKey: 'hr-management', roles: hrRoles },
       { key: 'hr-expense-approvals', label: 'Reimbursement approvals', url: '/hr/expenses/approvals', parentKey: 'hr-management', roles: hrRoles },
       { key: 'hr-attendance-reports', label: 'Attendance Reports', url: '/hr/attendance/reports', parentKey: 'hr-management', roles: hrRoles },
-      { key: 'hr-holidays', label: 'Holidays', url: '/hr/settings/holidays', parentKey: 'hr-management', roles: hrRoles },
-    ],
-  },
-  {
-    key: 'seo-website',
-    icon: 'iconamoon:search-duotone',
-    label: 'SEO Website',
-    roles: clientRoles,
-    children: [
-      {
-        key: 'seo-website-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/seo-website',
-        parentKey: 'seo-website',
-        roles: ['superadmin', 'admin'],
-      },
-    ],
-  },
-  {
-    key: 'challan-management',
-    icon: 'iconamoon:invoice-duotone',
-    label: 'Challan Management',
-    roles: ['superadmin', 'admin'],
-    children: [
-      {
-        key: 'challan-management-list',
-        label: 'List Challans',
-        url: '/challans',
-        parentKey: 'challan-management',
-        roles: ['superadmin', 'admin'],
-      },
-      {
-        key: 'challan-management-create',
-        label: 'Create Challan',
-        url: '/challans/create',
-        parentKey: 'challan-management',
-        roles: ['superadmin', 'admin'],
-      },
-    ],
-  },
-  {
-    key: 'sales-bill',
-    icon: 'iconamoon:invoice-duotone',
-    label: 'Sales Bill',
-    roles: ['superadmin', 'admin'],
-    children: [
-      {
-        key: 'sales-bill-overview',
-        label: 'Create Invoice',
-        url: '/invoices/create',
-        parentKey: 'sales-bill',
-        roles: ['superadmin', 'admin'],
-      },
-    ],
-  },
-  {
-    key: 'purchase-bill',
-    icon: 'iconamoon:invoice-duotone',
-    label: 'Purchase Bill',
-    roles: ['superadmin', 'admin'],
-    children: [
-      {
-        key: 'purchase-bill-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/purchase-bill',
-        parentKey: 'purchase-bill',
-        roles: ['superadmin', 'admin'],
-      },
     ],
   },
   {
@@ -296,53 +216,41 @@ export const MENU_ITEMS: MenuItemType[] = [
     roles: clientRoles,
     children: [
       {
-        key: 'client-management-overview',
-        label: 'All Clients',
-        url: '/clients',
+        key: 'client-management-clients',
+        label: 'Clients',
         parentKey: 'client-management',
         roles: clientRoles,
+        children: [
+          { key: 'client-management-create', label: 'Create Client', url: '/clients/create', parentKey: 'client-management-clients', roles: clientRoles },
+          { key: 'client-management-overview', label: 'List Clients', url: '/clients', parentKey: 'client-management-clients', roles: clientRoles },
+        ],
       },
       {
-        key: 'client-management-create',
-        label: 'Create Client',
-        url: '/clients/create',
-        parentKey: 'client-management',
-        roles: adminRoles,
-      },
-      {
-        key: 'client-management-invoices',
-        label: 'List Invoices',
-        url: '/invoices',
+        key: 'client-management-invoice',
+        label: 'Invoice',
         parentKey: 'client-management',
         roles: clientRoles,
+        children: [
+          { key: 'client-management-create-invoice', label: 'Create Invoice', url: '/invoices/create', parentKey: 'client-management-invoice', roles: clientRoles },
+          { key: 'client-management-invoices', label: 'List Invoices', url: '/invoices', parentKey: 'client-management-invoice', roles: clientRoles },
+        ],
       },
       {
-        key: 'client-management-create-invoice',
-        label: 'Create Invoice',
-        url: '/invoices/create',
+        key: 'client-management-delivery-challans',
+        label: 'Delivery Challans',
         parentKey: 'client-management',
-        roles: adminRoles,
-      },
-      {
-        key: 'client-management-challans',
-        label: 'List Challans',
-        url: '/challans',
-        parentKey: 'client-management',
-        roles: adminRoles,
-      },
-      {
-        key: 'client-management-create-challan',
-        label: 'Create Challan',
-        url: '/challans/create',
-        parentKey: 'client-management',
-        roles: adminRoles,
+        roles: clientRoles,
+        children: [
+          { key: 'client-management-create-challan', label: 'Create Delivery Challan', url: '/challans/create', parentKey: 'client-management-delivery-challans', roles: clientRoles },
+          { key: 'client-management-challans', label: 'List Delivery Challans', url: '/challans', parentKey: 'client-management-delivery-challans', roles: clientRoles },
+        ],
       },
     ],
   },
   {
     key: 'ecommerce',
     icon: 'iconamoon:shopping-bag-duotone',
-    label: 'Material Management',
+    label: 'Inventory Management',
     roles: ['superadmin', 'admin'],
     children: [
       {
@@ -396,36 +304,16 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
-    key: 'apps-invoices',
-    icon: 'iconamoon:invoice-duotone',
-    label: 'Invoices',
-    roles: ['superadmin', 'admin'],
-    children: [
-      {
-        key: 'invoices',
-        label: 'Invoices List',
-        url: '/invoices',
-        parentKey: 'apps-invoices',
-      },
-      {
-        key: 'invoices-details',
-        label: 'Invoices Details',
-        url: '/invoices/RB6985',
-        parentKey: 'apps-invoices',
-      },
-    ],
-  },
-  {
-    key: 'apps',
-    label: 'APPS',
+    key: 'website-utilities',
+    label: 'WEBSITE UTILITIES',
     isTitle: true,
     roles: ['superadmin', 'admin'],
   },
   {
-    key: 'apps-chat',
-    icon: 'iconamoon:comment-dots-duotone',
-    label: 'Chat',
-    url: '/apps/chat',
+    key: 'seo-website',
+    icon: 'iconamoon:search-duotone',
+    label: 'SEO Website',
+    url: '/upcoming/seo-website',
     roles: ['superadmin', 'admin'],
   },
   {
@@ -433,6 +321,13 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:profile-circle-duotone',
     label: 'Contacts',
     url: '/apps/contacts',
+    roles: ['superadmin', 'admin'],
+  },
+  {
+    key: 'apps-chat',
+    icon: 'iconamoon:comment-dots-duotone',
+    label: 'Chat',
+    url: '/apps/chat',
     roles: ['superadmin', 'admin'],
   },
   {
@@ -964,6 +859,21 @@ export const MENU_ITEMS: MenuItemType[] = [
     label: 'Disabled Item',
     isDisabled: true,
     roles: ['superadmin'],
+  },
+  {
+    key: 'employee-panel',
+    icon: 'iconamoon:profile-circle-duotone',
+    label: 'My Panel',
+    roles: ['employee'],
+    children: [
+      { key: 'employee-overview', label: 'Dashboard', url: '/hr/my-overview', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-profile', label: 'My Profile & Documents', url: '/hr/my-profile', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-attendance', label: 'My Attendance', url: '/hr/my-attendance', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-payslips', label: 'My Salary Slips', url: '/hr/my-payslips', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-leave', label: 'My Leave', url: '/hr/leave', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-reimbursements', label: 'My Reimbursements', url: '/hr/expenses', parentKey: 'employee-panel', roles: ['employee'] },
+      { key: 'employee-advance', label: 'Salary Advance', url: '/hr/advances', parentKey: 'employee-panel', roles: ['employee'] },
+    ],
   },
   {
     key: 'authentication',

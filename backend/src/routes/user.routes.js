@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createUser,
+  deleteUser,
   getUser,
   listLoginHistory,
   listUsers,
@@ -24,3 +25,4 @@ userRouter.post('/logout-all', asyncHandler(authenticate), authorizeRoles('super
 userRouter.post('/:id/logout', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(logoutUser));
 userRouter.get('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(getUser));
 userRouter.patch('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(updateUser));
+userRouter.delete('/:id', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(deleteUser));

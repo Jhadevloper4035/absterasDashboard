@@ -1,8 +1,22 @@
 import { AuthSession } from '../modules/auth/models/auth-session.model.js';
+import { BlockedToken } from '../modules/auth/models/blocked-token.model.js';
 import { User } from '../models/user.model.js';
+import { env } from '../config/env.js';
 import { Employee } from '../modules/hr/models/employee.model.js';
 import { SalaryStructure } from '../modules/hr/models/salary-structure.model.js';
+import { Attendance } from '../modules/hr/models/attendance.model.js';
+import { Advance } from '../modules/hr/models/advance.model.js';
+import { ExpenseClaim } from '../modules/hr/models/expense-claim.model.js';
+import { LeaveBalance } from '../modules/hr/models/leave-balance.model.js';
+import { LeaveRequest } from '../modules/hr/models/leave-request.model.js';
+import { PaidLeaveAllocation } from '../modules/hr/models/paid-leave-allocation.model.js';
+import { HrPermission } from '../modules/hr/models/permission.model.js';
 import { LoginHistory } from '../modules/auth/models/login-history.model.js';
+import { Lead } from '../modules/leads/models/lead.model.js';
+import { Notification } from '../modules/notifications/models/notification.model.js';
+import { Task } from '../modules/tasks/models/task.model.js';
+import { Todo } from '../modules/tasks/models/todo.model.js';
+import mongoose from 'mongoose';
 import { cleanIpAddress } from '../helpers/request-ip.js';
 import { auditEvent } from '../services/audit.service.js';
 import { revokeActiveUserSessions, revokeAllActiveSessions } from '../modules/auth/services/auth-session.service.js';
@@ -16,6 +30,7 @@ const TEAM_USER_ROLES = ['sales', 'operations', 'accounts', 'designers'];
 const ASSIGNABLE_ACCESS_TYPES = ['admin', ...TEAM_USER_ROLES];
 const SYSTEM_ACCESS_TYPES = [SUPERADMIN_ROLE, ...ASSIGNABLE_ACCESS_TYPES];
 const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'whatsappNumber', 'role', 'additionalRoles', 'accessTypes', 'status', 'timezone', 'notificationPreferences'];
+
 
 function cleanAdditionalRoles(roles, primaryRole) {
   if (roles === undefined) return undefined;
@@ -33,6 +48,8 @@ function cleanTerritories(territories) {
     .filter(Boolean)
     .slice(0, 50);
 }
+
+
 
 function stripPassword(body) {
   const { password, passwordHash, ...user } = body;
@@ -54,9 +71,9 @@ function employmentDetails(body) {
   const employment = body?.employment;
   if (!employment) return null;
   if (!['office', 'site'].includes(employment.employeeType) || !employment.department || !employment.designation || !employment.joiningDate) return undefined;
-  const monthlySalary = employment.monthlySalary === undefined || employment.monthlySalary === '' ? undefined : Number(employment.monthlySalary);
-  if (monthlySalary !== undefined && (!Number.isFinite(monthlySalary) || monthlySalary < 0)) return undefined;
-  return { employeeType: employment.employeeType, department: employment.department, designation: employment.designation, manager: employment.manager || undefined, joiningDate: employment.joiningDate, monthlySalary };
+  const monthlySalary = Number(employment.monthlySalary);
+  if (!Number.isFinite(monthlySalary) || monthlySalary <= 0) return undefined;
+  return { employeeType: employment.employeeType, department: employment.department, designation: employment.designation, manager: employment.manager || undefined, joiningDate: employment.joiningDate, dateOfBirth: employment.dateOfBirth || undefined, monthlySalary };
 }
 
 async function roleLimitError(role, currentUserId) {
@@ -87,6 +104,16 @@ function escapeRegex(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+async function purgeDevelopmentUserData(userId) {
+  const employees = await Employee.find({ user: userId }).select('_id').lean();
+  const employeeIds = employees.map((employee) => employee._id);
+  await Promise.all([
+    AuthSession.deleteMany({ user: userId }), BlockedToken.deleteMany({ user: userId }), LoginHistory.deleteMany({ user: userId }), HrPermission.deleteMany({ $or: [{ user: userId }, { grantedBy: userId }] }), Notification.deleteMany({ user: userId }),
+    Lead.deleteMany({ $or: [{ owner: userId }, { createdBy: userId }] }), Task.deleteMany({ $or: [{ assignee: userId }, { createdBy: userId }, { completedBy: userId }] }), Todo.deleteMany({ $or: [{ assignedTo: userId }, { createdBy: userId }, { completedBy: userId }] }),
+    ...(employeeIds.length ? [Attendance.deleteMany({ employee: { $in: employeeIds } }), Advance.deleteMany({ employee: { $in: employeeIds } }), ExpenseClaim.deleteMany({ employee: { $in: employeeIds } }), LeaveBalance.deleteMany({ employee: { $in: employeeIds } }), LeaveRequest.deleteMany({ employee: { $in: employeeIds } }), PaidLeaveAllocation.deleteMany({ employee: { $in: employeeIds } }), SalaryStructure.deleteMany({ employee: { $in: employeeIds } }), Employee.deleteMany({ _id: { $in: employeeIds } })] : []),
+  ]);
+}
+
 export async function createUser(req, res) {
   if (!req.body.password) {
     return res.status(400).json({ error: { message: 'Password is required' } });
@@ -107,9 +134,9 @@ export async function createUser(req, res) {
 
   const requestedAccessTypes = cleanAccessTypes(req.body.accessTypes) || [];
   const employment = employmentDetails(req.body);
-  if (employment === undefined) return res.status(400).json({ error: { message: 'Employee type, department, designation and joining date are required' } });
+  if (employment === undefined) return res.status(400).json({ error: { message: 'Employee type, department, designation, joining date and monthly salary are required' } });
   if (employment && !requestedAccessTypes.includes('employee')) return res.status(400).json({ error: { message: 'Select the Employee access type before adding employment details' } });
-  if (requestedAccessTypes.includes('employee') && !employment) return res.status(400).json({ error: { message: 'Employee type, department, designation and joining date are required' } });
+  if (requestedAccessTypes.includes('employee') && !employment) return res.status(400).json({ error: { message: 'Employee type, department, designation, joining date and monthly salary are required' } });
 
   const userFields = allowedUserUpdate(stripPassword(req.body));
   userFields.additionalRoles = cleanAdditionalRoles(userFields.additionalRoles, userFields.role);
@@ -385,4 +412,25 @@ export async function updateUser(req, res) {
   });
 
   return res.json({ data: user });
+}
+
+export async function deleteUser(req, res) {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ error: { message: 'User not found' } });
+  if (String(user._id) === String(req.user._id)) return res.status(400).json({ error: { message: 'You cannot delete your own account' } });
+  if (!adminCanManage(req.user, user) || (!userRoles(req.user).includes(SUPERADMIN_ROLE) && hasAdminAccess(user))) return res.status(403).json({ error: { message: 'Only Superadmin can delete an Admin account' } });
+
+  if (req.query?.hard === 'true') {
+    if (env.isProduction) return res.status(403).json({ error: { message: 'Hard delete is unavailable in production' } });
+    await revokeActiveUserSessions(user._id);
+    if (mongoose.connection.readyState === 1) await purgeDevelopmentUserData(user._id);
+    await User.deleteOne({ _id: user._id });
+    await auditEvent(req, { action: 'user.hard_delete', entity: 'user', entityId: user._id, before: { role: user.role, status: user.status } });
+    return res.json({ data: { id: String(user._id), hardDeleted: true } });
+  }
+
+  await User.findByIdAndUpdate(user._id, { status: 'inactive', failedLoginAttempts: 0, loginLockedAt: null }, { runValidators: true });
+  await revokeActiveUserSessions(user._id);
+  await auditEvent(req, { action: 'user.delete', entity: 'user', entityId: user._id, before: { role: user.role, status: user.status }, after: { status: 'inactive' } });
+  return res.json({ data: { id: String(user._id) } });
 }

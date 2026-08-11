@@ -1,6 +1,7 @@
 import PageMetaData from '@/components/PageTitle'
+import PdfActionButton from '@/components/PdfActionButton'
 import { apiFetch } from '@/helpers/api'
-import { buildApiUrl } from '@/helpers/apiUrl'
+import { downloadPdf, printPdf } from '@/helpers/pdf'
 import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -35,16 +36,10 @@ const ClientOverviewPage = () => {
   }, [clientId])
   const totalInvoiced = invoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0)
   const totalChallans = challans.reduce((sum, challan) => sum + challan.totalAmount, 0)
-  const download = async (path: string, filename: string) => {
-    const response = await fetch(buildApiUrl(path), { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' })
-    if (!response.ok) throw new Error('Unable to download PDF')
-    const url = URL.createObjectURL(await response.blob())
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
-  }
+  const download = (path: string, filename: string) => downloadPdf(path, filename, token)
+  const parentClientId = client && (typeof client.parentClient === 'string' ? client.parentClient : client.parentClient?._id)
+  const documentClientId = parentClientId || client?._id
+  const documentQuery = client?.parentClient ? `?client=${documentClientId}&site=${client._id}` : `?client=${documentClientId}`
   return (
     <>
       <PageMetaData title={client?.name || 'Client'} />
@@ -62,10 +57,10 @@ const ClientOverviewPage = () => {
                   <Link to="/clients">
                     <Button variant="outline-secondary">All clients</Button>
                   </Link>
-                  <Link to={`/invoices/create?client=${client._id}`}>
+                  <Link to={`/invoices/create${documentQuery}`}>
                     <Button variant="outline-primary">Create invoice</Button>
                   </Link>
-                  <Link to="/challans/create">
+                  <Link to={`/challans/create${documentQuery}`}>
                     <Button>Create challan</Button>
                   </Link>
                 </div>
@@ -161,13 +156,13 @@ const ClientOverviewPage = () => {
                             View
                           </Button>
                         </Link>
-                        <Button
+                        <PdfActionButton
                           size="sm"
                           variant="outline-secondary"
                           className="me-2"
-                          onClick={() => window.open(`/invoices/${invoice._id}?print=1`, '_blank')}>
+                          action={() => printPdf(`/invoices/${invoice._id}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open invoice PDF'))}>
                           Print
-                        </Button>
+                        </PdfActionButton>
                         <Button
                           size="sm"
                           variant="outline-success"
@@ -218,13 +213,13 @@ const ClientOverviewPage = () => {
                             View
                           </Button>
                         </Link>
-                        <Button
+                        <PdfActionButton
                           size="sm"
                           variant="outline-secondary"
                           className="me-2"
-                          onClick={() => window.open(`/challans/${challan._id}?print=1`, '_blank')}>
+                          action={() => printPdf(`/challans/${challan._id}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open delivery challan PDF'))}>
                           Print
-                        </Button>
+                        </PdfActionButton>
                         <Button
                           size="sm"
                           variant="outline-success"

@@ -23,7 +23,7 @@ export async function apiFetch<T>(path: string, { token, headers, skipRefresh, .
   const body = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    if (response.status === 401 && !skipRefresh) {
+    if (response.status === 401 && !skipRefresh && authToken === useAuthStore.getState().token) {
       const session = await useAuthStore.getState().refresh()
       return apiFetch<T>(path, { token: session.token, headers, skipRefresh: true, ...options })
     }

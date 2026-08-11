@@ -1,19 +1,34 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { generateBankFile, unpaidLeaveDaysForPayroll } from '../src/modules/hr/services/payroll.service.js';
+import { dailyPayForPayroll, generateBankFile, unpaidLeaveDaysForPayroll } from '../src/modules/hr/services/payroll.service.js';
+
+test('daily payroll rate always uses a 30-day month', () => {
+  assert.equal(dailyPayForPayroll(30000), 1000);
+});
 
 test('bank file safely quotes employee values', () => {
   const csv = generateBankFile({ entries: [{ employee: { _id: 'employee-1', user: { name: 'Ava "A"' } }, netPay: 1234.5 }] });
   assert.equal(csv, 'employee_id,employee_name,net_pay\n"employee-1","Ava ""A""","1234.5"');
 });
 
-test('only the first approved medical leave day remains paid', () => {
+test('bank file tolerates a permanently deleted employee', () => {
+  const csv = generateBankFile({ entries: [{ employee: null, netPay: 1234.5 }] });
+  assert.equal(csv, 'employee_id,employee_name,net_pay\n"","","1234.5"');
+});
+
+test('the first 1.5 approved medical leave days remain paid', () => {
   const from = new Date('2026-08-01T00:00:00.000Z');
   const to = new Date('2026-09-01T00:00:00.000Z');
   assert.equal(unpaidLeaveDaysForPayroll([
-    { days: 1, paidDays: 1, fromDate: '2026-08-04', toDate: '2026-08-04', leaveType: { isPaid: true } },
+    { days: 2, paidDays: 1.5, fromDate: '2026-08-04', toDate: '2026-08-05', leaveType: { isPaid: true } },
     { days: 1, paidDays: 0, fromDate: '2026-08-12', toDate: '2026-08-12', leaveType: { isPaid: true } },
-  ], from, to), 1);
+  ], from, to), 1.5);
+});
+
+test('Birthday and Birthday Leave default to 2.5 paid days', () => {
+  const from = new Date('2026-08-01T00:00:00.000Z');
+  const to = new Date('2026-09-01T00:00:00.000Z');
+  assert.equal(unpaidLeaveDaysForPayroll([{ fromDate: '2026-08-04', toDate: '2026-08-06', leaveType: { name: 'Birthday', isPaid: true } }], from, to), 0.5);
 });
 
 test('HR-paid leave is excluded while HR-unpaid leave is deducted', () => {

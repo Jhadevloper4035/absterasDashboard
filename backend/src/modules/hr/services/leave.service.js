@@ -1,3 +1,7 @@
+export const PAID_MEDICAL_LEAVE_DAYS = 1.5;
+export const PAID_BIRTHDAY_LEAVE_DAYS = 2.5;
+export const isBirthdayLeave = (name) => /^birthday(?: leave)?$/i.test(String(name || '').trim());
+
 export const dayAtMidnight = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;

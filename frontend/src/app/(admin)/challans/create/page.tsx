@@ -1,14 +1,16 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
+import { generatedChallanNumber } from '@/helpers/documentNumber'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
-type Client = { _id: string; name: string }
+type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; parentClient?: string | { _id: string } }
 type Line = { description: string; hsnCode: string; quantity: string; unit: string; rate: string }
 type Challan = {
   challanNumber: string
   client: string | { _id: string }
+  site?: string | { _id: string }
   challanDate: string
   transportType?: string
   vehicleNumber?: string
@@ -22,9 +24,11 @@ const blank = (): Line => ({ description: '', hsnCode: '', quantity: '1', unit: 
 const ChallanFormPage = () => {
   const { challanId } = useParams()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [clients, setClients] = useState<Client[]>([])
-  const [challanNumber, setChallanNumber] = useState('')
-  const [client, setClient] = useState('')
+  const [challanNumber, setChallanNumber] = useState(generatedChallanNumber)
+  const [client, setClient] = useState(params.get('client') || '')
+  const [site, setSite] = useState(params.get('site') || '')
   const [challanDate, setChallanDate] = useState(new Date().toISOString().slice(0, 10))
   const [transportType, setTransportType] = useState('')
   const [vehicleNumber, setVehicleNumber] = useState('')
@@ -43,6 +47,7 @@ const ChallanFormPage = () => {
         .then(({ data }) => {
           setChallanNumber(data.challanNumber)
           setClient(typeof data.client === 'string' ? data.client : data.client._id)
+          setSite(typeof data.site === 'string' ? data.site : data.site?._id || '')
           setChallanDate(data.challanDate.slice(0, 10))
           setTransportType(data.transportType || '')
           setVehicleNumber(data.vehicleNumber || '')
@@ -60,6 +65,9 @@ const ChallanFormPage = () => {
         })
         .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load challan'))
   }, [challanId])
+  const parentClients = clients.filter((entry) => !entry.parentClient)
+  const sites = clients.filter((entry) => String(typeof entry.parentClient === 'string' ? entry.parentClient : entry.parentClient?._id) === client)
+  const chooseClient = (id: string) => { setClient(id); setSite('') }
   const taxableAmount = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.rate) || 0), 0), [lines])
   const gstAmount = (taxableAmount * (Number(gstRate) || 0)) / 100
   const totalAmount = taxableAmount + gstAmount + (Number(freightCharge) || 0)
@@ -73,6 +81,7 @@ const ChallanFormPage = () => {
       const body = {
         challanNumber,
         client,
+        site: site || null,
         challanDate,
         transportType,
         vehicleNumber,
@@ -107,7 +116,7 @@ const ChallanFormPage = () => {
           <div className="d-flex justify-content-between align-items-start mb-4">
             <div>
               <h4 className="card-title mb-1">{challanId ? 'Update delivery challan' : 'Create delivery challan'}</h4>
-              <p className="text-muted mb-0">Challan numbering stays manual until Step 8.</p>
+              <p className="text-muted mb-0">A unique challan number is generated automatically when you save.</p>
             </div>
             <Link to="/challans">
               <Button variant="outline-secondary">Cancel</Button>
@@ -117,22 +126,29 @@ const ChallanFormPage = () => {
           <Form onSubmit={submit}>
             <div className="row g-3">
               <div className="col-md-4">
-                <Form.Label>Challan number</Form.Label>
-                <Form.Control required value={challanNumber} onChange={(event) => setChallanNumber(event.target.value)} />
+                <Form.Label>Generated challan number</Form.Label>
+                <Form.Control readOnly value={challanNumber} />
               </div>
               <div className="col-md-4">
                 <Form.Label>Challan date</Form.Label>
                 <Form.Control required type="date" value={challanDate} onChange={(event) => setChallanDate(event.target.value)} />
               </div>
               <div className="col-md-4">
-                <Form.Label>Client</Form.Label>
-                <Form.Select required value={client} onChange={(event) => setClient(event.target.value)}>
-                  <option value="">Select client</option>
-                  {clients.map((entry) => (
+                <Form.Label>Parent client</Form.Label>
+                <Form.Select required value={client} onChange={(event) => chooseClient(event.target.value)}>
+                  <option value="">Select parent client</option>
+                  {parentClients.map((entry) => (
                     <option key={entry._id} value={entry._id}>
                       {entry.name}
                     </option>
                   ))}
+                </Form.Select>
+              </div>
+              <div className="col-md-4">
+                <Form.Label>Site / address</Form.Label>
+                <Form.Select value={site} disabled={!client || !sites.length} required={sites.length > 0} onChange={(event) => setSite(event.target.value)}>
+                  <option value="">{client ? sites.length ? 'Select site / address' : 'No child sites available' : 'Select parent client first'}</option>
+                  {sites.map((entry) => <option key={entry._id} value={entry._id}>{entry.siteName || entry.name}{entry.siteAddress ? ` · ${entry.siteAddress}` : ''}</option>)}
                 </Form.Select>
               </div>
               <div className="col-md-4">

@@ -6,6 +6,7 @@ const lineItemSchema = new mongoose.Schema({ item: { type: ObjectId, ref: 'Item'
 const challanSchema = new mongoose.Schema({
   challanNumber: { type: String, required: true, trim: true, unique: true },
   client: { type: ObjectId, ref: 'Client', required: true },
+  site: { type: ObjectId, ref: 'Client' },
   challanDate: { type: Date, required: true },
   transportType: { type: String, trim: true },
   vehicleNumber: { type: String, trim: true, uppercase: true },
@@ -21,4 +22,5 @@ const challanSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 challanSchema.index({ client: 1, challanDate: -1 });
+challanSchema.index({ site: 1, challanDate: -1 });
 export const Challan = mongoose.models.Challan || mongoose.model('Challan', challanSchema);

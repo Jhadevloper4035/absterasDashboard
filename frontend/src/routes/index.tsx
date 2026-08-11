@@ -8,28 +8,28 @@ const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'))
 const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'))
 const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
+const EditUser = lazy(() => import('@/app/(admin)/users/[userId]/edit/page'))
 const LoginHistory = lazy(() => import('@/app/(admin)/users/login-history/page'))
 const HealthStatus = lazy(() => import('@/app/(admin)/health/status/page'))
 const Employees = lazy(() => import('@/app/(admin)/hr/employees/page'))
 const EmployeeDetail = lazy(() => import('@/app/(admin)/hr/employees/[employeeId]/page'))
 const EmployeeOverview = lazy(() => import('@/app/(admin)/hr/employee-overview/page'))
+const MyEmployeeProfile = lazy(() => import('@/app/(admin)/hr/my-profile/page'))
+const MyAttendance = lazy(() => import('@/app/(admin)/hr/my-attendance/page'))
 const MyIdCard = lazy(() => import('@/app/(admin)/hr/my-id-card/page'))
 const MyPayslips = lazy(() => import('@/app/(admin)/hr/my-payslips/page'))
 const HrOrganization = lazy(() => import('@/app/(admin)/hr/settings/organization/page'))
 const Attendance = lazy(() => import('@/app/(admin)/hr/attendance/page'))
 const AttendanceReports = lazy(() => import('@/app/(admin)/hr/attendance/reports/page'))
 const HrDashboard = lazy(() => import('@/app/(admin)/hr/page'))
-const Holidays = lazy(() => import('@/app/(admin)/hr/settings/holidays/page'))
 const Leave = lazy(() => import('@/app/(admin)/hr/leave/page'))
 const Payroll = lazy(() => import('@/app/(admin)/hr/payroll/page'))
 const PayrollDetail = lazy(() => import('@/app/(admin)/hr/payroll/[runId]/page'))
-const Salaries = lazy(() => import('@/app/(admin)/hr/payroll/salaries/page'))
 const Advances = lazy(() => import('@/app/(admin)/hr/payroll/advances/page'))
 const MyAdvances = lazy(() => import('@/app/(admin)/hr/advances/page'))
 const Settlements = lazy(() => import('@/app/(admin)/hr/payroll/settlements/page'))
 const Expenses = lazy(() => import('@/app/(admin)/hr/expenses/page'))
 const ExpenseApprovals = lazy(() => import('@/app/(admin)/hr/expenses/approvals/page'))
-const HrReports = lazy(() => import('@/app/(admin)/hr/reports/page'))
 const Leads = lazy(() => import('@/app/(admin)/leads/page'))
 const MyLeads = lazy(() => import('@/app/(admin)/leads/mine/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
@@ -191,6 +191,7 @@ export type RoutesProps = {
 
 const adminRoles: UserType['role'][] = ['superadmin', 'admin']
 const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
+const clientRoles: UserType['role'][] = [...adminRoles, 'operations']
 const hrAccessRoles = [...adminRoles, 'hr-management']
 const superadminRoles: UserType['role'][] = ['superadmin']
 const superadminOnly = (routes: RoutesProps[]) => routes.map((route) => ({ ...route, roles: route.roles ?? superadminRoles }))
@@ -245,6 +246,12 @@ const generalRoutes: RoutesProps[] = [
     roles: ['superadmin', 'admin'],
   },
   {
+    path: '/users/:userId/edit',
+    name: 'Edit User',
+    element: <EditUser />,
+    roles: ['superadmin', 'admin'],
+  },
+  {
     path: '/users/login-history',
     name: 'User Login History',
     element: <LoginHistory />,
@@ -261,31 +268,36 @@ const generalRoutes: RoutesProps[] = [
   { path: '/hr/employees/:employeeId', name: 'Employee', element: <EmployeeDetail />, roles: hrAccessRoles },
   { path: '/hr/employee-overview', name: 'Employee monthly overview', element: <EmployeeOverview />, roles: hrAccessRoles },
   { path: '/hr/my-overview', name: 'My monthly overview', element: <EmployeeOverview />, roles: ['employee'] },
+  { path: '/hr/my-profile', name: 'My Profile & Documents', element: <MyEmployeeProfile />, roles: ['employee'] },
+  { path: '/hr/my-attendance', name: 'My Attendance', element: <MyAttendance />, roles: ['employee'] },
   { path: '/hr/my-id-card', name: 'My ID Card', element: <MyIdCard />, roles: ['employee'] },
   { path: '/hr/my-payslips', name: 'My Salary Slips', element: <MyPayslips />, roles: ['employee'] },
-  { path: '/hr/settings/departments', name: 'Departments & Designations', element: <HrOrganization />, roles: adminRoles },
-  { path: '/hr/settings/designations', name: 'Departments & Designations', element: <HrOrganization />, roles: adminRoles },
+  { path: '/hr/settings/departments', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles },
+  { path: '/hr/settings/designations', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles },
   { path: '/hr/attendance', name: 'Attendance', element: <Attendance />, roles: hrAccessRoles },
   { path: '/hr/attendance/reports', name: 'Attendance reports', element: <AttendanceReports />, roles: hrAccessRoles },
-  { path: '/hr/settings/holidays', name: 'Holidays', element: <Holidays />, roles: hrAccessRoles },
+  { path: '/hr/settings/holidays', name: 'Holidays', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
   { path: '/hr/leave', name: 'Leave', element: <Leave />, roles: [...hrAccessRoles, 'employee'] },
+  { path: '/hr/leave/approvals', name: 'Leave approvals', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
+  { path: '/hr/leave/calendar', name: 'Leave calendar', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
+  { path: '/hr/settings/leave-types', name: 'Leave types', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
   { path: '/hr/payroll', name: 'Payroll', element: <Payroll />, roles: hrAccessRoles },
   { path: '/hr/payroll/:runId', name: 'Payroll run', element: <PayrollDetail />, roles: hrAccessRoles },
-  { path: '/hr/payroll/salaries', name: 'Salary structures', element: <Salaries />, roles: hrAccessRoles },
+  { path: '/hr/payroll/salaries', name: 'Salary structures', element: <Navigate to="/hr/payroll" replace />, roles: hrAccessRoles },
   { path: '/hr/payroll/advances', name: 'Advances', element: <Advances />, roles: hrAccessRoles },
   { path: '/hr/advances', name: 'Salary advance', element: <MyAdvances />, roles: ['employee'] },
   { path: '/hr/payroll/settlements', name: 'Settlements', element: <Settlements />, roles: hrAccessRoles },
   { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'] },
   { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles },
-  { path: '/hr/reports', name: 'HR reports', element: <HrReports />, roles: hrAccessRoles },
-  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: [...adminRoles, 'operations'] },
-  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: adminRoles },
-  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: [...adminRoles, 'operations'] },
-  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: adminRoles },
-  { path: '/challans', name: 'Challans', element: <Challans />, roles: adminRoles },
-  { path: '/challans/create', name: 'Create Challan', element: <CreateChallan />, roles: adminRoles },
-  { path: '/challans/:challanId/edit', name: 'Update Challan', element: <CreateChallan />, roles: adminRoles },
-  { path: '/challans/:challanId', name: 'Challan', element: <ChallanDetail />, roles: adminRoles },
+  { path: '/hr/reports', name: 'HR reports', element: <Navigate to="/hr" replace />, roles: hrAccessRoles },
+  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: clientRoles },
+  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: clientRoles },
+  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: clientRoles },
+  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: clientRoles },
+  { path: '/challans', name: 'Delivery Challans', element: <Challans />, roles: clientRoles },
+  { path: '/challans/create', name: 'Create Delivery Challan', element: <CreateChallan />, roles: clientRoles },
+  { path: '/challans/:challanId/edit', name: 'Update Delivery Challan', element: <CreateChallan />, roles: clientRoles },
+  { path: '/challans/:challanId', name: 'Delivery Challan', element: <ChallanDetail />, roles: clientRoles },
   {
     path: '/leads',
     name: 'Leads',
@@ -542,13 +554,13 @@ const appsRoutes: RoutesProps[] = [
     name: 'Invoices List',
     path: '/invoices',
     element: <Invoices />,
-    roles: adminRoles,
+    roles: clientRoles,
   },
   {
     name: 'Invoices Details',
     path: '/invoices/:invoiceId',
     element: <InvoiceDetails />,
-    roles: adminRoles,
+    roles: clientRoles,
   },
 ]
 

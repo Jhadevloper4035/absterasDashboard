@@ -5,7 +5,7 @@ const HR_MENU_MODULES: Record<string, string> = {
   'hr-employees': 'employees', 'hr-departments': 'employees', 'hr-designations': 'employees',
   'hr-attendance': 'attendance', 'hr-attendance-reports': 'attendance', 'hr-holidays': 'attendance',
   'hr-leave': 'leave', 'hr-leave-requests': 'leave', 'hr-leave-approvals': 'leave', 'hr-leave-calendar': 'leave', 'hr-leave-types': 'leave',
-  'hr-payroll': 'payroll', 'employee-reimbursements': 'expenses', 'hr-expense-approvals': 'expenses', 'hr-reports': 'reports',
+  'hr-payroll': 'payroll', 'employee-overview': 'employees', 'employee-profile': 'employees', 'employee-attendance': 'attendance', 'employee-id-card': 'employees', 'employee-payslips': 'payroll', 'employee-leave': 'leave', 'employee-reimbursements': 'expenses', 'employee-advance': 'payroll', 'hr-expense-approvals': 'expenses', 'hr-reports': 'reports',
 }
 const isVisible = (item: MenuItemType, roles: string[] = [], hrModules: string[] = []) => (!item.roles || roles.some((role) => item.roles?.includes(role))) && (!HR_MENU_MODULES[item.key] || hrModules.includes(HR_MENU_MODULES[item.key]))
 
@@ -44,11 +44,7 @@ export const getMenuItemFromURL = (items: MenuItemType | MenuItemType[], url: st
     }
   } else {
     if (items.url == url) return items
-    if (items.children != null) {
-      for (const item of items.children) {
-        if (item.url == url) return item
-      }
-    }
+    return items.children && getMenuItemFromURL(items.children, url)
   }
 }
 

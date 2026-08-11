@@ -8,6 +8,7 @@ import avatar1 from '@/assets/images/users/avatar-1.jpg'
 
 const ProfileDropdown = () => {
   const { removeSession, user } = useAuthContext()
+  const profileLink = user?.accessTypes?.includes('employee') ? '/hr/my-profile' : '/pages/profile'
 
   return (
     <Dropdown className="topbar-item" align={'end'}>
@@ -25,7 +26,7 @@ const ProfileDropdown = () => {
       </DropdownToggle>
       <DropdownMenu>
         <DropdownHeader as="h6">Welcome {user?.name || 'User'}!</DropdownHeader>
-        <DropdownItem as={Link} to="/pages/profile">
+        <DropdownItem as={Link} to={profileLink}>
           <IconifyIcon icon="bx:user-circle" className="text-muted fs-18 align-middle me-1" />
           <span className="align-middle">Profile</span>
         </DropdownItem>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { getHrPermissions, updateHrPermissions } from '../src/modules/hr/controllers/permissions.controller.js';
+import { getHrPermissions, getMyHrAccess, updateHrPermissions } from '../src/modules/hr/controllers/permissions.controller.js';
 import { HR_MODULES, HrPermission } from '../src/modules/hr/models/permission.model.js';
 import { User } from '../src/models/user.model.js';
 
@@ -29,6 +29,15 @@ test('HR permissions default every module to none', async () => {
   assert.equal(response.body.data.length, HR_MODULES.length);
   assert.deepEqual(response.body.data.find((item) => item.module === 'attendance'), { module: 'attendance', access: 'manage' });
   assert.deepEqual(response.body.data.find((item) => item.module === 'payroll'), { module: 'payroll', access: 'none' });
+});
+
+test('Employee access includes self-service HR modules', async () => {
+  HrPermission.find = () => ({ lean: async () => [{ module: 'attendance', access: 'none' }] });
+  const response = res();
+
+  await getMyHrAccess({ user: { _id: '507f1f77bcf86cd799439011', role: 'sales', accessTypes: ['employee'] } }, response);
+
+  for (const module of ['employees', 'attendance', 'leave', 'payroll', 'expenses']) assert.deepEqual(response.body.data.find((item) => item.module === module), { module, access: 'view' });
 });
 
 test('HR permissions reject unknown modules', async () => {

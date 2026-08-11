@@ -15,13 +15,15 @@ afterEach(() => {
   Invoice.findById = originalFindById;
 });
 
-test('creates and updates invoices with only documented fields', async () => {
+test('creates invoices with a generated number and only documented fields', async () => {
   let created;
   Invoice.create = async (payload) => { created = payload; return { _id: 'invoice-1', ...payload }; };
   const createResponse = res();
-  await createInvoice({ body: { invoiceNumber: '1/2026-27', financialYear: '2026-27', client: 'client-1', invoiceDate: '2026-04-04', taxableAmount: 100, grandTotal: 118, untrusted: true } }, createResponse);
+  await createInvoice({ body: { invoiceNumber: 'ABS-2026-27-1234567890', financialYear: '2026-27', client: 'client-1', invoiceDate: '2026-04-04', dispatchFromAddress: 'Warehouse A', taxableAmount: 100, grandTotal: 118, untrusted: true } }, createResponse);
   assert.equal(createResponse.statusCode, 201);
   assert.equal(created.untrusted, undefined);
+  assert.equal(created.invoiceNumber, 'ABS-2026-27-1234567890');
+  assert.equal(created.dispatchFromAddress, 'Warehouse A');
 
   const invoice = { _id: 'invoice-1', save: async () => {} };
   Invoice.findById = async () => invoice;

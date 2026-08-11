@@ -6,8 +6,10 @@ import { apiFetch } from '@/helpers/api'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import { FormEvent, useEffect, useState } from 'react'
-import { Alert, Badge, Button, Card, CardBody, Form, InputGroup, Modal, Table } from 'react-bootstrap'
+import { Alert, Badge, Button, Card, CardBody, Col, Form, InputGroup, Modal, Row, Table } from 'react-bootstrap'
 import ReactSelect from 'react-select'
+import { useNavigate } from 'react-router-dom'
+import Swal from 'sweetalert2'
 
 const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
 const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
@@ -51,6 +53,7 @@ const emptyEditForm = {
 
 const UsersPage = () => {
   const { user } = useAuthContext()
+  const navigate = useNavigate()
   const users = useUserManagementStore((state) => state.users)
   const meta = useUserManagementStore((state) => state.meta)
   const loading = useUserManagementStore((state) => state.loading)
@@ -58,6 +61,7 @@ const UsersPage = () => {
   const clearUsers = useUserManagementStore((state) => state.clearUsers)
   const fetchUsers = useUserManagementStore((state) => state.fetchUsers)
   const updateUserInStore = useUserManagementStore((state) => state.updateUser)
+  const deleteUserInStore = useUserManagementStore((state) => state.deleteUser)
   const [editingUser, setEditingUser] = useState<UserType | null>(null)
   const [editForm, setEditForm] = useState(emptyEditForm)
   const [editError, setEditError] = useState('')
@@ -109,21 +113,32 @@ const UsersPage = () => {
     }
   }
 
-  const openEdit = (item: UserType) => {
-    setEditingUser(item)
-    setVisiblePassword(false)
-    setEditError('')
-    setHrPermissions(defaultHrPermissions())
-    setEditForm({
-      name: item.name,
-      email: item.email,
-      phone: item.phone || '',
-      role: item.role,
-      accessTypes: [...new Set([...(item.role === 'superadmin' ? [] : [item.role]), ...(item.additionalRoles || []), ...(item.accessTypes || [])])],
-      status: item.status,
-      timezone: item.timezone || 'UTC',
-      password: '',
+  const deleteUser = async (item: UserType) => {
+    const hardDelete = import.meta.env.DEV
+    const confirmation = await Swal.fire({
+      icon: 'warning',
+      title: `Delete ${item.name}?`,
+      text: hardDelete ? 'This permanently removes the development account. It cannot be undone.' : 'This deactivates the account, signs the user out, and keeps their history.',
+      showCancelButton: true,
+      confirmButtonColor: '#dc3545',
+      confirmButtonText: 'Delete user',
+      cancelButtonText: 'Keep user',
+      reverseButtons: true,
     })
+    if (!confirmation.isConfirmed) return
+    setError('')
+    setMessage('')
+    try {
+      await deleteUserInStore(item._id, hardDelete)
+      setMessage(hardDelete ? 'User permanently deleted' : 'User deleted')
+      await Swal.fire({ icon: 'success', title: hardDelete ? 'User permanently deleted' : 'User deleted', text: hardDelete ? `${item.name} was removed from development.` : `${item.name} can no longer sign in.`, timer: 1800, showConfirmButton: false })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to delete user')
+    }
+  }
+
+  const openEdit = (item: UserType) => {
+    navigate(`/users/${item._id}/edit`)
   }
 
   const closeEdit = () => {
@@ -231,7 +246,7 @@ const UsersPage = () => {
                   <th style={{ minWidth: 220 }}>Access types</th>
                   <th style={{ minWidth: 150 }}>Account</th>
                   <th style={{ minWidth: 150 }}>Activity</th>
-                  <th style={{ minWidth: 175 }} className="text-end">
+                  <th style={{ minWidth: 280 }} className="text-end">
                     Actions
                   </th>
                 </tr>
@@ -263,8 +278,14 @@ const UsersPage = () => {
                       <div className="fs-13">Joined {joinedDate(item.createdAt)}</div>
                       <div className="text-muted fs-12">Updated {joinedDate(item.updatedAt)}</div>
                     </td>
-                    <td className="text-end">
-                      {canManageProfile(item) ? <div className="d-inline-flex gap-2"><Button size="sm" variant="outline-primary" type="button" onClick={() => openEdit(item)}><IconifyIcon icon="bx:edit" className="me-1" />Edit</Button><Button size="sm" variant={item.status === 'suspended' ? 'outline-success' : 'outline-danger'} type="button" className="text-nowrap" onClick={() => updateUser(item._id, { status: item.status === 'suspended' ? 'active' : 'suspended' })}><IconifyIcon icon={item.status === 'suspended' ? 'bx:lock-open' : 'bx:lock'} className="me-1" />{item.status === 'suspended' ? 'Unlock' : 'Lock'}</Button></div> : <Badge bg="light" text="dark">Superadmin protected</Badge>}
+                    <td className="text-end" style={{ minWidth: 280 }}>
+                      {canManageProfile(item) ? (
+                        <div className="d-inline-flex align-items-center gap-2 flex-nowrap">
+                          <Button size="sm" variant="outline-primary" type="button" className="text-nowrap" onClick={() => openEdit(item)}><IconifyIcon icon="bx:edit" className="me-1" />Edit</Button>
+                          <Button size="sm" variant={item.status === 'suspended' ? 'outline-success' : 'outline-danger'} type="button" className="text-nowrap" onClick={() => updateUser(item._id, { status: item.status === 'suspended' ? 'active' : 'suspended' })}><IconifyIcon icon={item.status === 'suspended' ? 'bx:lock-open' : 'bx:lock'} className="me-1" />{item.status === 'suspended' ? 'Unlock' : 'Lock'}</Button>
+                          {item._id !== user?._id && <Button size="sm" variant="outline-danger" type="button" className="text-nowrap" onClick={() => deleteUser(item)}><IconifyIcon icon="bx:trash" className="me-1" />Delete</Button>}
+                        </div>
+                      ) : <Badge bg="light" text="dark">Superadmin protected</Badge>}
                     </td>
                   </tr>
                 ))}
@@ -294,79 +315,36 @@ const UsersPage = () => {
         </CardBody>
       </Card>
 
-      <Modal show={Boolean(editingUser)} onHide={closeEdit} centered size="lg">
+      <Modal show={Boolean(editingUser)} onHide={closeEdit} centered size="xl">
         <Form onSubmit={saveEdit}>
           <Modal.Header closeButton>
             <Modal.Title>Edit User Information</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             {editError && <Alert variant="danger">{editError}</Alert>}
-            <Form.Group className="mb-3">
-              <Form.Label>Name</Form.Label>
-              <Form.Control required value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} />
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Email</Form.Label>
-              <Form.Control required type="email" value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} />
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Mobile Number</Form.Label>
-              <Form.Control required type="tel" inputMode="tel" value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="10-digit mobile number" />
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Access types</Form.Label>
-              <ReactSelect
-                isMulti
-                classNamePrefix="react-select"
-                options={accessTypeOptions}
-                placeholder="Select access types"
-                value={accessTypeOptions.filter((option) => editForm.accessTypes.includes(option.value))}
-                onChange={(options) => setEditForm({ ...editForm, accessTypes: options.map((option) => option.value) })}
-              />
-              <Form.Text>Select one or more approved business access types.</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Status</Form.Label>
-              <Form.Select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as UserType['status'] })}>
-                {statuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Timezone</Form.Label>
-              <Form.Control value={editForm.timezone} onChange={(event) => setEditForm({ ...editForm, timezone: event.target.value })} />
-            </Form.Group>
-            <Form.Group>
-              <Form.Label>New Password</Form.Label>
-              <InputGroup>
-                <Form.Control
-                  type={visiblePassword ? 'text' : 'password'}
-                  minLength={8}
-                  value={editForm.password}
-                  onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
-                  placeholder="Leave blank to keep current password"
-                />
-                <Button variant="outline-secondary" type="button" aria-label={visiblePassword ? 'Hide password' : 'Show password'} onClick={() => setVisiblePassword(!visiblePassword)}>
-                  <IconifyIcon icon={visiblePassword ? 'bx:hide' : 'bx:show'} />
-                </Button>
-              </InputGroup>
-              <Form.Text>Use at least 8 characters with letters and numbers.</Form.Text>
-            </Form.Group>
+            <h5 className="mb-3">Account details</h5>
+            <Row className="g-3">
+              <Col xl={6}><Form.Group><Form.Label>Name</Form.Label><Form.Control required value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} placeholder="Full name" /></Form.Group></Col>
+              <Col xl={6}><Form.Group><Form.Label>Email</Form.Label><Form.Control required type="email" value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} placeholder="name@company.com" /></Form.Group></Col>
+              <Col xl={6}><Form.Group><Form.Label>Mobile Number</Form.Label><Form.Control required type="tel" inputMode="tel" value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="10-digit mobile number" /></Form.Group></Col>
+              <Col xl={6}><Form.Group><Form.Label>New Password <span className="text-muted">(optional)</span></Form.Label><InputGroup><Form.Control type={visiblePassword ? 'text' : 'password'} minLength={8} value={editForm.password} onChange={(event) => setEditForm({ ...editForm, password: event.target.value })} placeholder="Leave blank to keep current password" /><Button variant="outline-secondary" type="button" aria-label={visiblePassword ? 'Hide password' : 'Show password'} onClick={() => setVisiblePassword(!visiblePassword)}><IconifyIcon icon={visiblePassword ? 'bx:hide' : 'bx:show'} /></Button></InputGroup><Form.Text>Letters and numbers required.</Form.Text></Form.Group></Col>
+              <Col xs={12}><Form.Group><Form.Label>Access types</Form.Label><ReactSelect isMulti classNamePrefix="react-select" options={accessTypeOptions} placeholder="Select access types" value={accessTypeOptions.filter((option) => editForm.accessTypes.includes(option.value))} onChange={(options) => setEditForm({ ...editForm, accessTypes: options.map((option) => option.value) })} /><Form.Text>Choose HR Management, Employee, Sales, Operations, Accounts, or Designers.</Form.Text></Form.Group></Col>
+              <Col xl={6}><Form.Group><Form.Label>Status</Form.Label><Form.Select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as UserType['status'] })}>{statuses.map((status) => <option key={status} value={status}>{status}</option>)}</Form.Select></Form.Group></Col>
+              <Col xl={6}><Form.Group><Form.Label>Timezone</Form.Label><Form.Control value={editForm.timezone} onChange={(event) => setEditForm({ ...editForm, timezone: event.target.value })} /></Form.Group></Col>
+            </Row>
             {editingUser && !singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number]) && (
-              <Form.Group className="mt-3">
-                <Form.Label>HR Access</Form.Label>
+              <details className="mt-3">
+                <summary className="fw-medium">Advanced HR module permissions</summary>
+                <Form.Text>Use only when this user needs different access for individual HR modules.</Form.Text>
                 {loadingHrPermissions ? <Spinner className="spinner-border-sm" tag="span" /> : hrPermissions.map((permission) => (
-                  <div className="d-flex align-items-center gap-2 mb-2" key={permission.module}>
+                  <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}>
                     <span className="flex-grow-1">{hrLabel(permission.module)}</span>
                     <Form.Select aria-label={`${hrLabel(permission.module)} access`} value={permission.access} onChange={(event) => setHrPermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as HrAccess } : item))} style={{ maxWidth: 140 }}>
                       <option value="none">None</option><option value="view">View</option><option value="manage">Manage</option>
                     </Form.Select>
                   </div>
                 ))}
-              </Form.Group>
+              </details>
             )}
           </Modal.Body>
           <Modal.Footer>

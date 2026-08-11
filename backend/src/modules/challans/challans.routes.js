@@ -6,7 +6,7 @@ import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware
 export const challanRouter = Router();
 challanRouter.use(asyncHandler(authenticate), authorizeRoles('superadmin', 'admin', 'operations'));
 challanRouter.get('/', asyncHandler(listChallans));
-challanRouter.post('/', authorizeRoles('superadmin', 'admin'), asyncHandler(createChallan));
+challanRouter.post('/', authorizeRoles('superadmin', 'admin', 'operations'), asyncHandler(createChallan));
 challanRouter.get('/:id/pdf', asyncHandler(downloadChallanPdf));
 challanRouter.get('/:id', asyncHandler(getChallan));
 challanRouter.patch('/:id', asyncHandler(updateChallan));

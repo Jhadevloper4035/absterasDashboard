@@ -14,7 +14,7 @@ export type CreateUserPayload = {
   accessTypes?: string[]
   status: UserType['status']
   timezone: string
-  employment?: { employeeType: 'office' | 'site'; department: string; designation: string; manager?: string; joiningDate: string; monthlySalary?: string }
+  employment?: { employeeType: 'office' | 'site'; department: string; designation: string; manager?: string; joiningDate: string; dateOfBirth?: string; monthlySalary?: string }
 }
 
 type UserManagementStore = {
@@ -26,6 +26,7 @@ type UserManagementStore = {
   fetchUsers: (query?: string) => Promise<UserType[]>
   createUser: (payload: CreateUserPayload) => Promise<UserType>
   updateUser: (id: string, patch: Partial<UserType> & { password?: string }) => Promise<UserType>
+  deleteUser: (id: string, hard?: boolean) => Promise<void>
 }
 
 const authedFetch = <T>(path: string, options: RequestInit = {}) => {
@@ -80,6 +81,16 @@ export const useUserManagementStore = create<UserManagementStore>()(
         } catch (e) {
           const message = e instanceof Error ? e.message : 'Unable to update user'
           set({ error: message }, false, 'users/update:error')
+          throw e
+        }
+      },
+      deleteUser: async (id, hard = false) => {
+        try {
+          await authedFetch(`/users/${id}${hard ? '?hard=true' : ''}`, { method: 'DELETE' })
+          set((state) => ({ users: state.users.filter((item) => item._id !== id), meta: { ...state.meta, total: Math.max(0, state.meta.total - 1) } }), false, 'users/delete:success')
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Unable to delete user'
+          set({ error: message }, false, 'users/delete:error')
           throw e
         }
       },

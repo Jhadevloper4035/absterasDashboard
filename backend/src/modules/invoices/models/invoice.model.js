@@ -20,6 +20,7 @@ const invoiceSchema = new mongoose.Schema(
     invoiceNumber: { type: String, required: true, trim: true },
     financialYear: { type: String, required: true, trim: true, match: /^\d{4}-\d{2}$/ },
     client: { type: ObjectId, ref: 'Client', required: true },
+    site: { type: ObjectId, ref: 'Client' },
     invoiceDate: { type: Date, required: true },
     grRrNumber: { type: String, trim: true },
     transport: { type: String, trim: true },
@@ -28,6 +29,7 @@ const invoiceSchema = new mongoose.Schema(
     reverseCharge: { type: Boolean, default: false },
     vehicleNumber: { type: String, trim: true, uppercase: true },
     station: { type: String, trim: true },
+    dispatchFromAddress: { type: String, trim: true, maxlength: 1000 },
     lineItems: { type: [invoiceLineItemSchema], default: [] },
     taxableAmount: { type: Number, required: true, min: 0 },
     igstAmount: { type: Number, min: 0, default: 0 },
@@ -43,5 +45,6 @@ const invoiceSchema = new mongoose.Schema(
 
 invoiceSchema.index({ financialYear: 1, invoiceNumber: 1 }, { unique: true });
 invoiceSchema.index({ client: 1, invoiceDate: -1 });
+invoiceSchema.index({ site: 1, invoiceDate: -1 });
 
 export const Invoice = mongoose.models.Invoice || mongoose.model('Invoice', invoiceSchema);

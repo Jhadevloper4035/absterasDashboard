@@ -1,9 +1,10 @@
 import PageMetaData from '@/components/PageTitle'
+import PdfActionButton from '@/components/PdfActionButton'
 import { apiFetch } from '@/helpers/api'
-import { buildApiUrl } from '@/helpers/apiUrl'
+import { downloadPdf, printPdf } from '@/helpers/pdf'
 import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Spinner, Table } from 'react-bootstrap'
 
 type Challan = {
@@ -18,12 +19,12 @@ type Challan = {
   roundOff: number
   totalAmount: number
   lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; rate: number; amount: number }[]
-  client: { name: string; gstin?: string; phone?: string; shippingAddress?: string; billingAddress?: string; state?: string; stateCode?: string }
+  client: { name: string; siteName?: string; siteAddress?: string; gstin?: string; phone?: string; shippingAddress?: string; billingAddress?: string; state?: string; stateCode?: string }
+  site?: { name: string; siteName?: string; siteAddress?: string; shippingAddress?: string; state?: string; stateCode?: string }
 }
 const money = (value = 0) => value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const ChallanDetailPage = () => {
   const { challanId } = useParams()
-  const [searchParams] = useSearchParams()
   const [challan, setChallan] = useState<Challan>()
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState(false)
@@ -34,37 +35,18 @@ const ChallanDetailPage = () => {
         .then(({ data }) => setChallan(data))
         .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load challan'))
   }, [challanId])
-  useEffect(() => {
-    if (challan && searchParams.get('print') === '1') window.print()
-  }, [challan, searchParams])
-  const download = async () => {
-    const response = await fetch(buildApiUrl(`/challans/${challanId}/pdf`), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      credentials: 'include',
-    })
-    if (!response.ok) throw new Error('Unable to download challan')
-    const url = URL.createObjectURL(await response.blob())
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `challan-${challan?.challanNumber}.pdf`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
+  const download = () => downloadPdf(`/challans/${challanId}/pdf`, `challan-${challan?.challanNumber}.pdf`, token)
+  const receiver = challan?.site || challan?.client
   return (
     <>
       <PageMetaData title={challan ? `Challan ${challan.challanNumber}` : 'Challan'} />
-      <style>
-        {
-          '@media print { .no-print { display:none!important } body { background:#fff!important } .card { border:0!important; box-shadow:none!important } }'
-        }
-      </style>
       {error && <Alert variant="danger">{error}</Alert>}
       {challan && (
         <Card>
           <CardBody>
             <div className="no-print d-flex justify-content-between mb-4">
               <Link to="/challans">
-                <Button variant="outline-secondary">Back to challans</Button>
+                <Button variant="outline-secondary">Back to delivery challans</Button>
               </Link>
               <div>
                 <Link to={`/challans/${challanId}/edit`}>
@@ -72,9 +54,9 @@ const ChallanDetailPage = () => {
                     Edit
                   </Button>
                 </Link>
-                <Button className="me-2" onClick={() => window.print()}>
-                  Print challan
-                </Button>
+                <PdfActionButton className="me-2" action={() => printPdf(`/challans/${challanId}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open delivery challan PDF'))}>
+                  Print PDF
+                </PdfActionButton>
                 <Button
                   variant="outline-success"
                   disabled={downloading}
@@ -96,13 +78,13 @@ const ChallanDetailPage = () => {
             <div className="row border-bottom py-3">
               <div className="col-md-7">
                 <h6>Details of Receiver</h6>
-                <strong>NAME: {challan.client.name}</strong>
+                <strong>NAME: {receiver?.siteName || receiver?.name}</strong>
                 <br />
-                <strong>ADDRESS:</strong> {challan.client.shippingAddress || challan.client.billingAddress || '-'}
+                <strong>ADDRESS:</strong> {receiver?.siteAddress || receiver?.shippingAddress || challan.client.shippingAddress || challan.client.billingAddress || '-'}
                 <br />
-                STATE: {challan.client.state || '-'}
+                STATE: {receiver?.state || challan.client.state || '-'}
                 <br />
-                STATE CODE: {challan.client.stateCode || '-'}
+                STATE CODE: {receiver?.stateCode || challan.client.stateCode || '-'}
                 <br />
                 PHONE NO.: {challan.client.phone || '-'}
                 <br />

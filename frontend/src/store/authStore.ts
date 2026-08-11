@@ -75,7 +75,7 @@ export const useAuthStore = create<AuthStore>()(
             return res.data
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Please sign in again'
-            set({ ...emptyAuth, error: message }, false, 'auth/refresh:error')
+            set(get().token ? { ...emptyAuth, error: message } : emptyAuth, false, 'auth/refresh:error')
             throw e
           }
         })()
@@ -110,12 +110,12 @@ export const useAuthStore = create<AuthStore>()(
       clearSession: () => set(emptyAuth, false, 'auth/clearSession'),
       logout: async () => {
         const token = get().token
+        get().clearSession()
         await fetch(buildApiUrl('/auth/logout'), {
           method: 'POST',
           credentials: 'include',
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         }).catch(() => {})
-        get().clearSession()
       },
     }),
     { name: 'AuthStore' },

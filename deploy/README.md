@@ -100,7 +100,10 @@ SMTP_PASS=
 SMTP_FROM=
 SMTP_TIMEOUT_MS=5000
 TRUST_PROXY=1
+REDIS_URL=redis://redis:6379
 ```
+
+`REDIS_URL` must use the internal Compose hostname above; do not expose Redis publicly.
 
 The workflow appends `BACKEND_IMAGE` and `FRONTEND_IMAGE` automatically during deploy.
 

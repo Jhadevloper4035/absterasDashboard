@@ -54,7 +54,7 @@ export function authorizeHrModule(module, minAccess = 'view') {
       req.hrAccess = 'manage';
       return next();
     }
-    if (['expenses', 'leave', 'payroll', 'employee-overview'].includes(module) && minAccess === 'view' && accessTypes.includes('employee')) {
+    if (['attendance', 'expenses', 'leave', 'payroll', 'employee-overview', 'employees'].includes(module) && minAccess === 'view' && accessTypes.includes('employee')) {
       req.hrAccess = 'view';
       return next();
     }

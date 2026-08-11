@@ -19,6 +19,7 @@ const employeeSchema = new mongoose.Schema(
     designation: { type: mongoose.Schema.Types.ObjectId, ref: 'Designation', required: true },
     manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     joiningDate: { type: Date, required: true },
+    dateOfBirth: Date,
     status: { type: String, enum: ['active', 'resigned', 'terminated'], default: 'active' },
     lastWorkingDate: Date,
     photo: documentSchema,

@@ -17,6 +17,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const weakSecretPattern = /^(replace-with|change-me|development)/i;
 
 if (isProduction) {
+  if (!process.env.REDIS_URL) throw new Error('Missing required env: REDIS_URL');
   const weak = [];
   if (process.env.AUTH_SECRET.length < 32 || weakSecretPattern.test(process.env.AUTH_SECRET)) weak.push('AUTH_SECRET');
   if (!process.env.SETUP_TOKEN || process.env.SETUP_TOKEN.length < 24 || weakSecretPattern.test(process.env.SETUP_TOKEN)) weak.push('SETUP_TOKEN');

@@ -1,6 +1,7 @@
 import PageMetaData from '@/components/PageTitle'
+import PdfActionButton from '@/components/PdfActionButton'
 import { apiFetch } from '@/helpers/api'
-import { buildApiUrl } from '@/helpers/apiUrl'
+import { downloadPdf, printPdf } from '@/helpers/pdf'
 import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -32,22 +33,10 @@ const ChallansPage = () => {
   useEffect(() => {
     load()
   }, [search, client])
-  const download = async (challan: Challan) => {
-    const response = await fetch(buildApiUrl(`/challans/${challan._id}/pdf`), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      credentials: 'include',
-    })
-    if (!response.ok) throw new Error('Unable to download challan')
-    const url = URL.createObjectURL(await response.blob())
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `challan-${challan.challanNumber}.pdf`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
+  const download = (challan: Challan) => downloadPdf(`/challans/${challan._id}/pdf`, `challan-${challan.challanNumber}.pdf`, token)
   return (
     <>
-      <PageMetaData title="Challans" />
+      <PageMetaData title="Delivery Challans" />
       <Card className="mb-3">
         <CardBody>
           <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -106,13 +95,13 @@ const ChallansPage = () => {
                         View
                       </Button>
                     </Link>
-                    <Button
+                    <PdfActionButton
                       size="sm"
                       variant="outline-secondary"
                       className="me-2"
-                      onClick={() => window.open(`/challans/${challan._id}?print=1`, '_blank')}>
+                      action={() => printPdf(`/challans/${challan._id}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open delivery challan PDF'))}>
                       Print
-                    </Button>
+                    </PdfActionButton>
                     <Button
                       size="sm"
                       variant="outline-success"
@@ -126,7 +115,7 @@ const ChallansPage = () => {
               {!challans.length && (
                 <tr>
                   <td colSpan={5} className="text-center text-muted py-4">
-                    No challans found.
+                    No delivery challans found.
                   </td>
                 </tr>
               )}

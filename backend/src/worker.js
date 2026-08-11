@@ -1,11 +1,14 @@
 import mongoose from 'mongoose';
 import { connectDatabase } from './config/db.js';
 import { startEmailWorker } from './services/email-queue.service.js';
+import { startBirthdayNotifier } from './modules/hr/services/birthday-notification.service.js';
 
 async function start() {
   await connectDatabase();
   const worker = startEmailWorker();
+  const birthdayNotifier = startBirthdayNotifier();
   const stop = async () => {
+    clearInterval(birthdayNotifier);
     await worker.close();
     await mongoose.disconnect();
     process.exit(0);
