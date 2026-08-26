@@ -23,6 +23,7 @@ type Task = {
 }
 
 type DashboardSummary = {
+  access: { leads: number; tasks: number }
   stats: {
     activeLeads: number
     unassignedLeads: number
@@ -46,6 +47,7 @@ const closedLeadStatuses = ['WON', 'LOST', 'ON_HOLD']
 const AdminDashboard = () => {
   const token = useAuthStore((state) => state.token)
   const [summary, setSummary] = useState<DashboardSummary>({
+    access: { leads: 0, tasks: 0 },
     stats: { activeLeads: 0, unassignedLeads: 0, todayMeetings: 0, overdueTasks: 0, dueTodayTasks: 0, teamUsers: 0 },
     todayMeetings: [],
     priorityTasks: [],
@@ -66,6 +68,10 @@ const AdminDashboard = () => {
       .finally(() => setLoading(false))
   }, [token])
 
+  const canReadLeads = summary.access.leads > 0
+  const canReadTasks = summary.access.tasks > 0
+  const canManageLeads = summary.access.leads === 2
+  const canManageTasks = summary.access.tasks === 2
   const stats = [
     { label: 'Active leads', value: summary.stats.activeLeads, note: 'Follow-up required', bg: 'primary' },
     { label: 'Unassigned leads', value: summary.stats.unassignedLeads, note: 'Assign today', bg: summary.stats.unassignedLeads ? 'warning' : 'success' },
@@ -73,7 +79,7 @@ const AdminDashboard = () => {
     { label: 'Overdue tasks', value: summary.stats.overdueTasks, note: 'Action required', bg: summary.stats.overdueTasks ? 'danger' : 'success' },
     { label: 'Tasks due today', value: summary.stats.dueTodayTasks, note: 'Due today', bg: 'warning' },
     { label: 'Team users', value: summary.stats.teamUsers, note: 'Active team', bg: 'secondary' },
-  ]
+  ].filter((item) => (['Active leads', 'Unassigned leads', "Today's meetings"].includes(item.label) ? canReadLeads : ['Overdue tasks', 'Tasks due today'].includes(item.label) ? canReadTasks : canReadLeads || canReadTasks))
 
   const downloadReport = async () => {
     if (!token) return
@@ -105,13 +111,13 @@ const AdminDashboard = () => {
       <PageMetaData title="Absteras Dashboard" />
 
       <div className="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-4">
-        <div className="text-muted">Absteras Company overview for leads, meetings, tasks, and sales workload.</div>
+        <div className="text-muted">Your dashboard shows only the modules assigned to your account.</div>
         <div className="d-flex gap-2 flex-wrap ms-auto">
-          <Link to="/leads/create" className="btn btn-primary text-nowrap">Create Lead</Link>
-          <Link to="/tasks/create" className="btn btn-outline-primary text-nowrap">Create Task</Link>
-          <button type="button" className="btn btn-outline-secondary text-nowrap" onClick={downloadReport} disabled={exporting}>
+          {canManageLeads && <Link to="/leads/create" className="btn btn-primary text-nowrap">Create Lead</Link>}
+          {canManageTasks && <Link to="/tasks/create" className="btn btn-outline-primary text-nowrap">Create Task</Link>}
+          {(canReadLeads || canReadTasks) && <button type="button" className="btn btn-outline-secondary text-nowrap" onClick={downloadReport} disabled={exporting}>
             {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -141,8 +147,10 @@ const AdminDashboard = () => {
         ))}
       </Row>
 
-      <Row className="g-3 mb-4">
-        <Col xl={7}>
+      {!canReadLeads && !canReadTasks && <Alert variant="info">No business modules are assigned yet. Todo and Notifications remain available.</Alert>}
+
+      {(canReadLeads || canReadTasks) && <Row className="g-3 mb-4">
+        {canReadLeads && <Col xl={canReadTasks ? 7 : 12}>
           <Card className="h-100">
             <CardBody>
               <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
@@ -183,9 +191,9 @@ const AdminDashboard = () => {
               )}
             </CardBody>
           </Card>
-        </Col>
+        </Col>}
 
-        <Col xl={5}>
+        {canReadTasks && <Col xl={canReadLeads ? 5 : 12}>
           <Card className="h-100">
             <CardBody>
               <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
@@ -211,10 +219,10 @@ const AdminDashboard = () => {
               )}
             </CardBody>
           </Card>
-        </Col>
-      </Row>
+        </Col>}
+      </Row>}
 
-      <Card className="mb-0">
+      {canReadLeads && <Card className="mb-0">
         <CardBody>
           <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
             <div>
@@ -255,7 +263,7 @@ const AdminDashboard = () => {
             </div>
           )}
         </CardBody>
-      </Card>
+      </Card>}
     </>
   )
 }

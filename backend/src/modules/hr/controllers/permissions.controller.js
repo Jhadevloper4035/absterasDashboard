@@ -23,10 +23,10 @@ export async function getHrPermissions(req, res) {
 
 export async function getMyHrAccess(req, res) {
   const accessTypes = userRoles(req.user);
-  if (accessTypes.some((role) => ['superadmin', 'admin', 'hr-management'].includes(role))) return res.json({ data: HR_MODULES.map((module) => ({ module, access: 'manage' })) });
+  if (req.user.modulePermissions?.some((permission) => permission.module === 'hr' && permission.access === 'manage') || accessTypes.some((role) => ['superadmin', 'admin', 'hr-management'].includes(role))) return res.json({ data: HR_MODULES.map((module) => ({ module, access: 'manage' })) });
   const permissions = await HrPermission.find({ user: req.user._id }).lean();
   const accessByModule = new Map(permissions.map((permission) => [permission.module, permission.access]));
-  if (accessTypes.includes('employee')) for (const module of ['employees', 'attendance', 'leave', 'payroll', 'expenses']) accessByModule.set(module, 'view');
+  if (req.user.workProfile === 'employee' || (!req.user.workProfile && accessTypes.includes('employee'))) for (const module of ['employees', 'attendance', 'leave', 'payroll', 'expenses']) accessByModule.set(module, 'view');
   return res.json({ data: HR_MODULES.map((module) => ({ module, access: accessByModule.get(module) || 'none' })) });
 }
 

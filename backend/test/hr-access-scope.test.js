@@ -69,7 +69,7 @@ test('managed attendance listing filters the selected employee', async () => {
 });
 
 test('employee overview access is limited to the employee role', async () => {
-  const req = { user: { accessTypes: ['employee'] } };
+  const req = { method: 'GET', user: { accessTypes: ['employee'], modulePermissions: [{ module: 'hr', access: 'view' }] } };
   await authorizeHrModule('employee-overview', 'view')(req, {}, (error) => assert.equal(error, undefined));
   assert.equal(req.hrAccess, 'view');
 });

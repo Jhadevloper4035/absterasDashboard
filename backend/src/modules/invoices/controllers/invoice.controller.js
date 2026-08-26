@@ -19,9 +19,18 @@ function hasCreateFields(body) {
   return ['financialYear', 'client', 'invoiceDate', 'taxableAmount', 'grandTotal'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
 }
 
+function applyTax(payload) {
+  const taxableAmount = Number(payload.taxableAmount) || 0;
+  const isHaryana = String(payload.placeOfSupplyCode || '') === '06' || String(payload.placeOfSupply || '').trim().toLowerCase() === 'haryana';
+  payload.cgstAmount = isHaryana ? taxableAmount * 0.09 : 0;
+  payload.sgstAmount = isHaryana ? taxableAmount * 0.09 : 0;
+  payload.igstAmount = isHaryana ? 0 : taxableAmount * 0.18;
+  payload.grandTotal = taxableAmount + payload.cgstAmount + payload.sgstAmount + payload.igstAmount + (Number(payload.roundOff) || 0);
+}
+
 export async function createInvoice(req, res) {
   if (!hasCreateFields(req.body)) return res.status(400).json({ error: { message: 'Financial year, client, invoice date, taxable amount, and grand total are required' } });
-  let invoice; const payload = invoicePayload(req.body); const requestedNumber = requestedInvoiceNumber(req.body?.invoiceNumber, payload.financialYear);
+  let invoice; const payload = invoicePayload(req.body); applyTax(payload); const requestedNumber = requestedInvoiceNumber(req.body?.invoiceNumber, payload.financialYear);
   if (payload.site && !await Client.exists({ _id: payload.site, parentClient: payload.client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try { invoice = await Invoice.create({ ...payload, invoiceNumber: attempt === 0 && requestedNumber ? requestedNumber : invoiceNumber(payload.financialYear) }); break; }
@@ -66,6 +75,7 @@ export async function updateInvoice(req, res) {
   const invoice = await Invoice.findById(req.params.id);
   if (!invoice) return res.status(404).json({ error: { message: 'Invoice not found' } });
   const payload = invoicePayload(req.body);
+  applyTax(payload);
   const client = payload.client || invoice.client;
   if (payload.site && !await Client.exists({ _id: payload.site, parentClient: client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
   Object.assign(invoice, payload);

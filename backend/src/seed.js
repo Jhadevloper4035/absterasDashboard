@@ -8,6 +8,30 @@ import { Invoice } from './modules/invoices/models/invoice.model.js';
 import { Task } from './modules/tasks/models/task.model.js';
 import { User } from './models/user.model.js';
 import { hashPassword } from './modules/auth/services/password.service.js';
+import { CategoryDefinition } from './modules/inventory/models/category-definition.model.js';
+import { InventoryItem } from './modules/inventory/models/item.model.js';
+import { InventoryPermission, INVENTORY_MODULES } from './modules/inventory/models/permission.model.js';
+
+const inventoryCategories = [
+  ['tube', 'Tube', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm'], ['coating', 'Coating/Paint', 'string']]],
+  ['sheet', 'Sheet', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['width', 'Width (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm'], ['coating', 'Coating/Shade', 'string']]],
+  ['profile', 'Profile / Section', [['codeOrSize', 'Code/Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['width', 'Width (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
+  ['hand_rail', 'Hand Rail', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
+  ['bottom_rail', 'Bottom Rail', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
+  ['hardware', 'Hardware', [['hardwareType', 'Hardware Type', 'string', true], ['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm']]],
+].map(([slug, label, fields]) => ({ slug, label, fields: fields.map(([key, fieldLabel, type, required = false, unit]) => ({ key, label: fieldLabel, type, required, unit })) }));
+const demoInventoryItems = [
+  ['TUBE-0001', 'tube', 'Aluminium Tube 25x50', 'pcs', 100, 25, 'A-01', 42, { size: '25x50', length: 3657, thickness: 1, coating: 'Powder coated white' }],
+  ['TUBE-0002', 'tube', 'Aluminium Tube 50x50', 'pcs', 18, 25, 'A-02', 54, { size: '50x50', length: 3657, thickness: 1.2, coating: 'Mill finish' }],
+  ['SHT-0001', 'sheet', 'Aluminium Sheet 1220x2440', 'sheet', 30, 10, 'B-01', 180, { size: '1220x2440', length: 2440, width: 1220, thickness: 1.2, coating: 'Silver' }],
+  ['SHT-0002', 'sheet', 'Aluminium Sheet 1220x3050', 'sheet', 8, 10, 'B-02', 225, { size: '1220x3050', length: 3050, width: 1220, thickness: 1.5, coating: 'Black' }],
+  ['PRF-0001', 'profile', 'U Profile 40mm', 'meter', 80, 20, 'C-01', 18, { codeOrSize: 'U-40', length: 6000, width: 40, thickness: 1.2 }],
+  ['PRF-0002', 'profile', 'L Profile 25mm', 'meter', 12, 20, 'C-02', 12, { codeOrSize: 'L-25', length: 6000, width: 25, thickness: 1 }],
+  ['HR-0001', 'hand_rail', 'Hand Rail 50x25', 'meter', 44, 15, 'D-01', 35, { size: '50x25', length: 6000, thickness: 1.5 }],
+  ['BR-0001', 'bottom_rail', 'Bottom Rail 60x30', 'meter', 10, 15, 'D-02', 31, { size: '60x30', length: 6000, thickness: 1.5 }],
+  ['HW-0001', 'hardware', 'Truss Head Screw', 'pcs', 500, 100, 'E-01', 0.35, { hardwareType: 'truss_head', size: 'M4', length: 16 }],
+  ['HW-0002', 'hardware', 'Shelf Screw', 'pcs', 45, 100, 'E-02', 0.45, { hardwareType: 'shelf_screw', size: 'M5', length: 25 }],
+].map(([sku, category, name, unit, quantityInStock, minStockLevel, location, unitCost, specs]) => ({ sku, category, name, unit, quantityInStock, minStockLevel, location, unitCost, specs }));
 
 const demoUsers = [
   {
@@ -169,6 +193,11 @@ async function seed() {
     if (result.upsertedCount || result.modifiedCount) userCount += 1;
   }
 
+  const superadmin = await User.findOne({ role: 'superadmin', status: 'active' });
+  if (superadmin) await Promise.all(INVENTORY_MODULES.map((module) => InventoryPermission.findOneAndUpdate({ user: superadmin._id, module }, { access: 'manage', grantedBy: superadmin._id }, { upsert: true, runValidators: true })));
+  for (const category of inventoryCategories) await CategoryDefinition.updateOne({ slug: category.slug }, { $set: category }, { upsert: true, runValidators: true });
+  for (const item of demoInventoryItems) await InventoryItem.updateOne({ sku: item.sku }, { $set: { ...item, status: 'active' } }, { upsert: true, runValidators: true });
+
   for (const lead of demoLeads) {
     if (!(await Lead.exists({ email: lead.email }))) {
       await Lead.create(lead);
@@ -250,6 +279,7 @@ async function seed() {
   console.log(`Seeded ${invoiceCount} demo invoices`);
   console.log(`Seeded ${challanCount} demo challans`);
   console.log(`Seeded ${taskCount} demo tasks`);
+  console.log(`Seeded ${inventoryCategories.length} inventory categories and ${demoInventoryItems.length} inventory items`);
 }
 
 seed()

@@ -1,6 +1,6 @@
 import { AuthSession } from '../modules/auth/models/auth-session.model.js';
 import { BlockedToken } from '../modules/auth/models/blocked-token.model.js';
-import { User } from '../models/user.model.js';
+import { User, WORK_PROFILES } from '../models/user.model.js';
 import { env } from '../config/env.js';
 import { Employee } from '../modules/hr/models/employee.model.js';
 import { SalaryStructure } from '../modules/hr/models/salary-structure.model.js';
@@ -11,6 +11,7 @@ import { LeaveBalance } from '../modules/hr/models/leave-balance.model.js';
 import { LeaveRequest } from '../modules/hr/models/leave-request.model.js';
 import { PaidLeaveAllocation } from '../modules/hr/models/paid-leave-allocation.model.js';
 import { HrPermission } from '../modules/hr/models/permission.model.js';
+import { InventoryPermission } from '../modules/inventory/models/permission.model.js';
 import { LoginHistory } from '../modules/auth/models/login-history.model.js';
 import { Lead } from '../modules/leads/models/lead.model.js';
 import { Notification } from '../modules/notifications/models/notification.model.js';
@@ -24,12 +25,10 @@ import { clearFailedLoginAttempts } from '../modules/auth/services/login-attempt
 import { invalidateCache } from '../services/redis-cache.service.js';
 import { hashPassword, passwordPolicyError } from '../modules/auth/services/password.service.js';
 import { userRoles } from '../modules/auth/middleware/auth.middleware.js';
+import { APP_ACCESS_LEVELS, APP_MODULES } from '../config/app-modules.js';
 
 const SUPERADMIN_ROLE = 'superadmin';
-const TEAM_USER_ROLES = ['sales', 'operations', 'accounts', 'designers'];
-const ASSIGNABLE_ACCESS_TYPES = ['admin', ...TEAM_USER_ROLES];
-const SYSTEM_ACCESS_TYPES = [SUPERADMIN_ROLE, ...ASSIGNABLE_ACCESS_TYPES];
-const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'whatsappNumber', 'role', 'additionalRoles', 'accessTypes', 'status', 'timezone', 'notificationPreferences'];
+const USER_UPDATE_FIELDS = ['name', 'email', 'phone', 'whatsappNumber', 'workProfile', 'modulePermissions', 'status', 'timezone', 'notificationPreferences'];
 
 
 function cleanAdditionalRoles(roles, primaryRole) {
@@ -40,6 +39,30 @@ function cleanAdditionalRoles(roles, primaryRole) {
 function cleanAccessTypes(types) {
   if (types === undefined) return undefined;
   return [...new Set((Array.isArray(types) ? types : []).map((type) => String(type).trim().toLowerCase()).filter((type) => /^[a-z][a-z0-9-]{1,39}$/.test(type)))].slice(0, 20);
+}
+
+function cleanWorkProfile(profile) {
+  return WORK_PROFILES.includes(profile) ? profile : null;
+}
+
+function cleanModulePermissions(permissions) {
+  if (!Array.isArray(permissions)) return null;
+  const accessByModule = new Map();
+  for (const permission of permissions) {
+    if (!APP_MODULES.includes(permission?.module) || !APP_ACCESS_LEVELS.includes(permission?.access) || accessByModule.has(permission.module)) return null;
+    accessByModule.set(permission.module, permission.access);
+  }
+  return APP_MODULES.map((module) => ({ module, access: accessByModule.get(module) || 'none' }));
+}
+
+function employeeModulePermissions(permissions, workProfile) {
+  if (workProfile !== 'employee' || !permissions) return permissions;
+  return permissions.map((permission) => permission.module === 'hr' && permission.access === 'none' ? { ...permission, access: 'view' } : permission);
+}
+
+function requiredModulePermissions(permissions) {
+  if (!permissions) return permissions;
+  return permissions.map((permission) => ['todo', 'notifications'].includes(permission.module) ? { ...permission, access: 'manage' } : permission);
 }
 
 function cleanTerritories(territories) {
@@ -62,8 +85,8 @@ function allowedUserUpdate(body) {
     return fields;
   }, {});
   if (body.territories !== undefined) update.territories = cleanTerritories(body.territories);
-  if (update.additionalRoles !== undefined) update.additionalRoles = cleanAdditionalRoles(update.additionalRoles, update.role || body.role);
-  if (update.accessTypes !== undefined) update.accessTypes = cleanAccessTypes(update.accessTypes);
+  if (update.workProfile !== undefined) update.workProfile = cleanWorkProfile(update.workProfile);
+  if (update.modulePermissions !== undefined) update.modulePermissions = cleanModulePermissions(update.modulePermissions);
   return update;
 }
 
@@ -108,7 +131,7 @@ async function purgeDevelopmentUserData(userId) {
   const employees = await Employee.find({ user: userId }).select('_id').lean();
   const employeeIds = employees.map((employee) => employee._id);
   await Promise.all([
-    AuthSession.deleteMany({ user: userId }), BlockedToken.deleteMany({ user: userId }), LoginHistory.deleteMany({ user: userId }), HrPermission.deleteMany({ $or: [{ user: userId }, { grantedBy: userId }] }), Notification.deleteMany({ user: userId }),
+    AuthSession.deleteMany({ user: userId }), BlockedToken.deleteMany({ user: userId }), LoginHistory.deleteMany({ user: userId }), HrPermission.deleteMany({ $or: [{ user: userId }, { grantedBy: userId }] }), InventoryPermission.deleteMany({ $or: [{ user: userId }, { grantedBy: userId }] }), Notification.deleteMany({ user: userId }),
     Lead.deleteMany({ $or: [{ owner: userId }, { createdBy: userId }] }), Task.deleteMany({ $or: [{ assignee: userId }, { createdBy: userId }, { completedBy: userId }] }), Todo.deleteMany({ $or: [{ assignedTo: userId }, { createdBy: userId }, { completedBy: userId }] }),
     ...(employeeIds.length ? [Attendance.deleteMany({ employee: { $in: employeeIds } }), Advance.deleteMany({ employee: { $in: employeeIds } }), ExpenseClaim.deleteMany({ employee: { $in: employeeIds } }), LeaveBalance.deleteMany({ employee: { $in: employeeIds } }), LeaveRequest.deleteMany({ employee: { $in: employeeIds } }), PaidLeaveAllocation.deleteMany({ employee: { $in: employeeIds } }), SalaryStructure.deleteMany({ employee: { $in: employeeIds } }), Employee.deleteMany({ _id: { $in: employeeIds } })] : []),
   ]);
@@ -134,21 +157,17 @@ export async function createUser(req, res) {
 
   const requestedAccessTypes = cleanAccessTypes(req.body.accessTypes) || [];
   const employment = employmentDetails(req.body);
+  const employeeProfile = req.body.workProfile === 'employee' || (req.body.workProfile === undefined && requestedAccessTypes.includes('employee'));
   if (employment === undefined) return res.status(400).json({ error: { message: 'Employee type, department, designation, joining date and monthly salary are required' } });
-  if (employment && !requestedAccessTypes.includes('employee')) return res.status(400).json({ error: { message: 'Select the Employee access type before adding employment details' } });
-  if (requestedAccessTypes.includes('employee') && !employment) return res.status(400).json({ error: { message: 'Employee type, department, designation, joining date and monthly salary are required' } });
+  if (employment && !employeeProfile) return res.status(400).json({ error: { message: 'Select the Employee work profile before adding employment details' } });
+  if (employeeProfile && !employment) return res.status(400).json({ error: { message: 'Employee type, department, designation, joining date and monthly salary are required' } });
 
   const userFields = allowedUserUpdate(stripPassword(req.body));
-  userFields.additionalRoles = cleanAdditionalRoles(userFields.additionalRoles, userFields.role);
-  if (hasAdminAccess(userFields) && !userRoles(req.user).includes(SUPERADMIN_ROLE)) {
-    return res.status(403).json({ error: { message: 'Only Superadmin can assign Admin access' } });
-  }
-  const roleError = await roleLimitError(userFields.role);
-  const adminError = await adminAccessLimitError(userFields);
-  if (roleError || adminError) {
-    return res.status(400).json({ error: { message: roleError || adminError } });
-  }
-  userFields.accessTypes = requestedAccessTypes.filter((type) => !SYSTEM_ACCESS_TYPES.includes(type));
+  if (userFields.modulePermissions === null) return res.status(400).json({ error: { message: 'Invalid module permissions' } });
+  if (userFields.workProfile === null) return res.status(400).json({ error: { message: 'Invalid work profile' } });
+  if (!req.user && req.body.role === SUPERADMIN_ROLE) userFields.role = SUPERADMIN_ROLE;
+  userFields.modulePermissions = employeeModulePermissions(requiredModulePermissions(userFields.modulePermissions), userFields.workProfile);
+  if (userFields.workProfile === 'director' && userFields.modulePermissions?.some((permission) => permission.module === 'hr' && permission.access !== 'none')) return res.status(400).json({ error: { message: 'Directors cannot receive HR Management access' } });
   const user = await User.create({
     ...userFields,
     passwordHash: await hashPassword(req.body.password),
@@ -310,6 +329,8 @@ export async function getUser(req, res) {
 
 export async function updateUser(req, res) {
   const update = allowedUserUpdate(stripPassword(req.body));
+  if (update.modulePermissions === null) return res.status(400).json({ error: { message: 'Invalid module permissions' } });
+  if (update.workProfile === null) return res.status(400).json({ error: { message: 'Invalid work profile' } });
   const currentUser = await User.findById(req.params.id);
 
   if (!currentUser) {
@@ -317,60 +338,18 @@ export async function updateUser(req, res) {
   }
 
   const actorIsSuperadmin = userRoles(req.user).includes(SUPERADMIN_ROLE);
-  if (!adminCanManage(req.user, currentUser) || (!actorIsSuperadmin && (currentUser.role === SUPERADMIN_ROLE || update.role === SUPERADMIN_ROLE))) {
+  if (!adminCanManage(req.user, currentUser) || (!actorIsSuperadmin && currentUser.role === SUPERADMIN_ROLE)) {
     return res.status(403).json({ error: { message: 'Only Superadmin can manage the Superadmin account' } });
   }
 
-  if (update.role === 'admin' && currentUser.role !== 'admin') {
-    return res.status(400).json({ error: { message: 'Assign Admin through access types' } });
-  }
-
-  if (update.additionalRoles !== undefined) {
-    update.additionalRoles = cleanAdditionalRoles(update.additionalRoles, update.role || currentUser.role);
-  }
-
-  if (update.accessTypes !== undefined) {
-    const accessTypes = cleanAccessTypes(update.accessTypes);
-    if (accessTypes.includes(SUPERADMIN_ROLE)) return res.status(403).json({ error: { message: 'Superadmin can only be created during initial setup' } });
-    const businessTypes = accessTypes.filter((type) => TEAM_USER_ROLES.includes(type));
-    const assignableTypes = accessTypes.filter((type) => ASSIGNABLE_ACCESS_TYPES.includes(type));
-    if (TEAM_USER_ROLES.includes(currentUser.role) && !businessTypes.length) {
-      return res.status(400).json({ error: { message: 'Select at least one business access type' } });
-    }
-    if (businessTypes.length) {
-      if (TEAM_USER_ROLES.includes(currentUser.role)) {
-        update.role = businessTypes[0];
-        update.additionalRoles = assignableTypes.filter((type) => type !== update.role);
-      } else {
-        update.additionalRoles = assignableTypes.filter((type) => type !== currentUser.role);
-      }
-    }
-    update.accessTypes = accessTypes.filter((type) => !SYSTEM_ACCESS_TYPES.includes(type));
-  }
-
   const nextUser = { ...currentUser, ...update };
-  if ((hasAdminAccess(currentUser) || hasAdminAccess(nextUser)) && !actorIsSuperadmin) {
-    return res.status(403).json({ error: { message: 'Only Superadmin can assign or manage Admin access' } });
-  }
-  if (!hasAdminAccess(currentUser)) {
-    const adminError = await adminAccessLimitError(nextUser, currentUser._id);
-    if (adminError) return res.status(400).json({ error: { message: adminError } });
-  }
+  update.modulePermissions = employeeModulePermissions(requiredModulePermissions(update.modulePermissions), nextUser.workProfile);
+  if (nextUser.workProfile === 'director' && nextUser.modulePermissions?.some((permission) => permission.module === 'hr' && permission.access !== 'none')) return res.status(400).json({ error: { message: 'Directors cannot receive HR Management access' } });
 
   if (update.phone !== undefined && !String(update.phone).trim()) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
 
-  if (update.role && update.role !== currentUser.role) {
-    const roleError = await roleLimitError(update.role, currentUser._id);
-    if (roleError) {
-      return res.status(400).json({ error: { message: roleError } });
-    }
-
-    if (currentUser.role === SUPERADMIN_ROLE && update.role !== currentUser.role) {
-      return res.status(400).json({ error: { message: 'Superadmin role cannot be changed' } });
-    }
-  }
 
   if (req.body.password) {
     const passwordError = passwordPolicyError(req.body.password);
@@ -385,7 +364,7 @@ export async function updateUser(req, res) {
     update.loginLockedAt = null;
   }
 
-  const securityChanged = Boolean(req.body.password) || ['status', 'role', 'additionalRoles', 'accessTypes'].some((field) => update[field] !== undefined && JSON.stringify(update[field]) !== JSON.stringify(currentUser[field]));
+  const securityChanged = Boolean(req.body.password) || ['status', 'workProfile', 'modulePermissions'].some((field) => update[field] !== undefined && JSON.stringify(update[field]) !== JSON.stringify(currentUser[field]));
 
   const user = await User.findByIdAndUpdate(req.params.id, update, {
     new: true,

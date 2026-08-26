@@ -8,10 +8,10 @@ import { hrDashboard } from './controllers/dashboard.controller.js';
 import { createAdvance, createPayrollRun, createSalaryStructure, decideAdvance, downloadBankFile, downloadPayslip, getPayrollRun, listAdvances, listMyAdvances, listPayrollRuns, listSalaryStructures, previewPayroll, previewSettlement, processPayrollRun, requestAdvance, updateSalaryStructure } from './controllers/payroll.controller.js';
 import { createDepartment, createDesignation, createEmployee, deleteDepartment, deleteDesignation, deleteEmployee, downloadEmployeeIdCard, getEmployee, getMyEmployee, listDepartments, listDesignations, listEmployees, updateDepartment, updateDesignation, updateEmployee } from './controllers/employee.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeHrModule } from '../auth/middleware/auth.middleware.js';
+import { authenticate, authorizeAppModule, authorizeHrModule } from '../auth/middleware/auth.middleware.js';
 
 export const hrRouter = Router();
-hrRouter.use(asyncHandler(authenticate));
+hrRouter.use(asyncHandler(authenticate), authorizeAppModule('hr'));
 hrRouter.get('/dashboard', authorizeHrModule('employees', 'manage'), asyncHandler(hrDashboard));
 
 for (const [path, list, create, update, remove] of [['/departments', listDepartments, createDepartment, updateDepartment, deleteDepartment], ['/designations', listDesignations, createDesignation, updateDesignation, deleteDesignation]]) {

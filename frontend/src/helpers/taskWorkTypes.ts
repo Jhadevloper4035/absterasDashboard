@@ -1,9 +1,5 @@
 export const defaultTaskWorkTypes: Record<string, string[]> = {
-  operations: ['Coating', 'Procurement', 'Laser Cut'],
-  designers: ['Drawing', '3D Design', 'Revision'],
-  sales: ['Follow Up', 'Meeting', 'Quotation'],
-  admin: ['Documentation', 'Approval', 'Coordination'],
-  accounts: ['Payment Reminder', 'Salary Slip', 'Ledger Update'],
+  general: ['Coating', 'Procurement', 'Laser Cut', 'Drawing', '3D Design', 'Revision', 'Follow Up', 'Meeting', 'Quotation', 'Documentation', 'Approval', 'Coordination', 'Payment Reminder', 'Salary Slip', 'Ledger Update'],
 }
 
 export const taskWorkTypeRoles = Object.keys(defaultTaskWorkTypes)

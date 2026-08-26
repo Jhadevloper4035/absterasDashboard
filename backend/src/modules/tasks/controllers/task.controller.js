@@ -1,21 +1,19 @@
 import { Task, TASK_PRIORITIES, TASK_STATUSES } from '../models/task.model.js';
-import { DEFAULT_TASK_WORK_TYPES, TASK_WORK_TYPE_ROLES, TaskWorkType, normalizeTaskWorkType } from '../models/task-work-type.model.js';
+import { DEFAULT_TASK_WORK_TYPES, TaskWorkType, normalizeTaskWorkType } from '../models/task-work-type.model.js';
 import { User } from '../../../models/user.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
-import { userRoles } from '../../auth/middleware/auth.middleware.js';
+import { appAccessLevel } from '../../auth/middleware/auth.middleware.js';
 import { cachedJson, invalidateCache } from '../../../services/redis-cache.service.js';
 
-const ADMIN_ROLES = ['superadmin', 'admin'];
-const TASK_ASSIGNEE_ROLES = ['sales', 'operations', 'accounts', 'designers'];
 
 function canAssignTasks(user) {
-  return userRoles(user).some((role) => TASK_ASSIGNEE_ROLES.includes(role));
+  return appAccessLevel(user, 'tasks') === 2;
 }
 
 function canManageTaskWorkTypes(user) {
-  return userRoles(user).some((role) => ADMIN_ROLES.includes(role));
+  return appAccessLevel(user, 'tasks') === 2;
 }
 
 function taskQueryFor(user, extra = {}) {
@@ -83,7 +81,7 @@ async function taskData(task) {
 }
 
 async function findAssignee(id) {
-  return User.findOne({ _id: id, status: 'active', $or: [{ role: { $in: TASK_ASSIGNEE_ROLES } }, { additionalRoles: { $in: TASK_ASSIGNEE_ROLES } }] });
+  return User.findOne({ _id: id, status: 'active', modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } } });
 }
 
 function notificationMetadata(type, taskId, actor) {
@@ -117,7 +115,7 @@ export async function listTaskAssignees(req, res) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const users = await User.find({ status: 'active', $or: [{ role: { $in: TASK_ASSIGNEE_ROLES } }, { additionalRoles: { $in: TASK_ASSIGNEE_ROLES } }] }).select('name email role additionalRoles status').sort({ name: 1 }).limit(1000);
+  const users = await User.find({ status: 'active', modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } } }).select('name email status').sort({ name: 1 }).limit(1000);
   return res.json({ data: users });
 }
 
@@ -127,11 +125,12 @@ export async function listTaskWorkTypes(req, res) {
 
   customWorkTypes.forEach((item) => {
     const normalizedName = item.normalizedName || item.name.toLowerCase();
+    const group = 'general';
     if (item.deleted) {
-      workTypes[item.role] = (workTypes[item.role] || []).filter((name) => name.toLowerCase() !== normalizedName);
+      workTypes[group] = (workTypes[group] || []).filter((name) => name.toLowerCase() !== normalizedName);
       return;
     }
-    workTypes[item.role] = [...new Set([...(workTypes[item.role] || []), item.name])].sort();
+    workTypes[group] = [...new Set([...(workTypes[group] || []), item.name])].sort();
   });
 
   return res.json({ data: workTypes });
@@ -142,12 +141,9 @@ export async function createTaskWorkType(req, res) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const role = String(req.body.role || '').trim();
+  const role = 'general';
   const name = normalizeTaskWorkType(req.body.name);
 
-  if (!TASK_WORK_TYPE_ROLES.includes(role)) {
-    return res.status(400).json({ error: { message: 'Select a valid role' } });
-  }
   if (!name) {
     return res.status(400).json({ error: { message: 'Work type name is required' } });
   }
@@ -170,12 +166,9 @@ export async function deleteTaskWorkType(req, res) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const role = String(req.params.role || '').trim();
+  const role = 'general';
   const name = normalizeTaskWorkType(req.params.name);
 
-  if (!TASK_WORK_TYPE_ROLES.includes(role)) {
-    return res.status(400).json({ error: { message: 'Select a valid role' } });
-  }
   if (!name) {
     return res.status(400).json({ error: { message: 'Work type name is required' } });
   }
@@ -201,7 +194,7 @@ export async function listTasks(req, res) {
     extra.dueDate = { $lt: today };
   }
   if (req.query.group) {
-    const users = await User.find({ status: 'active', $or: [{ role: req.query.group }, { additionalRoles: req.query.group }] }).select('_id').limit(1000);
+    const users = await User.find({ status: 'active', modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } } }).select('_id').limit(1000);
     extra.assignee = { $in: users.map((user) => user._id) };
   }
   if (req.query.assignee) extra.assignee = req.query.assignee;
@@ -258,7 +251,7 @@ export async function createTask(req, res) {
 
   const assignee = await findAssignee(req.body.assignee);
   if (!assignee) {
-    return res.status(400).json({ error: { message: 'Assign task to an active sales, operations, accounts, or designers user' } });
+    return res.status(400).json({ error: { message: 'Assign task to an active user with Task Management access' } });
   }
 
   const task = new Task({ createdBy: req.user._id, assignee: assignee._id });
@@ -289,6 +282,9 @@ export async function updateTask(req, res) {
   }
 
   if (req.body.assignee !== undefined) {
+    if (String(task.createdBy) !== String(req.user._id)) {
+      return res.status(403).json({ error: { message: 'Only the task creator can reassign it' } });
+    }
     const assignee = await findAssignee(req.body.assignee);
     if (!assignee) {
       return res.status(400).json({ error: { message: 'Assign task to an active sales, operations, accounts, or designers user' } });

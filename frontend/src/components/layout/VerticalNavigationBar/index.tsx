@@ -12,13 +12,20 @@ const VerticalNavigationBar = () => {
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const [hrModules, setHrModules] = useState<string[]>([])
+  const [inventoryModules, setInventoryModules] = useState<string[]>([])
   useEffect(() => {
     if (!token) return setHrModules([])
     apiFetch<{ data: { module: string; access: string }[] }>('/hr/permissions/me', { token })
       .then((response) => setHrModules(response.data.filter((item) => item.access !== 'none').map((item) => item.module)))
       .catch(() => setHrModules([]))
   }, [token])
-  const menuItems = getMenuItems([user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].filter(Boolean) as UserRole[], hrModules)
+  useEffect(() => {
+    if (!token) return setInventoryModules([])
+    apiFetch<{ data: { module: string; access: string }[] }>('/inventory/permissions/me', { token })
+      .then((response) => setInventoryModules(response.data.filter((item) => item.access !== 'none').map((item) => item.module)))
+      .catch(() => setInventoryModules([]))
+  }, [token])
+  const menuItems = getMenuItems([user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].filter(Boolean) as UserRole[], hrModules, inventoryModules, user?.modulePermissions || [], user?.workProfile)
 
   return (
     <div className="main-nav" id="leftside-menu-container">

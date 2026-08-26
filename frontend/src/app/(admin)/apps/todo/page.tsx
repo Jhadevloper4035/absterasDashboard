@@ -635,13 +635,16 @@ const TODO = () => {
                 visibleTodos.map((todo) => (
                   <tr key={todo._id}>
                     <td className="text-center">
-                      <Form.Check
-                        type="checkbox"
-                        checked={todo.status === 'Completed' || todo.status === 'Done'}
-                        disabled={!isTodoPage && todo.status === 'Done'}
-                        aria-label={`Mark ${todo.title} complete`}
-                        onChange={(event) => updateStatus(todo, event.target.checked ? 'Completed' : 'Pending')}
-                      />
+                      {isTodoPage ? (
+                        <Form.Check
+                          type="checkbox"
+                          checked={todo.status === 'Completed'}
+                          aria-label={`Mark ${todo.title} complete`}
+                          onChange={(event) => updateStatus(todo, event.target.checked ? 'Completed' : 'Pending')}
+                        />
+                      ) : (
+                        <Form.Check type="checkbox" checked={todo.status === 'Done'} readOnly tabIndex={-1} aria-label={`${todo.title} is ${todo.status === 'Done' ? 'complete' : 'not complete'}`} />
+                      )}
                     </td>
                     {!isTodoPage && (
                       <td>
@@ -654,7 +657,7 @@ const TODO = () => {
                     </td>
                     {!isTodoPage && <td>{todo.projectEpic || '-'}</td>}
                     <td>
-                      {canAssign && !isTodoPage && todo.status !== 'Done' ? (
+                      {canAssign && !isTodoPage && todo.status !== 'Done' && personId(todo.createdBy) === user?._id ? (
                         <Form.Select className="task-table-select" size="sm" value={personId(todo.assignee) || ''} onChange={(event) => reassignTask(todo, event.target.value)}>
                           {users.map((person) => (
                             <option key={person._id} value={person._id}>
@@ -675,7 +678,7 @@ const TODO = () => {
                     <td>
                       {!isTodoPage && todo.status !== 'Done' ? (
                         <Form.Select className="task-table-select" size="sm" value={todo.status} onChange={(event) => updateStatus(todo, event.target.value as TaskStatus)}>
-                          {taskStatuses.map((status) => (
+                          {taskStatuses.filter((status) => status !== 'Done').map((status) => (
                             <option key={status}>{status}</option>
                           ))}
                         </Form.Select>

@@ -1,15 +1,9 @@
 import mongoose from 'mongoose';
-import { USER_ROLES } from '../../../models/user.model.js';
-
 export const DEFAULT_TASK_WORK_TYPES = {
-  operations: ['Coating', 'Procurement', 'Laser Cut'],
-  designers: ['Drawing', '3D Design', 'Revision'],
-  sales: ['Follow Up', 'Meeting', 'Quotation'],
-  admin: ['Documentation', 'Approval', 'Coordination'],
-  accounts: ['Payment Reminder', 'Salary Slip', 'Ledger Update'],
+  general: ['Coating', 'Procurement', 'Laser Cut', 'Drawing', '3D Design', 'Revision', 'Follow Up', 'Meeting', 'Quotation', 'Documentation', 'Approval', 'Coordination', 'Payment Reminder', 'Salary Slip', 'Ledger Update'],
 };
 
-export const TASK_WORK_TYPE_ROLES = USER_ROLES.filter((role) => role !== 'superadmin');
+export const TASK_WORK_TYPE_ROLES = ['general'];
 
 export function normalizeTaskWorkType(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');

@@ -3,6 +3,7 @@ import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
+import { BASIC_APP_MODULES, moduleLabel } from '@/helpers/moduleAccess'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import { FormEvent, useEffect, useState } from 'react'
@@ -11,9 +12,8 @@ import ReactSelect from 'react-select'
 import { useNavigate } from 'react-router-dom'
 import Swal from 'sweetalert2'
 
-const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
 const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
-const accessTypes = ['admin', ...teamRoles, 'hr-management', 'employee']
+const accessTypes = ['admin', ...teamRoles]
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 const singleUserRoles = ['superadmin', 'admin'] as const
 const hrModules = ['employees', 'attendance', 'leave', 'payroll', 'expenses', 'reports']
@@ -21,17 +21,7 @@ type HrAccess = 'none' | 'view' | 'manage'
 type HrPermission = { module: string; access: HrAccess }
 const defaultHrPermissions = () => hrModules.map((module) => ({ module, access: 'none' as HrAccess }))
 const hrLabel = (module: string) => module.replace(/\b\w/g, (letter) => letter.toUpperCase())
-const accessLabel = (type: string) => type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 const joinedDate = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)) : '—'
-
-const roleBadge = (role: UserType['role']) => {
-  if (role === 'superadmin') return 'danger'
-  if (role === 'admin') return 'primary'
-  if (role === 'operations') return 'info'
-  if (role === 'accounts') return 'warning'
-  if (role === 'designers') return 'secondary'
-  return 'success'
-}
 
 const statusBadge = (status: UserType['status']) => {
   if (status === 'active') return 'success'
@@ -39,6 +29,12 @@ const statusBadge = (status: UserType['status']) => {
   if (status === 'invited') return 'warning'
   return 'secondary'
 }
+
+const workProfileLabel = (user: UserType) => user.workProfile === 'employee' || (!user.workProfile && user.accessTypes?.includes('employee')) ? 'Employee' : 'Director'
+const sidebarPermissions = (user: UserType) => [
+  ...BASIC_APP_MODULES.map((module) => ({ module, access: 'manage' as const })),
+  ...(user.modulePermissions || []).filter((permission) => !BASIC_APP_MODULES.includes(permission.module as (typeof BASIC_APP_MODULES)[number]) && permission.access !== 'none'),
+]
 
 const emptyEditForm = {
   name: '',
@@ -71,7 +67,7 @@ const UsersPage = () => {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState({ q: '', role: '', status: '' })
+  const [filters, setFilters] = useState({ q: '', status: '' })
   const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
   const isSuperadmin = currentAccessTypes.includes('superadmin')
   const canManageUsers = isSuperadmin || currentAccessTypes.includes('admin')
@@ -79,16 +75,15 @@ const UsersPage = () => {
   useEffect(() => {
     const query = new URLSearchParams({ page: String(page), limit: '25' })
     if (filters.q.trim()) query.set('q', filters.q.trim())
-    if (filters.role) query.set('role', filters.role)
     if (filters.status) query.set('status', filters.status)
 
     if (canManageUsers) fetchUsers(`?${query}`).catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
     else clearUsers()
-  }, [canManageUsers, clearUsers, fetchUsers, filters.q, filters.role, filters.status, page])
+  }, [canManageUsers, clearUsers, fetchUsers, filters.q, filters.status, page])
 
   useEffect(() => {
     setPage(1)
-  }, [filters.q, filters.role, filters.status])
+  }, [filters.q, filters.status])
 
   useEffect(() => {
     if (!editingUser || singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) return
@@ -213,24 +208,18 @@ const UsersPage = () => {
     )
   }
 
-  const accessTypeOptions = [...new Set([...accessTypes, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]), ...editForm.accessTypes])].filter((type) => type !== 'superadmin' && (isSuperadmin || type !== 'admin')).map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }))
+  const accessTypeOptions = [...new Set([...accessTypes, ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]), ...editForm.accessTypes])].filter((type) => type !== 'superadmin' && type !== 'hr-management' && type !== 'employee' && (isSuperadmin || type !== 'admin')).map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }))
 
   return (
     <>
       <PageMetaData title="Users" />
       <Card>
         <CardBody>
-          <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h4 className="card-title mb-1">User Profiles & Access</h4><p className="text-muted mb-0">All account details and assigned access types in one place.</p></div><Badge bg="light" text="dark">{meta.total} users</Badge></div>
+          <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h4 className="card-title mb-1">User Profiles & Access</h4><p className="text-muted mb-0">System role, work profile, and sidebar access in one place.</p></div><Badge bg="light" text="dark">{meta.total} users</Badge></div>
           {(error || storeError) && <Alert variant="danger">{error || storeError}</Alert>}
           {message && <Alert variant="success">{message}</Alert>}
           <div className="d-flex gap-2 flex-wrap mb-3">
             <Form.Control style={{ flex: '1 1 260px' }} placeholder="Search name, email, mobile" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} />
-            <Form.Select style={{ flex: '0 1 180px' }} value={filters.role} onChange={(event) => setFilters({ ...filters, role: event.target.value })}>
-              <option value="">All roles</option>
-              {roles.map((role) => (
-                <option key={role}>{role}</option>
-              ))}
-            </Form.Select>
             <Form.Select style={{ flex: '0 1 180px' }} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
               <option value="">All status</option>
               {statuses.map((status) => (
@@ -239,11 +228,12 @@ const UsersPage = () => {
             </Form.Select>
           </div>
           <div className="table-responsive">
-            <Table className="align-middle mb-0" style={{ minWidth: 960 }}>
+            <Table className="align-middle mb-0" style={{ minWidth: 1200 }}>
               <thead>
                 <tr>
                   <th style={{ minWidth: 260 }}>User</th>
-                  <th style={{ minWidth: 220 }}>Access types</th>
+                  <th style={{ minWidth: 130 }}>Work profile</th>
+                  <th style={{ minWidth: 260 }}>Sidebar access</th>
                   <th style={{ minWidth: 150 }}>Account</th>
                   <th style={{ minWidth: 150 }}>Activity</th>
                   <th style={{ minWidth: 280 }} className="text-end">
@@ -254,7 +244,7 @@ const UsersPage = () => {
               <tbody>
                 {loading && !users.length && (
                   <tr>
-                    <td colSpan={5} className="text-center py-5">
+                    <td colSpan={6} className="text-center py-5">
                       <Spinner className="spinner-border-sm me-2" tag="span" />
                       <span className="text-muted">Loading data...</span>
                     </td>
@@ -267,8 +257,15 @@ const UsersPage = () => {
                       <div className="fs-13">{item.email}</div>
                       <div className="text-muted fs-13">{item.phone || 'Mobile not added'}</div>
                     </td>
+                    <td><Badge bg={workProfileLabel(item) === 'Employee' ? 'success' : 'secondary'}>{workProfileLabel(item)}</Badge></td>
                     <td>
-                      <div className="d-flex flex-wrap gap-1">{[...new Set([item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])])].map((type) => <Badge bg={roleBadge(type as UserType['role'])} key={type}>{accessLabel(type)}</Badge>)}</div>
+                      {[item.role, ...(item.additionalRoles || [])].some((role) => role === 'superadmin' || role === 'admin') ? (
+                        <Badge bg="primary">{workProfileLabel(item) === 'Director' ? 'All except HR Management' : 'All sidebar tabs'}</Badge>
+                      ) : (
+                        <div className="d-flex flex-wrap gap-1">
+                          {sidebarPermissions(item).map((permission) => <Badge bg={permission.access === 'manage' ? 'primary' : 'light'} text={permission.access === 'manage' ? undefined : 'dark'} key={permission.module}>{moduleLabel(permission.module)} · {permission.access}</Badge>)}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <Badge bg={statusBadge(item.status)}>{item.status}</Badge>
@@ -291,7 +288,7 @@ const UsersPage = () => {
                 ))}
                 {!users.length && !loading && (
                   <tr>
-                    <td colSpan={5} className="text-center text-muted py-4">
+                    <td colSpan={6} className="text-center text-muted py-4">
                       No users found
                     </td>
                   </tr>
@@ -328,7 +325,7 @@ const UsersPage = () => {
               <Col xl={6}><Form.Group><Form.Label>Email</Form.Label><Form.Control required type="email" value={editForm.email} onChange={(event) => setEditForm({ ...editForm, email: event.target.value })} placeholder="name@company.com" /></Form.Group></Col>
               <Col xl={6}><Form.Group><Form.Label>Mobile Number</Form.Label><Form.Control required type="tel" inputMode="tel" value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} placeholder="10-digit mobile number" /></Form.Group></Col>
               <Col xl={6}><Form.Group><Form.Label>New Password <span className="text-muted">(optional)</span></Form.Label><InputGroup><Form.Control type={visiblePassword ? 'text' : 'password'} minLength={8} value={editForm.password} onChange={(event) => setEditForm({ ...editForm, password: event.target.value })} placeholder="Leave blank to keep current password" /><Button variant="outline-secondary" type="button" aria-label={visiblePassword ? 'Hide password' : 'Show password'} onClick={() => setVisiblePassword(!visiblePassword)}><IconifyIcon icon={visiblePassword ? 'bx:hide' : 'bx:show'} /></Button></InputGroup><Form.Text>Letters and numbers required.</Form.Text></Form.Group></Col>
-              <Col xs={12}><Form.Group><Form.Label>Access types</Form.Label><ReactSelect isMulti classNamePrefix="react-select" options={accessTypeOptions} placeholder="Select access types" value={accessTypeOptions.filter((option) => editForm.accessTypes.includes(option.value))} onChange={(options) => setEditForm({ ...editForm, accessTypes: options.map((option) => option.value) })} /><Form.Text>Choose HR Management, Employee, Sales, Operations, Accounts, or Designers.</Form.Text></Form.Group></Col>
+              <Col xs={12}><Form.Group><Form.Label>System roles</Form.Label><ReactSelect isMulti classNamePrefix="react-select" options={accessTypeOptions} placeholder="Select system roles" value={accessTypeOptions.filter((option) => editForm.accessTypes.includes(option.value))} onChange={(options) => setEditForm({ ...editForm, accessTypes: options.map((option) => option.value) })} /><Form.Text>Choose Sales, Operations, Accounts, or Designers.</Form.Text></Form.Group></Col>
               <Col xl={6}><Form.Group><Form.Label>Status</Form.Label><Form.Select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value as UserType['status'] })}>{statuses.map((status) => <option key={status} value={status}>{status}</option>)}</Form.Select></Form.Group></Col>
               <Col xl={6}><Form.Group><Form.Label>Timezone</Form.Label><Form.Control value={editForm.timezone} onChange={(event) => setEditForm({ ...editForm, timezone: event.target.value })} /></Form.Group></Col>
             </Row>

@@ -22,6 +22,7 @@ type Task = {
   title?: string
   description?: string
   assignee?: string | Pick<UserType, '_id' | 'role'>
+  createdBy?: string | Pick<UserType, '_id'>
   priority?: string
   status?: string
   dueDate?: string
@@ -57,6 +58,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   const [users, setUsers] = useState<UserType[]>([])
   const [workTypesByRole, setWorkTypesByRole] = useState(defaultTaskWorkTypes)
   const [form, setForm] = useState(emptyForm)
+  const [taskCreatorId, setTaskCreatorId] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pendingUploads, setPendingUploads] = useState(0)
@@ -65,11 +67,10 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   const [uploadFailed, setUploadFailed] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const canAssign = ['sales', 'operations', 'accounts', 'designers'].includes(user?.role || '')
+  const canAssign = user?.modulePermissions?.some((permission) => permission.module === 'tasks' && permission.access === 'manage') || ['superadmin', 'admin'].includes(user?.role || '')
+  const canManageAssignee = canAssign && (!taskId || taskCreatorId === String(user?._id || ''))
   const uploading = pendingUploads > 0
-  const selectedAssignee = users.find((person) => person._id === form.assignee)
-  const selectedRole = selectedAssignee?.role || user?.role || ''
-  const workTypes = [...new Set([...(workTypesByRole[selectedRole] || ['General']), form.projectEpic].filter(Boolean))]
+  const workTypes = [...new Set([...(workTypesByRole.general || ['General']), form.projectEpic].filter(Boolean))]
 
   const updatePendingUploads = (change: number) => {
     pendingUploadsRef.current = Math.max(0, pendingUploadsRef.current + change)
@@ -78,6 +79,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
 
   useEffect(() => {
     if (!token) return
+    setTaskCreatorId('')
     setLoading(true)
     Promise.all([
       canAssign ? apiFetch<{ data: UserType[] }>('/tasks/assignees', { token }) : Promise.resolve({ data: [] }),
@@ -89,6 +91,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
         setWorkTypesByRole(mergeTaskWorkTypes(workTypeRes.data, false))
         if (taskRes?.data) {
           const task = taskRes.data
+          setTaskCreatorId(typeof task.createdBy === 'object' ? task.createdBy._id : task.createdBy || '')
           setForm({
             title: task.title || '',
             description: task.description || '',
@@ -138,7 +141,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
       setError('Attachment upload failed. Please upload the file again before saving the task.')
       return
     }
-    if (canAssign && !form.assignee) {
+    if (canManageAssignee && !form.assignee) {
       setError('Please select an assignee')
       return
     }
@@ -150,7 +153,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
       const response = await apiFetch<{ data: Task }>(taskId ? `/tasks/${taskId}` : '/tasks', {
         method: taskId ? 'PATCH' : 'POST',
         token,
-        body: JSON.stringify(canAssign ? { ...taskFields, assignee } : taskFields),
+        body: JSON.stringify(canManageAssignee ? { ...taskFields, assignee } : taskFields),
       })
       toast.success(taskId ? 'Task updated successfully' : 'Task assigned successfully')
       if (taskId) {
@@ -201,7 +204,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                   placeholder="e.g. Prepare coating checklist"
                 />
               </Form.Group>
-              {canAssign && (
+              {canManageAssignee && (
                 <Form.Group as={Col} lg={6}>
                   <Form.Label className="fs-14 mb-1">Assign to</Form.Label>
                   <ReactSelect<AssigneeOption>

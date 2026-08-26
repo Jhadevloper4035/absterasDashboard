@@ -1,11 +1,9 @@
 import { lazy } from 'react'
 import { Navigate, type RouteProps } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
 import type { UserType } from '@/types/auth'
 
 // Dashboard Routes
 const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'))
-const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'))
 const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
 const EditUser = lazy(() => import('@/app/(admin)/users/[userId]/edit/page'))
@@ -60,6 +58,13 @@ const EcommerceSellers = lazy(() => import('@/app/(admin)/ecommerce/sellers/page
 const EcommerceOrders = lazy(() => import('@/app/(admin)/ecommerce/orders/page'))
 const EcommerceOrderDetails = lazy(() => import('@/app/(admin)/ecommerce/orders/[orderId]/page'))
 const EcommerceInventory = lazy(() => import('@/app/(admin)/ecommerce/inventory/page'))
+const Inventory = lazy(() => import('@/app/(admin)/inventory/page'))
+const AddInventoryItem = lazy(() => import('@/app/(admin)/inventory/add/page'))
+const InventorySuppliers = lazy(() => import('@/app/(admin)/inventory/suppliers/page'))
+const InventoryMaterialDetail = lazy(() => import('@/app/(admin)/inventory/[itemId]/page'))
+const InventoryPurchases = lazy(() => import('@/app/(admin)/inventory/purchases/page'))
+const Returns = lazy(() => import('@/app/(admin)/returns/page'))
+const CreateReturn = lazy(() => import('@/app/(admin)/returns/create/page'))
 const Chat = lazy(() => import('@/app/(admin)/apps/chat/page'))
 const Email = lazy(() => import('@/app/(admin)/apps/email/page'))
 const Schedule = lazy(() => import('@/app/(admin)/calendar/schedule/page'))
@@ -173,12 +178,10 @@ const ResetPassword2 = lazy(() => import('@/app/(other)/auth/reset-pass-2/page')
 const LockScreen = lazy(() => import('@/app/(other)/auth/lock-screen/page'))
 const LockScreen2 = lazy(() => import('@/app/(other)/auth/lock-screen-2/page'))
 
-const dashboardPath = (role?: string) =>
-  ['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics'
+const dashboardPath = () => '/dashboard/analytics'
 
 const DashboardRedirect = () => {
-  const role = useAuthStore((state) => state.user?.role)
-  return <Navigate to={dashboardPath(role)} replace />
+  return <Navigate to={dashboardPath()} replace />
 }
 
 export type RoutesProps = {
@@ -191,8 +194,9 @@ export type RoutesProps = {
 
 const adminRoles: UserType['role'][] = ['superadmin', 'admin']
 const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
-const clientRoles: UserType['role'][] = [...adminRoles, 'operations']
-const hrAccessRoles = [...adminRoles, 'hr-management']
+const allRoles: UserType['role'][] = [...adminRoles, ...teamRoles]
+const leadRoles: UserType['role'][] = [...adminRoles, 'sales']
+const hrAccessRoles = allRoles
 const superadminRoles: UserType['role'][] = ['superadmin']
 const superadminOnly = (routes: RoutesProps[]) => routes.map((route) => ({ ...route, roles: route.roles ?? superadminRoles }))
 
@@ -219,7 +223,7 @@ const generalRoutes: RoutesProps[] = [
     path: '/dashboard/analytics',
     name: 'Admin Dashboard',
     element: <Analytics />,
-    roles: ['superadmin', 'admin'],
+    roles: allRoles,
   },
   {
     path: '/dashboard/finance',
@@ -229,9 +233,8 @@ const generalRoutes: RoutesProps[] = [
   },
   {
     path: '/dashboard/sales',
-    name: 'Team Profile Dashboard',
-    element: <Sales />,
-    roles: teamRoles,
+    name: 'Dashboard',
+    element: <Navigate to="/dashboard/analytics" replace />,
   },
   {
     path: '/users',
@@ -290,19 +293,19 @@ const generalRoutes: RoutesProps[] = [
   { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'] },
   { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles },
   { path: '/hr/reports', name: 'HR reports', element: <Navigate to="/hr" replace />, roles: hrAccessRoles },
-  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: clientRoles },
-  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: clientRoles },
-  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: clientRoles },
-  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: clientRoles },
-  { path: '/challans', name: 'Delivery Challans', element: <Challans />, roles: clientRoles },
-  { path: '/challans/create', name: 'Create Delivery Challan', element: <CreateChallan />, roles: clientRoles },
-  { path: '/challans/:challanId/edit', name: 'Update Delivery Challan', element: <CreateChallan />, roles: clientRoles },
-  { path: '/challans/:challanId', name: 'Delivery Challan', element: <ChallanDetail />, roles: clientRoles },
+  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: allRoles },
+  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: allRoles },
+  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: allRoles },
+  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: allRoles },
+  { path: '/challans', name: 'Delivery Challans', element: <Challans />, roles: allRoles },
+  { path: '/challans/create', name: 'Create Delivery Challan', element: <CreateChallan />, roles: allRoles },
+  { path: '/challans/:challanId/edit', name: 'Update Delivery Challan', element: <CreateChallan />, roles: allRoles },
+  { path: '/challans/:challanId', name: 'Delivery Challan', element: <ChallanDetail />, roles: allRoles },
   {
     path: '/leads',
     name: 'Leads',
     element: <Leads />,
-    roles: adminRoles,
+    roles: leadRoles,
   },
   {
     path: '/leads/all-leads',
@@ -338,22 +341,25 @@ const generalRoutes: RoutesProps[] = [
     path: '/leads/scheduled',
     name: 'Meeting Scheduled',
     element: <ScheduledLeads />,
+    roles: leadRoles,
   },
   {
     path: '/leads/closed',
     name: 'Closed Leads',
     element: <ClosedLeads />,
+    roles: leadRoles,
   },
   {
     path: '/leads/:leadId',
     name: 'Lead Detail',
     element: <LeadDetail />,
+    roles: leadRoles,
   },
   {
     path: '/upcoming/events-management',
     name: 'Events Management',
     element: <ComingSoon />,
-    roles: ['superadmin', 'admin'],
+    roles: allRoles,
   },
   {
     path: '/upcoming/hr-management',
@@ -388,6 +394,14 @@ const generalRoutes: RoutesProps[] = [
 ]
 
 const appsRoutes: RoutesProps[] = [
+  { name: 'Inventory Management', path: '/inventory', element: <Inventory /> },
+  { name: 'Add Material', path: '/inventory/add', element: <AddInventoryItem /> },
+  { name: 'Update Material', path: '/inventory/:itemId/edit', element: <AddInventoryItem /> },
+  { name: 'Material Details', path: '/inventory/:itemId', element: <InventoryMaterialDetail /> },
+  { name: 'Purchase History', path: '/inventory/purchases', element: <InventoryPurchases /> },
+  { name: 'Suppliers', path: '/inventory/suppliers', element: <InventorySuppliers /> },
+  { name: 'Return Management', path: '/returns', element: <Returns /> },
+  { name: 'Record Return', path: '/returns/create', element: <CreateReturn /> },
   {
     name: 'Products',
     path: '/ecommerce/products',
@@ -524,7 +538,7 @@ const appsRoutes: RoutesProps[] = [
     name: 'Todo',
     path: '/apps/todo',
     element: <Todo />,
-    roles: adminRoles,
+    roles: allRoles,
   },
   {
     name: 'Notifications',
@@ -554,13 +568,13 @@ const appsRoutes: RoutesProps[] = [
     name: 'Invoices List',
     path: '/invoices',
     element: <Invoices />,
-    roles: clientRoles,
+    roles: allRoles,
   },
   {
     name: 'Invoices Details',
     path: '/invoices/:invoiceId',
     element: <InvoiceDetails />,
-    roles: clientRoles,
+    roles: allRoles,
   },
 ]
 

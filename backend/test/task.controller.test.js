@@ -324,6 +324,17 @@ test('team users can only list and update tasks they created or are assigned', a
   assert.ok(task.completedAt instanceof Date);
 });
 
+test('only the task creator can reassign it', async () => {
+  const task = { _id: 'task-1', status: 'To Do', createdBy: 'sales-2', assignee: 'sales-1' };
+  Task.findOne = async () => task;
+
+  const response = res();
+  await updateTask({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { assignee: 'sales-3' } }, response);
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only the task creator can reassign it');
+});
+
 test('task assignment pages always filter by the signed-in user', async () => {
   let query;
   Task.find = (filter) => {

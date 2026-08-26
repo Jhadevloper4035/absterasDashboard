@@ -2,6 +2,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { env } from '../../../config/env.js';
 import { User } from '../../../models/user.model.js';
 import { HrPermission } from '../../hr/models/permission.model.js';
+import { InventoryPermission } from '../../inventory/models/permission.model.js';
+import { APP_ACCESS_LEVELS, APP_MODULES } from '../../../config/app-modules.js';
 import { isAccessTokenBlocked } from '../services/auth-session.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
 
@@ -44,23 +46,61 @@ export function authorizeRoles(...roles) {
   };
 }
 
+export const appAccessLevel = (user, module) => {
+  if (userRoles(user).some((role) => ['superadmin', 'admin'].includes(role))) return 2;
+  if (['todo', 'notifications'].includes(module)) return 2;
+  const access = (user.modulePermissions || []).find((permission) => permission.module === module)?.access || 'none';
+  return { none: 0, view: 1, manage: 2 }[access] || 0;
+};
+
+export function authorizeAppModule(module, minAccess = 'view') {
+  const required = { none: 0, view: 1, manage: 2 }[minAccess];
+  if (!APP_MODULES.includes(module) || !APP_ACCESS_LEVELS.includes(minAccess)) throw new Error('Invalid application module permission');
+
+  return (req, res, next) => {
+    if (!req.user) return next(authError(401, 'Authentication required'));
+    if (module === 'hr' && req.user.workProfile === 'director') return next(authError(403, 'Forbidden'));
+    if (appAccessLevel(req.user, module) < required) return next(authError(403, 'Forbidden'));
+    return next();
+  };
+}
+
 export function authorizeHrModule(module, minAccess = 'view') {
   const required = minAccess === 'manage' ? 2 : 1;
   const levels = { none: 0, view: 1, manage: 2 };
   return async (req, res, next) => {
     if (!req.user) return next(authError(401, 'Authentication required'));
+    if (appAccessLevel(req.user, 'hr') < (req.method === 'GET' ? required : 2)) return next(authError(403, 'Forbidden'));
     const accessTypes = userRoles(req.user);
-    if (accessTypes.some((role) => ['superadmin', 'admin', 'hr-management'].includes(role))) {
+    if (appAccessLevel(req.user, 'hr') === 2 || accessTypes.some((role) => ['superadmin', 'admin', 'hr-management'].includes(role))) {
       req.hrAccess = 'manage';
       return next();
     }
-    if (['attendance', 'expenses', 'leave', 'payroll', 'employee-overview', 'employees'].includes(module) && minAccess === 'view' && accessTypes.includes('employee')) {
+    if (['attendance', 'expenses', 'leave', 'payroll', 'employee-overview', 'employees'].includes(module) && minAccess === 'view' && (req.user.workProfile === 'employee' || (!req.user.workProfile && accessTypes.includes('employee')))) {
       req.hrAccess = 'view';
       return next();
     }
     const permission = await HrPermission.findOne({ user: req.user._id, module }).select('access').lean();
     if (!permission || levels[permission.access] < required) return next(authError(403, 'Forbidden'));
     req.hrAccess = permission.access;
+    return next();
+  };
+}
+
+export function authorizeInventoryModule(module, minAccess = 'view') {
+  const required = minAccess === 'manage' ? 2 : 1;
+  const levels = { none: 0, view: 1, manage: 2 };
+  return async (req, res, next) => {
+    if (!req.user) return next(authError(401, 'Authentication required'));
+    const accessLevel = appAccessLevel(req.user, 'inventory');
+    if (accessLevel < (req.method === 'GET' ? required : 2)) return next(authError(403, 'Forbidden'));
+    if (accessLevel >= required) {
+      req.inventoryAccess = accessLevel === 2 ? 'manage' : 'view';
+      return next();
+    }
+    const permission = await InventoryPermission.findOne({ user: req.user._id, module }).select('access').lean();
+    if (!permission || levels[permission.access] < required) return next(authError(403, 'Forbidden'));
+    req.inventoryAccess = permission.access;
     return next();
   };
 }

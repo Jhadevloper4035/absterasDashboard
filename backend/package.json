@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "worker": "node src/worker.js",
     "db:seed": "node src/seed.js",
+    "inventory:seed": "node src/seed.js",
     "hr:migrate-users": "node scripts/migrate-users-to-employees.mjs",
     "hr:seed-employees": "node scripts/seed-dummy-employees.mjs",
     "hr:seed-demo-data": "node scripts/seed-employee-demo-data.mjs",

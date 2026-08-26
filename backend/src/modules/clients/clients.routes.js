@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { createClient, getClient, listClients, updateClient } from './controllers/client.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { authenticate, authorizeRoles } from '../auth/middleware/auth.middleware.js';
+import { authenticate, authorizeAppModule } from '../auth/middleware/auth.middleware.js';
 
 export const clientRouter = Router();
-clientRouter.use(asyncHandler(authenticate), authorizeRoles('superadmin', 'admin', 'operations'));
+clientRouter.use(asyncHandler(authenticate), authorizeAppModule('clients'));
 clientRouter.get('/', asyncHandler(listClients));
-clientRouter.post('/', authorizeRoles('superadmin', 'admin', 'operations'), asyncHandler(createClient));
+clientRouter.post('/', authorizeAppModule('clients', 'manage'), asyncHandler(createClient));
 clientRouter.get('/:id', asyncHandler(getClient));
-clientRouter.patch('/:id', asyncHandler(updateClient));
+clientRouter.patch('/:id', authorizeAppModule('clients', 'manage'), asyncHandler(updateClient));

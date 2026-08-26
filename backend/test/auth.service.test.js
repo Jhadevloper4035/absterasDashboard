@@ -7,7 +7,7 @@ import { RateLimit } from '../src/models/rate-limit.model.js';
 import { User } from '../src/models/user.model.js';
 import { env } from '../src/config/env.js';
 import { cleanIpAddress } from '../src/helpers/request-ip.js';
-import { allowFirstSuperadminOrUserManager, authorizeHrModule, authorizeRoles } from '../src/modules/auth/middleware/auth.middleware.js';
+import { allowFirstSuperadminOrUserManager, authorizeAppModule, authorizeHrModule, authorizeRoles } from '../src/modules/auth/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
 import { login, logout } from '../src/modules/auth/controllers/auth.controller.js';
 import { clearFailedLoginAttempts, recordFailedLoginAttempt, setLoginAttemptStoreForTest } from '../src/modules/auth/services/login-attempt.service.js';
@@ -85,13 +85,33 @@ test('role authorization accepts an assigned additional business role', () => {
 });
 
 test('HR and employee access types grant only their intended HR scope', async () => {
-  const employeeRequest = { user: { accessTypes: ['employee'] } };
+  const employeeRequest = { method: 'GET', user: { accessTypes: ['employee'], modulePermissions: [{ module: 'hr', access: 'view' }] } };
   await authorizeHrModule('expenses', 'view')(employeeRequest, {}, (error) => assert.equal(error, undefined));
   assert.equal(employeeRequest.hrAccess, 'view');
 
-  const hrRequest = { user: { accessTypes: ['hr-management'] } };
+  const hrRequest = { method: 'GET', user: { accessTypes: ['hr-management'], modulePermissions: [{ module: 'hr', access: 'manage' }] } };
   await authorizeHrModule('payroll', 'manage')(hrRequest, {}, (error) => assert.equal(error, undefined));
   assert.equal(hrRequest.hrAccess, 'manage');
+});
+
+test('application access defaults to deny and distinguishes view from manage', () => {
+  let denied;
+  authorizeAppModule('tasks')({ user: { role: 'sales' } }, {}, (error) => { denied = error; });
+  assert.equal(denied.statusCode, 403);
+
+  let viewed;
+  authorizeAppModule('tasks')({ user: { role: 'sales', modulePermissions: [{ module: 'tasks', access: 'view' }] } }, {}, (error) => { viewed = error; });
+  assert.equal(viewed, undefined);
+
+  let mutationDenied;
+  authorizeAppModule('tasks', 'manage')({ user: { role: 'sales', modulePermissions: [{ module: 'tasks', access: 'view' }] } }, {}, (error) => { mutationDenied = error; });
+  assert.equal(mutationDenied.statusCode, 403);
+});
+
+test('directors cannot access HR', () => {
+  let denied;
+  authorizeAppModule('hr')({ user: { role: 'admin', workProfile: 'director' } }, {}, (error) => { denied = error; });
+  assert.equal(denied.statusCode, 403);
 });
 
 test('production setup requires a one-time setup token', async () => {

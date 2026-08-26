@@ -6,7 +6,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
 type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; parentClient?: string | { _id: string } }
-type Line = { description: string; hsnCode: string; quantity: string; unit: string; rate: string }
+type InventoryItem = { _id: string; name: string; sku: string; unit: string; quantityInStock: number }
+type Line = { inventoryItem?: string; description: string; hsnCode: string; quantity: string; unit: string; rate: string }
 type Challan = {
   challanNumber: string
   client: string | { _id: string }
@@ -17,7 +18,7 @@ type Challan = {
   eWayBillNumber?: string
   freightCharge: number
   gstAmount: number
-  lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; rate: number }[]
+  lineItems: { inventoryItem?: string; description: string; hsnCode?: string; quantity: number; unit?: string; rate: number }[]
 }
 const blank = (): Line => ({ description: '', hsnCode: '', quantity: '1', unit: 'NOS', rate: '' })
 
@@ -26,6 +27,7 @@ const ChallanFormPage = () => {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [clients, setClients] = useState<Client[]>([])
+  const [materials, setMaterials] = useState<InventoryItem[]>([])
   const [challanNumber, setChallanNumber] = useState(generatedChallanNumber)
   const [client, setClient] = useState(params.get('client') || '')
   const [site, setSite] = useState(params.get('site') || '')
@@ -42,6 +44,9 @@ const ChallanFormPage = () => {
     apiFetch<{ data: Client[] }>('/clients?limit=100')
       .then(({ data }) => setClients(data))
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load clients'))
+    apiFetch<{ data: InventoryItem[] }>('/inventory/items?limit=100')
+      .then(({ data }) => setMaterials(data))
+      .catch(() => {})
     if (challanId)
       apiFetch<{ data: Challan }>(`/challans/${challanId}`)
         .then(({ data }) => {
@@ -57,7 +62,8 @@ const ChallanFormPage = () => {
             data.lineItems.map((line) => ({
               description: line.description,
               hsnCode: line.hsnCode || '',
-              quantity: String(line.quantity),
+          quantity: String(line.quantity),
+          inventoryItem: line.inventoryItem,
               unit: line.unit || '',
               rate: String(line.rate),
             })),
@@ -73,6 +79,10 @@ const ChallanFormPage = () => {
   const totalAmount = taxableAmount + gstAmount + (Number(freightCharge) || 0)
   const setLine = (index: number, field: keyof Line, value: string) =>
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)))
+  const chooseMaterial = (index: number, id: string) => {
+    const material = materials.find((item) => item._id === id)
+    setLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, inventoryItem: id || undefined, description: material?.name || '', unit: material?.unit || line.unit } : line))
+  }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setSaving(true)
@@ -185,9 +195,7 @@ const ChallanFormPage = () => {
               <tbody>
                 {lines.map((line, index) => (
                   <tr key={index}>
-                    <td>
-                      <Form.Control required value={line.description} onChange={(event) => setLine(index, 'description', event.target.value)} />
-                    </td>
+                    <td><Form.Select required value={line.inventoryItem || ''} onChange={(event) => chooseMaterial(index, event.target.value)}><option value="">Select inventory material</option>{materials.map((item) => <option key={item._id} value={item._id}>{item.name} ({item.sku}) · {item.quantityInStock} {item.unit}</option>)}</Form.Select></td>
                     <td>
                       <Form.Control value={line.hsnCode} onChange={(event) => setLine(index, 'hsnCode', event.target.value)} />
                     </td>
@@ -202,7 +210,7 @@ const ChallanFormPage = () => {
                       />
                     </td>
                     <td>
-                      <Form.Control value={line.unit} onChange={(event) => setLine(index, 'unit', event.target.value)} />
+                      <Form.Control readOnly value={line.unit} />
                     </td>
                     <td>
                       <Form.Control

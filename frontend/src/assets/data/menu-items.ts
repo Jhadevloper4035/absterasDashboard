@@ -1,10 +1,10 @@
 import type { MenuItemType } from '@/types/menu'
 
 const adminRoles = ['superadmin', 'admin']
-const clientRoles = [...adminRoles, 'operations']
 const teamRoles = ['sales', 'operations', 'accounts', 'designers']
 const allRoles = [...adminRoles, ...teamRoles]
-const hrRoles = [...adminRoles, 'hr-management']
+const leadRoles = [...adminRoles, 'sales']
+const hrRoles = allRoles
 
 export const MENU_ITEMS: MenuItemType[] = [
   {
@@ -17,14 +17,6 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:home-duotone',
     label: 'Dashboard',
     url: '/dashboard/analytics',
-    roles: adminRoles,
-  },
-  {
-    key: 'dashboard-sales',
-    icon: 'iconamoon:home-duotone',
-    label: 'Dashboard',
-    url: '/dashboard/sales',
-    roles: teamRoles,
   },
   {
     key: 'crm',
@@ -36,7 +28,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:check-circle-1-duotone',
     label: 'Todo',
     url: '/apps/todo',
-    roles: adminRoles,
+    roles: allRoles,
   },
   {
     key: 'notifications',
@@ -56,6 +48,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'leads',
     icon: 'iconamoon:send-duotone',
     label: 'Lead Management',
+    roles: leadRoles,
     children: [
       {
         key: 'leads-create',
@@ -97,12 +90,14 @@ export const MENU_ITEMS: MenuItemType[] = [
         label: 'Meeting Scheduled',
         url: '/leads/scheduled',
         parentKey: 'leads',
+        roles: leadRoles,
       },
       {
         key: 'leads-closed',
         label: 'Closed Leads',
         url: '/leads/closed',
         parentKey: 'leads',
+        roles: leadRoles,
       },
     ],
   },
@@ -167,14 +162,14 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'events-management',
     icon: 'iconamoon:flag-duotone',
     label: 'Events Management',
-    roles: ['superadmin', 'admin'],
+    roles: allRoles,
     children: [
       {
         key: 'events-management-overview',
         label: 'Coming Soon',
         url: '/upcoming/events-management',
         parentKey: 'events-management',
-        roles: ['superadmin', 'admin'],
+        roles: allRoles,
       },
     ],
   },
@@ -213,94 +208,68 @@ export const MENU_ITEMS: MenuItemType[] = [
     key: 'client-management',
     icon: 'iconamoon:profile-circle-duotone',
     label: 'Client Management',
-    roles: clientRoles,
+    roles: allRoles,
     children: [
       {
         key: 'client-management-clients',
         label: 'Clients',
         parentKey: 'client-management',
-        roles: clientRoles,
+        roles: allRoles,
         children: [
-          { key: 'client-management-create', label: 'Create Client', url: '/clients/create', parentKey: 'client-management-clients', roles: clientRoles },
-          { key: 'client-management-overview', label: 'List Clients', url: '/clients', parentKey: 'client-management-clients', roles: clientRoles },
+          { key: 'client-management-create', label: 'Create Client', url: '/clients/create', parentKey: 'client-management-clients', roles: allRoles },
+          { key: 'client-management-overview', label: 'List Clients', url: '/clients', parentKey: 'client-management-clients', roles: allRoles },
         ],
       },
       {
         key: 'client-management-invoice',
         label: 'Invoice',
         parentKey: 'client-management',
-        roles: clientRoles,
+        roles: allRoles,
         children: [
-          { key: 'client-management-create-invoice', label: 'Create Invoice', url: '/invoices/create', parentKey: 'client-management-invoice', roles: clientRoles },
-          { key: 'client-management-invoices', label: 'List Invoices', url: '/invoices', parentKey: 'client-management-invoice', roles: clientRoles },
+          { key: 'client-management-create-invoice', label: 'Create Invoice', url: '/invoices/create', parentKey: 'client-management-invoice', roles: allRoles },
+          { key: 'client-management-invoices', label: 'List Invoices', url: '/invoices', parentKey: 'client-management-invoice', roles: allRoles },
         ],
       },
       {
         key: 'client-management-delivery-challans',
         label: 'Delivery Challans',
         parentKey: 'client-management',
-        roles: clientRoles,
+        roles: allRoles,
         children: [
-          { key: 'client-management-create-challan', label: 'Create Delivery Challan', url: '/challans/create', parentKey: 'client-management-delivery-challans', roles: clientRoles },
-          { key: 'client-management-challans', label: 'List Delivery Challans', url: '/challans', parentKey: 'client-management-delivery-challans', roles: clientRoles },
+          { key: 'client-management-create-challan', label: 'Create Delivery Challan', url: '/challans/create', parentKey: 'client-management-delivery-challans', roles: allRoles },
+          { key: 'client-management-challans', label: 'List Delivery Challans', url: '/challans', parentKey: 'client-management-delivery-challans', roles: allRoles },
         ],
       },
     ],
   },
   {
-    key: 'ecommerce',
+    key: 'inventory-management',
     icon: 'iconamoon:shopping-bag-duotone',
     label: 'Inventory Management',
-    roles: ['superadmin', 'admin'],
     children: [
       {
-        key: 'ecommerce-products',
+        key: 'inventory-items',
         label: 'Materials',
-        url: '/ecommerce/products',
-        parentKey: 'ecommerce',
+        url: '/inventory',
+        parentKey: 'inventory-management',
       },
       {
-        key: 'ecommerce-products-details',
-        label: 'Material Details',
-        url: '/ecommerce/products/10005',
-        parentKey: 'ecommerce',
+        key: 'inventory-add-item',
+        label: 'Add Material',
+        url: '/inventory/add',
+        parentKey: 'inventory-management',
       },
-      {
-        key: 'ecommerce-create-product',
-        label: 'Create Material',
-        url: '/ecommerce/products/create',
-        parentKey: 'ecommerce',
-      },
-      {
-        key: 'ecommerce-customers',
-        label: 'Customers',
-        url: '/ecommerce/customers',
-        parentKey: 'ecommerce',
-      },
-      {
-        key: 'ecommerce-sellers',
-        label: 'Sellers',
-        url: '/ecommerce/sellers',
-        parentKey: 'ecommerce',
-      },
-      {
-        key: 'ecommerce-orders',
-        label: 'Orders',
-        url: '/ecommerce/orders',
-        parentKey: 'ecommerce',
-      },
-      {
-        key: 'ecommerce-order-details',
-        label: 'Order Details',
-        url: '/ecommerce/orders/3001',
-        parentKey: 'ecommerce',
-      },
-      {
-        key: 'ecommerce-inventory',
-        label: 'Inventory',
-        url: '/ecommerce/inventory',
-        parentKey: 'ecommerce',
-      },
+      { key: 'inventory-suppliers', label: 'Suppliers', url: '/inventory/suppliers', parentKey: 'inventory-management' },
+      { key: 'inventory-purchases', label: 'Purchase History', url: '/inventory/purchases', parentKey: 'inventory-management' },
+    ],
+  },
+  {
+    key: 'return-management',
+    icon: 'iconamoon:refresh-duotone',
+    label: 'Return Management',
+    children: [
+      { key: 'return-products', label: 'Return Products', url: '/returns', parentKey: 'return-management' },
+      { key: 'return-create', label: 'Record Return', url: '/returns/create', parentKey: 'return-management' },
     ],
   },
   {

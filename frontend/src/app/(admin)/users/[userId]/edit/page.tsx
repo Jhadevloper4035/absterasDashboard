@@ -2,20 +2,20 @@ import PageMetaData from '@/components/PageTitle'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
+import { BASIC_APP_MODULES, defaultModulePermissions, moduleLabel, type ModulePermission } from '@/helpers/moduleAccess'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import type { EmployeeType, OrganizationItem } from '@/types/hr'
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
-import ReactSelect from 'react-select'
 import { useNavigate, useParams } from 'react-router-dom'
 
-const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
-const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
-const accessTypes = ['admin', ...teamRoles, 'hr-management', 'employee']
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
+const inventoryModules = ['categories', 'items', 'transactions', 'reports']
+type InventoryPermission = { module: string; access: 'none' | 'view' | 'manage' }
+const defaultInventoryPermissions = () => inventoryModules.map((module) => ({ module, access: 'none' as const }))
 
-type EditForm = Pick<UserType, 'name' | 'email' | 'phone' | 'status' | 'timezone'> & { accessTypes: string[]; password: string }
+type EditForm = Pick<UserType, 'name' | 'email' | 'phone' | 'workProfile' | 'status' | 'timezone'> & { password: string }
 type Employment = { employeeType: 'office' | 'site'; department: string; designation: string; joiningDate: string; dateOfBirth: string }
 
 const EditUserPage = () => {
@@ -32,31 +32,32 @@ const EditUserPage = () => {
   const [salaryStructureId, setSalaryStructureId] = useState('')
   const [monthlySalary, setMonthlySalary] = useState('')
   const [employment, setEmployment] = useState<Employment>({ employeeType: 'office', department: '', designation: '', joiningDate: '', dateOfBirth: '' })
+  const [inventoryPermissions, setInventoryPermissions] = useState<InventoryPermission[]>(defaultInventoryPermissions)
+  const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>(defaultModulePermissions)
   const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
   const isSuperadmin = currentAccessTypes.includes('superadmin')
-  const accessTypeOptions = useMemo(
-    () =>
-      accessTypes
-        .filter((type) => type !== 'admin' || isSuperadmin)
-        .map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) })),
-    [isSuperadmin],
-  )
 
   useEffect(() => {
     apiFetch<{ data: UserType }>(`/users/${userId}`)
-      .then(({ data }) =>
+      .then(({ data }) => {
         setForm({
           name: data.name,
           email: data.email,
           phone: data.phone || '',
+          workProfile: data.workProfile || (data.accessTypes?.includes('employee') ? 'employee' : 'director'),
           status: data.status,
           timezone: data.timezone || 'UTC',
-          accessTypes: [...new Set([data.role, ...(data.additionalRoles || []), ...(data.accessTypes || [])])],
           password: '',
-        }),
-      )
+        })
+        setModulePermissions(defaultModulePermissions().map((permission) => ({ ...permission, access: data.modulePermissions?.find((item) => item.module === permission.module)?.access || 'none' })))
+      })
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load user'))
   }, [userId])
+
+  useEffect(() => {
+    if (!isSuperadmin) return
+    apiFetch<{ data: InventoryPermission[] }>(`/inventory/permissions/${userId}`).then((response) => setInventoryPermissions(response.data)).catch(() => {})
+  }, [isSuperadmin, userId])
 
   useEffect(() => {
     Promise.all([
@@ -91,10 +92,8 @@ const EditUserPage = () => {
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!form) return
-    const selectedRoles = form.accessTypes.filter((type): type is UserType['role'] => roles.includes(type as UserType['role']))
-    if (!selectedRoles.some((role) => teamRoles.includes(role))) return setError('Select at least one business access type')
     if (
-      form.accessTypes.includes('employee') &&
+      form.workProfile === 'employee' &&
       (!employment.department || !employment.designation || !employment.joiningDate || !Number(monthlySalary))
     )
       return setError('Department, designation, joining date, and monthly salary are required')
@@ -108,12 +107,14 @@ const EditUserPage = () => {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone?.trim(),
+        workProfile: form.workProfile,
         status: form.status,
         timezone: form.timezone?.trim() || 'UTC',
-        accessTypes: form.accessTypes,
+        modulePermissions,
         ...(form.password ? { password: form.password } : {}),
       })
-      if (form.accessTypes.includes('employee')) {
+      if (isSuperadmin) await apiFetch(`/inventory/permissions/${userId}`, { method: 'PUT', body: JSON.stringify({ permissions: inventoryPermissions }) })
+      if (form.workProfile === 'employee') {
         const response = employeeId
           ? await apiFetch<{ data: EmployeeType }>(`/hr/employees/${employeeId}`, { method: 'PATCH', body: JSON.stringify(employment) })
           : await apiFetch<{ data: EmployeeType }>('/hr/employees', { method: 'POST', body: JSON.stringify({ user: userId, ...employment }) })
@@ -150,7 +151,7 @@ const EditUserPage = () => {
               <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
                 <div>
                   <h4 className="card-title mb-1">Edit User</h4>
-                  <p className="text-muted mb-0">Update login details, role, and access status.</p>
+                  <p className="text-muted mb-0">Update login details, work profile, and sidebar access.</p>
                 </div>
               </div>
               <h5 className="mb-3">Account details</h5>
@@ -206,21 +207,36 @@ const EditUserPage = () => {
                     <Form.Text>Letters and numbers required.</Form.Text>
                   </Form.Group>
                 </Col>
-                <Col xs={12}>
+                <Col xl={6}>
                   <Form.Group>
-                    <Form.Label>Access types</Form.Label>
-                    <ReactSelect
-                      isMulti
-                      classNamePrefix="react-select"
-                      options={accessTypeOptions}
-                      placeholder="Select access types"
-                      value={accessTypeOptions.filter((option) => form.accessTypes.includes(option.value))}
-                      onChange={(options) => setForm({ ...form, accessTypes: options.map((option) => option.value) })}
-                    />
-                    <Form.Text>Choose HR Management, Employee, Sales, Operations, Accounts, or Designers.</Form.Text>
+                    <Form.Label>Work profile</Form.Label>
+                    <Form.Select value={form.workProfile} onChange={(event) => {
+                      const workProfile = event.target.value as NonNullable<UserType['workProfile']>
+                      setForm({ ...form, workProfile })
+                      if (workProfile === 'director') setModulePermissions((current) => current.map((permission) => permission.module === 'hr' ? { ...permission, access: 'none' } : permission))
+                    }}>
+                      <option value="employee">Employee</option>
+                      <option value="director">Director</option>
+                    </Form.Select>
+                    <Form.Text>Only employees receive an HR record, salary, and leave data.</Form.Text>
                   </Form.Group>
                 </Col>
-                {form.accessTypes.includes('employee') && (
+                <Col xs={12}>
+                  <details open>
+                    <summary className="fw-medium">Sidebar access</summary>
+                    <Form.Text>Todo and Notifications are enabled for every user. Grant access to the remaining sidebar labels.</Form.Text>
+                    {modulePermissions.filter((permission) => !BASIC_APP_MODULES.includes(permission.module as (typeof BASIC_APP_MODULES)[number])).map((permission) => (
+                      <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}>
+                        <span className="flex-grow-1">{moduleLabel(permission.module)}</span>
+                        <Form.Select disabled={form.workProfile === 'director' && permission.module === 'hr'} style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setModulePermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as ModulePermission['access'] } : item))}>
+                          <option value="none">None</option><option value="view">View</option><option value="manage">Manage</option>
+                        </Form.Select>
+                      </div>
+                    ))}
+                  </details>
+                </Col>
+                {isSuperadmin && <Col xs={12}><details><summary className="fw-medium">Inventory access</summary><Form.Text>Separate from roles and HR access.</Form.Text>{inventoryPermissions.map((permission) => <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}><span className="flex-grow-1 text-capitalize">{permission.module}</span><Form.Select style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setInventoryPermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as InventoryPermission['access'] } : item))}><option value="none">None</option><option value="view">View</option><option value="manage">Manage</option></Form.Select></div>)}</details></Col>}
+                {form.workProfile === 'employee' && (
                   <>
                     <Col xs={12}>
                       <hr className="my-2" />

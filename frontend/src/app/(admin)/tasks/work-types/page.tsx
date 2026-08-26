@@ -7,23 +7,13 @@ import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
-import { defaultTaskWorkTypes, mergeTaskWorkTypes, taskWorkTypeRoles } from '@/helpers/taskWorkTypes'
+import { defaultTaskWorkTypes, mergeTaskWorkTypes } from '@/helpers/taskWorkTypes'
 import { useAuthStore } from '@/store/authStore'
-
-const roleVariant: Record<string, string> = {
-  accounts: 'warning',
-  admin: 'primary',
-  designers: 'secondary',
-  operations: 'info',
-  sales: 'success',
-}
-
-const roleLabel = (role: string) => role.replace(/\b\w/g, (letter) => letter.toUpperCase())
 
 const WorkTypes = () => {
   const token = useAuthStore((state) => state.token)
   const [workTypesByRole, setWorkTypesByRole] = useState(defaultTaskWorkTypes)
-  const [form, setForm] = useState({ role: 'sales', name: '' })
+  const [form, setForm] = useState({ name: '' })
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState('')
@@ -61,7 +51,7 @@ const WorkTypes = () => {
       })
       setWorkTypesByRole((current) => mergeTaskWorkTypes({
         ...current,
-        [form.role]: [...(current[form.role] || []), form.name.trim()],
+        general: [...(current.general || []), form.name.trim()],
       }))
       setForm((value) => ({ ...value, name: '' }))
       toast.success('Work type added')
@@ -73,7 +63,7 @@ const WorkTypes = () => {
   }
 
   const deleteWorkType = async (role: string, name: string) => {
-    if (!token || !window.confirm(`Delete "${name}" from ${roleLabel(role)} work types?`)) return
+    if (!token || !window.confirm(`Delete "${name}"?`)) return
 
     setDeleting(`${role}:${name}`)
     try {
@@ -104,15 +94,6 @@ const WorkTypes = () => {
               <h4 className="card-title mb-3">Create Work Type</h4>
               {error && <Alert variant="danger">{error}</Alert>}
               <Form onSubmit={createWorkType} className="d-flex gap-2 flex-wrap">
-                <div style={{ flex: '0 1 220px' }}>
-                  <Form.Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} aria-label="Role">
-                    {taskWorkTypeRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </div>
                 <div style={{ flex: '1 1 280px' }}>
                   <Form.Control value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Work type name" />
                 </div>
@@ -127,7 +108,7 @@ const WorkTypes = () => {
               <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap">
                 <div>
                   <h4 className="card-title mb-1">All Work Types</h4>
-                  <div className="text-muted fs-13">{rows.length} roles configured</div>
+                  <div className="text-muted fs-13">Shared by all Task Management users</div>
                 </div>
                 <Badge bg="primary-subtle" text="primary" className="fs-13 px-3 py-2">
                   {rows.reduce((total, [, workTypes]) => total + workTypes.length, 0)} options
@@ -145,7 +126,7 @@ const WorkTypes = () => {
                   <Table hover className="mb-0 align-middle">
                     <thead className="bg-light bg-opacity-50">
                       <tr>
-                        <th className="border-0 ps-4 py-3" style={{ width: 280 }}>Role</th>
+                        <th className="border-0 ps-4 py-3" style={{ width: 280 }}>Work type group</th>
                         <th className="border-0 py-3">Work Types</th>
                         <th className="border-0 pe-4 py-3 text-end" style={{ width: 120 }}>Total</th>
                       </tr>
@@ -155,11 +136,11 @@ const WorkTypes = () => {
                         <tr key={role}>
                           <td className="ps-4">
                             <div className="d-flex align-items-center gap-3">
-                              <span className={`avatar-sm rounded bg-${roleVariant[role] || 'primary'}-subtle text-${roleVariant[role] || 'primary'} d-inline-flex align-items-center justify-content-center fw-semibold`}>
+                              <span className="avatar-sm rounded bg-primary-subtle text-primary d-inline-flex align-items-center justify-content-center fw-semibold">
                                 {role.charAt(0).toUpperCase()}
                               </span>
                               <div>
-                                <div className="fw-semibold">{roleLabel(role)}</div>
+                                <div className="fw-semibold">General</div>
                                 <div className="text-muted fs-13">{workTypes.length} work types</div>
                               </div>
                             </div>
@@ -187,7 +168,7 @@ const WorkTypes = () => {
                             </div>
                           </td>
                           <td className="pe-4 text-end">
-                            <Badge bg={`${roleVariant[role] || 'primary'}-subtle`} text={roleVariant[role] || 'primary'} className="px-2 py-1">
+                            <Badge bg="primary-subtle" text="primary" className="px-2 py-1">
                               {workTypes.length}
                             </Badge>
                           </td>

@@ -4,10 +4,9 @@ import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
 import { cachedJson, invalidateCache } from '../../../services/redis-cache.service.js';
-import { userRoles } from '../../auth/middleware/auth.middleware.js';
+import { appAccessLevel, userRoles } from '../../auth/middleware/auth.middleware.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
-const LEAD_CREATE_ROLES = [...ADMIN_ROLES, 'sales'];
 const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory', 'leadCost'];
 const LEAD_DOCUMENT_TYPES = ['site_images', 'psf', 'boq', 'estimation'];
 const CLOSED_LEAD_STATUSES = ['WON', 'LOST', 'ON_HOLD'];
@@ -17,7 +16,7 @@ function canViewAllLeads(user) {
 }
 
 function canAssignLeads(user) {
-  return userRoles(user).some((role) => [...ADMIN_ROLES, 'sales'].includes(role));
+  return appAccessLevel(user, 'leads') === 2;
 }
 
 function forbidden(res) {
@@ -105,7 +104,7 @@ function notificationMetadata(user, type, lead) {
 }
 
 export async function createLead(req, res) {
-  if (!userRoles(req.user).some((role) => LEAD_CREATE_ROLES.includes(role))) {
+  if (!canAssignLeads(req.user)) {
     return forbidden(res);
   }
 
@@ -131,8 +130,8 @@ export async function createLead(req, res) {
 
   let owner;
   if (requestedOwner) {
-    owner = await User.findOne({ _id: requestedOwner, status: 'active', $or: [{ role: 'sales' }, { additionalRoles: 'sales' }] });
-    if (!owner) return res.status(400).json({ error: { message: 'Assign leads to an active salesperson' } });
+    owner = await User.findOne({ _id: requestedOwner, status: 'active', modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } } });
+    if (!owner) return res.status(400).json({ error: { message: 'Assign leads to an active user with Lead Management access' } });
   }
 
   const lead = await Lead.create({
@@ -197,7 +196,7 @@ export async function listLeads(req, res) {
 }
 
 export async function listLeadAssignees(req, res) {
-  const users = await User.find({ status: 'active', $or: [{ role: 'sales' }, { additionalRoles: 'sales' }] }).select('name email role additionalRoles status').sort({ name: 1 }).limit(1000);
+  const users = await User.find({ status: 'active', modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } } }).select('name email status').sort({ name: 1 }).limit(1000);
   return res.json({ data: users });
 }
 
@@ -267,10 +266,10 @@ export async function updateLead(req, res) {
       return forbidden(res);
     }
 
-    const newOwner = await User.findOne({ _id: owner, status: 'active', $or: [{ role: 'sales' }, { additionalRoles: 'sales' }] });
+    const newOwner = await User.findOne({ _id: owner, status: 'active', modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } } });
 
     if (!newOwner) {
-      return res.status(400).json({ error: { message: 'Assign leads to an active salesperson' } });
+      return res.status(400).json({ error: { message: 'Assign leads to an active user with Lead Management access' } });
     }
 
     if (String(lead.owner || '') !== String(newOwner._id)) {

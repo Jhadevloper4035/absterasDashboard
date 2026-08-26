@@ -23,7 +23,6 @@ const CreateInvoicePage = () => {
   const [placeOfSupplyCode, setPlaceOfSupplyCode] = useState('')
   const [dispatchFromAddress, setDispatchFromAddress] = useState('')
   const [lines, setLines] = useState<Line[]>([blankLine()])
-  const [igstRate, setIgstRate] = useState('18')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -35,7 +34,10 @@ const CreateInvoicePage = () => {
   const parentClients = clients.filter((entry) => !entry.parentClient)
   const sites = clients.filter((entry) => String(typeof entry.parentClient === 'string' ? entry.parentClient : entry.parentClient?._id) === client)
   const taxableAmount = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0), [lines])
-  const igstAmount = (taxableAmount * (Number(igstRate) || 0)) / 100
+  const isHaryana = placeOfSupplyCode === '06' || placeOfSupply.trim().toLowerCase() === 'haryana'
+  const cgstAmount = isHaryana ? taxableAmount * 0.09 : 0
+  const sgstAmount = isHaryana ? taxableAmount * 0.09 : 0
+  const igstAmount = isHaryana ? 0 : taxableAmount * 0.18
   const setLine = (index: number, field: keyof Line, value: string) =>
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)))
   const chooseClient = (id: string) => {
@@ -75,7 +77,9 @@ const CreateInvoicePage = () => {
           })),
           taxableAmount,
           igstAmount,
-          grandTotal: taxableAmount + igstAmount,
+          cgstAmount,
+          sgstAmount,
+          grandTotal: taxableAmount + igstAmount + cgstAmount + sgstAmount,
         }),
       })
       navigate(`/clients/${client}`)
@@ -228,12 +232,10 @@ const CreateInvoicePage = () => {
             </Table>
             <div className="row justify-content-end">
               <div className="col-md-4">
-                <Form.Label>IGST rate (%)</Form.Label>
-                <Form.Control type="number" min="0" step="0.01" value={igstRate} onChange={(event) => setIgstRate(event.target.value)} />
                 <div className="text-end mt-3">
                   <div>Taxable: {taxableAmount.toFixed(2)}</div>
-                  <div>IGST: {igstAmount.toFixed(2)}</div>
-                  <strong>Grand total: {(taxableAmount + igstAmount).toFixed(2)}</strong>
+                  {isHaryana ? <><div>CGST (9%): {cgstAmount.toFixed(2)}</div><div>SGST (9%): {sgstAmount.toFixed(2)}</div></> : <div>IGST (18%): {igstAmount.toFixed(2)}</div>}
+                  <strong>Grand total: {(taxableAmount + igstAmount + cgstAmount + sgstAmount).toFixed(2)}</strong>
                 </div>
               </div>
             </div>

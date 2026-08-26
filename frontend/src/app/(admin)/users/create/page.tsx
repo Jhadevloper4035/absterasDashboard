@@ -2,16 +2,13 @@ import PageMetaData from '@/components/PageTitle'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
+import { BASIC_APP_MODULES, defaultModulePermissions, moduleLabel, type ModulePermission } from '@/helpers/moduleAccess'
 import { type CreateUserPayload, useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import type { OrganizationItem } from '@/types/hr'
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
-import ReactSelect from 'react-select'
 
-const roles: UserType['role'][] = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers']
-const teamRoles: UserType['role'][] = ['sales', 'operations', 'accounts', 'designers']
-const defaultAccessTypes = ['admin', ...teamRoles, 'hr-management', 'employee']
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 const defaultTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 
@@ -20,20 +17,16 @@ const emptyForm: CreateUserPayload = {
   email: '',
   phone: '',
   password: '',
-  role: 'sales',
-  additionalRoles: [],
-  accessTypes: ['sales'],
+  workProfile: 'employee',
+  modulePermissions: defaultModulePermissions(),
   status: 'active',
   timezone: defaultTimezone,
 }
 
 const CreateUserPage = () => {
   const { user } = useAuthContext()
-  const users = useUserManagementStore((state) => state.users)
   const loading = useUserManagementStore((state) => state.loading)
   const storeError = useUserManagementStore((state) => state.error)
-  const clearUsers = useUserManagementStore((state) => state.clearUsers)
-  const fetchUsers = useUserManagementStore((state) => state.fetchUsers)
   const createUserInStore = useUserManagementStore((state) => state.createUser)
   const [form, setForm] = useState(emptyForm)
   const [message, setMessage] = useState('')
@@ -41,27 +34,7 @@ const CreateUserPage = () => {
   const [departments, setDepartments] = useState<OrganizationItem[]>([])
   const [designations, setDesignations] = useState<OrganizationItem[]>([])
   const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
-  const isSuperadmin = currentAccessTypes.includes('superadmin')
   const canManageUsers = currentAccessTypes.includes('superadmin') || currentAccessTypes.includes('admin')
-  const createRoles = teamRoles
-  const accessTypeOptions = useMemo(
-    () =>
-      [
-        ...new Set([
-          ...defaultAccessTypes,
-          ...createRoles,
-          ...users.flatMap((item) => [item.role, ...(item.additionalRoles || []), ...(item.accessTypes || [])]),
-        ]),
-      ]
-        .filter((type) => type !== 'superadmin' && (isSuperadmin || type !== 'admin'))
-        .map((type) => ({ value: type, label: type.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) })),
-    [createRoles, isSuperadmin, users],
-  )
-
-  useEffect(() => {
-    if (canManageUsers) fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
-    else clearUsers()
-  }, [canManageUsers, clearUsers, fetchUsers])
 
   useEffect(() => {
     if (!canManageUsers) return
@@ -84,16 +57,9 @@ const CreateUserPage = () => {
     }
 
     try {
-      const selectedRoles = (form.accessTypes || []).filter((type): type is UserType['role'] => roles.includes(type as UserType['role']))
-      const businessRoles = selectedRoles.filter((type) => teamRoles.includes(type))
-      const primaryRole = businessRoles[0]
-      if (!primaryRole || !createRoles.includes(primaryRole)) {
-        setError('Select at least one permitted business access type')
-        return
-      }
-      const employment = form.accessTypes?.includes('employee') ? form.employment : undefined
+      const employment = form.workProfile === 'employee' ? form.employment : undefined
       if (
-        form.accessTypes?.includes('employee') &&
+        form.workProfile === 'employee' &&
         (!employment?.department || !employment.designation || !employment.joiningDate || !Number(employment.monthlySalary))
       ) {
         setError('Department, designation, joining date, and monthly salary are required')
@@ -101,9 +67,6 @@ const CreateUserPage = () => {
       }
       await createUserInStore({
         ...form,
-        role: primaryRole,
-        additionalRoles: selectedRoles.filter((type) => type !== primaryRole && type !== 'superadmin'),
-        accessTypes: (form.accessTypes || []).filter((type) => !roles.includes(type as UserType['role'])),
         employment,
       })
       setForm(emptyForm)
@@ -130,9 +93,8 @@ const CreateUserPage = () => {
           <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
             <div>
               <h4 className="card-title mb-1">Create User</h4>
-              <p className="text-muted mb-0">Add login details, role, and access status.</p>
+              <p className="text-muted mb-0">Add login details, work profile, and sidebar access.</p>
             </div>
-            <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">{createRoles.length} roles available</span>
           </div>
           {(error || storeError) && <Alert variant="danger">{error || storeError}</Alert>}
           {message && <Alert variant="success">{message}</Alert>}
@@ -189,24 +151,34 @@ const CreateUserPage = () => {
                   <Form.Text>Letters and numbers required.</Form.Text>
                 </Form.Group>
               </Col>
-              <Col xl={12}>
+              <Col xl={6}>
                 <Form.Group>
-                  <Form.Label>Access types</Form.Label>
-                  <ReactSelect
-                    isMulti
-                    classNamePrefix="react-select"
-                    options={accessTypeOptions}
-                    placeholder="Select access types"
-                    value={accessTypeOptions.filter((option) => form.accessTypes?.includes(option.value))}
-                    onChange={(options) => {
-                      const accessTypes = options.map((option) => option.value)
-                      setForm({ ...form, accessTypes, employment: accessTypes.includes('employee') ? form.employment : undefined })
-                    }}
-                  />
-                  <Form.Text>Select all applicable types. Options already assigned to users appear here automatically.</Form.Text>
+                  <Form.Label>Work profile</Form.Label>
+                  <Form.Select value={form.workProfile} onChange={(event) => {
+                    const workProfile = event.target.value as NonNullable<UserType['workProfile']>
+                    setForm({ ...form, workProfile, employment: workProfile === 'employee' ? form.employment : undefined, modulePermissions: workProfile === 'director' ? form.modulePermissions?.map((permission) => permission.module === 'hr' ? { ...permission, access: 'none' } : permission) : form.modulePermissions })
+                  }}>
+                    <option value="employee">Employee</option>
+                    <option value="director">Director</option>
+                  </Form.Select>
+                  <Form.Text>Only employees receive an HR record, salary, and leave data.</Form.Text>
                 </Form.Group>
               </Col>
-              {form.accessTypes?.includes('employee') && (
+              <Col xs={12}>
+                <details open>
+                  <summary className="fw-medium">Sidebar access</summary>
+                  <Form.Text>Todo and Notifications are enabled for every user. Grant access to the remaining sidebar labels.</Form.Text>
+                  {(form.modulePermissions || []).filter((permission) => !BASIC_APP_MODULES.includes(permission.module as (typeof BASIC_APP_MODULES)[number])).map((permission) => (
+                    <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}>
+                      <span className="flex-grow-1">{moduleLabel(permission.module)}</span>
+                      <Form.Select disabled={form.workProfile === 'director' && permission.module === 'hr'} style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setForm({ ...form, modulePermissions: form.modulePermissions?.map((item) => item.module === permission.module ? { ...item, access: event.target.value as ModulePermission['access'] } : item) })}>
+                        <option value="none">None</option><option value="view">View</option><option value="manage">Manage</option>
+                      </Form.Select>
+                    </div>
+                  ))}
+                </details>
+              </Col>
+              {form.workProfile === 'employee' && (
                 <>
                   <Col xs={12}>
                     <hr className="my-2" />

@@ -1,6 +1,7 @@
 import { Lead } from '../modules/leads/models/lead.model.js';
 import { Task } from '../modules/tasks/models/task.model.js';
 import { User } from '../models/user.model.js';
+import { appAccessLevel } from '../modules/auth/middleware/auth.middleware.js';
 
 const ADMIN_ROLES = ['superadmin', 'admin'];
 const CLOSED_LEAD_STATUSES = ['WON', 'LOST', 'ON_HOLD'];
@@ -43,6 +44,9 @@ function csvRow(values) {
 
 async function getDashboardSummary(user) {
   const { start, end } = todayRange();
+  const access = { leads: appAccessLevel(user, 'leads'), tasks: appAccessLevel(user, 'tasks') };
+  const canReadLeads = access.leads > 0;
+  const canReadTasks = access.tasks > 0;
   const activeLeadQuery = userLeadQuery(user, { status: { $nin: CLOSED_LEAD_STATUSES } });
   const unassignedLeadQuery = canManage(user) ? { assignmentException: true } : { _id: null };
   const openTaskQuery = userTaskQuery(user, { status: { $ne: 'Done' } });
@@ -51,31 +55,32 @@ async function getDashboardSummary(user) {
   const meetingQuery = userLeadQuery(user, { meetingHistory: { $elemMatch: { startsAt: { $gte: start, $lt: end }, status: { $ne: 'CANCELLED' } } } });
 
   const [activeLeads, unassignedLeads, todayMeetings, overdueTasks, dueTodayTasks, teamUsers, recentLeads, priorityTasks] = await Promise.all([
-    Lead.countDocuments(activeLeadQuery),
-    Lead.countDocuments(unassignedLeadQuery),
-    Lead.countDocuments(meetingQuery),
-    Task.countDocuments(overdueTaskQuery),
-    Task.countDocuments(todayTaskQuery),
-    canManage(user) ? User.countDocuments({ status: 'active', $or: [{ role: { $in: TEAM_ROLES } }, { additionalRoles: { $in: TEAM_ROLES } }] }) : 1,
-    Lead.find(userLeadQuery(user))
+    canReadLeads ? Lead.countDocuments(activeLeadQuery) : 0,
+    canReadLeads ? Lead.countDocuments(unassignedLeadQuery) : 0,
+    canReadLeads ? Lead.countDocuments(meetingQuery) : 0,
+    canReadTasks ? Task.countDocuments(overdueTaskQuery) : 0,
+    canReadTasks ? Task.countDocuments(todayTaskQuery) : 0,
+    canManage(user) ? User.countDocuments({ status: 'active' }) : 1,
+    canReadLeads ? Lead.find(userLeadQuery(user))
       .populate('owner', 'name email role status')
       .sort({ createdAt: -1 })
       .limit(6)
-      .lean(),
-    Task.find(openTaskQuery)
+      .lean() : [],
+    canReadTasks ? Task.find(openTaskQuery)
       .populate('assignee', 'name email role status')
       .sort({ priority: 1, dueDate: 1, createdAt: -1 })
       .limit(6)
-      .lean(),
+      .lean() : [],
   ]);
 
-  const meetingLeads = await Lead.find(meetingQuery)
+  const meetingLeads = canReadLeads ? await Lead.find(meetingQuery)
     .populate('owner', 'name email role status')
     .sort({ 'meetingHistory.startsAt': 1 })
     .limit(6)
-    .lean();
+    .lean() : [];
 
   return {
+    access,
     stats: { activeLeads, unassignedLeads, todayMeetings, overdueTasks, dueTodayTasks, teamUsers },
     todayMeetings: meetingLeads.map(withCurrentMeeting),
     priorityTasks,

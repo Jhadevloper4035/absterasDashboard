@@ -3,6 +3,8 @@ import { auditEvent } from '../../../services/audit.service.js';
 import { Client } from '../../clients/models/client.model.js';
 import { Challan } from '../models/challan.model.js';
 import { createChallanPdf } from '../services/challan-pdf.service.js';
+import { InventoryItem } from '../../inventory/models/item.model.js';
+import { StockTransaction } from '../../inventory/models/transaction.model.js';
 
 const FIELDS = ['client', 'site', 'challanDate', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'freightCharge', 'taxableAmount', 'gstAmount', 'roundOff', 'totalAmount', 'linkedInvoice', 'pdfFileUrl'];
 const payload = (body) => FIELDS.reduce((result, field) => (body?.[field] !== undefined ? { ...result, [field]: body[field] } : result), {});
@@ -19,6 +21,22 @@ export async function createChallan(req, res) {
     catch (error) { if (error?.code !== 11000) throw error; }
   }
   if (!challan) return res.status(409).json({ error: { message: 'Unable to generate a unique challan number. Please try again.' } });
+  const deducted = []; const stockTransactions = [];
+  try {
+    for (const line of (challan.lineItems || []).filter((entry) => entry.inventoryItem)) {
+      const quantity = Number(line.quantity);
+      const item = await InventoryItem.findOneAndUpdate({ _id: line.inventoryItem, quantityInStock: { $gte: quantity } }, { $inc: { quantityInStock: -quantity } }, { new: true });
+      if (!item) throw Object.assign(new Error(`Insufficient stock for ${line.description}`), { statusCode: 409 });
+      deducted.push({ item: item._id, quantity });
+      const transaction = await StockTransaction.create({ item: item._id, type: 'out', quantity, reference: challan.challanNumber, note: `Delivery challan ${challan.challanNumber}`, purchaseDate: challan.challanDate, performedBy: req.user._id });
+      if (transaction?._id) stockTransactions.push(transaction._id);
+    }
+  } catch (error) {
+    await Promise.all(deducted.map(({ item, quantity }) => InventoryItem.findByIdAndUpdate(item, { $inc: { quantityInStock: quantity } })));
+    if (stockTransactions.length) await StockTransaction.deleteMany({ _id: { $in: stockTransactions } });
+    await Challan.findByIdAndDelete(challan._id);
+    throw error;
+  }
   await auditEvent(req, { action: 'challan.create', entity: 'challan', entityId: challan._id });
   return res.status(201).json({ data: challan });
 }
@@ -59,4 +77,27 @@ export async function updateChallan(req, res) {
   await challan.save();
   await auditEvent(req, { action: 'challan.update', entity: 'challan', entityId: challan._id });
   return res.json({ data: challan });
+}
+
+export async function deleteChallan(req, res) {
+  const challan = await Challan.findById(req.params.id);
+  if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
+  const restored = []; const stockTransactions = [];
+  try {
+    for (const line of (challan.lineItems || []).filter((entry) => entry.inventoryItem)) {
+      const quantity = Number(line.quantity);
+      const item = await InventoryItem.findByIdAndUpdate(line.inventoryItem, { $inc: { quantityInStock: quantity } });
+      if (!item) throw new Error(`Inventory item no longer exists for ${line.description}`);
+      restored.push({ item: line.inventoryItem, quantity });
+      const transaction = await StockTransaction.create({ item: line.inventoryItem, type: 'adjustment', quantity, reference: challan.challanNumber, note: `Stock restored after deleting delivery challan ${challan.challanNumber}`, purchaseDate: new Date(), performedBy: req.user._id });
+      if (transaction?._id) stockTransactions.push(transaction._id);
+    }
+    await challan.deleteOne();
+  } catch (error) {
+    await Promise.all(restored.map(({ item, quantity }) => InventoryItem.findByIdAndUpdate(item, { $inc: { quantityInStock: -quantity } })));
+    if (stockTransactions.length) await StockTransaction.deleteMany({ _id: { $in: stockTransactions } });
+    throw error;
+  }
+  await auditEvent(req, { action: 'challan.delete', entity: 'challan', entityId: challan._id, before: challan.toObject() });
+  return res.status(204).end();
 }

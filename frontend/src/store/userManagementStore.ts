@@ -9,9 +9,8 @@ export type CreateUserPayload = {
   email: string
   phone: string
   password: string
-  role: UserType['role']
-  additionalRoles?: UserType['role'][]
-  accessTypes?: string[]
+  workProfile?: UserType['workProfile']
+  modulePermissions?: UserType['modulePermissions']
   status: UserType['status']
   timezone: string
   employment?: { employeeType: 'office' | 'site'; department: string; designation: string; manager?: string; joiningDate: string; dateOfBirth?: string; monthlySalary?: string }

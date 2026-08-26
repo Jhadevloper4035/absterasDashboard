@@ -1,7 +1,10 @@
 import mongoose from 'mongoose';
+import { APP_ACCESS_LEVELS, APP_MODULES } from '../config/app-modules.js';
 
-export const USER_ROLES = ['superadmin', 'admin', 'sales', 'operations', 'accounts', 'designers'];
+// Legacy business-role values remain valid for existing records, but new users are role-neutral.
+export const USER_ROLES = ['superadmin', 'admin', 'user', 'sales', 'operations', 'accounts', 'designers'];
 export const USER_STATUSES = ['active', 'inactive', 'invited', 'suspended'];
+export const WORK_PROFILES = ['director', 'employee'];
 
 function isTimezone(value) {
   try {
@@ -43,7 +46,7 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: USER_ROLES,
-      default: 'sales',
+      default: 'user',
     },
     additionalRoles: [{
       type: String,
@@ -53,6 +56,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
+    }],
+    workProfile: {
+      type: String,
+      enum: WORK_PROFILES,
+    },
+    modulePermissions: [{
+      module: { type: String, enum: APP_MODULES, required: true },
+      access: { type: String, enum: APP_ACCESS_LEVELS, default: 'none' },
     }],
     status: {
       type: String,
