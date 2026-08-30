@@ -159,21 +159,6 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
-    key: 'events-management',
-    icon: 'iconamoon:flag-duotone',
-    label: 'Events Management',
-    roles: allRoles,
-    children: [
-      {
-        key: 'events-management-overview',
-        label: 'Coming Soon',
-        url: '/upcoming/events-management',
-        parentKey: 'events-management',
-        roles: allRoles,
-      },
-    ],
-  },
-  {
     key: 'erp',
     label: 'ERP',
     isTitle: true,
@@ -210,36 +195,26 @@ export const MENU_ITEMS: MenuItemType[] = [
     label: 'Client Management',
     roles: allRoles,
     children: [
-      {
-        key: 'client-management-clients',
-        label: 'Clients',
-        parentKey: 'client-management',
-        roles: allRoles,
-        children: [
-          { key: 'client-management-create', label: 'Create Client', url: '/clients/create', parentKey: 'client-management-clients', roles: allRoles },
-          { key: 'client-management-overview', label: 'List Clients', url: '/clients', parentKey: 'client-management-clients', roles: allRoles },
-        ],
-      },
-      {
-        key: 'client-management-invoice',
-        label: 'Invoice',
-        parentKey: 'client-management',
-        roles: allRoles,
-        children: [
-          { key: 'client-management-create-invoice', label: 'Create Invoice', url: '/invoices/create', parentKey: 'client-management-invoice', roles: allRoles },
-          { key: 'client-management-invoices', label: 'List Invoices', url: '/invoices', parentKey: 'client-management-invoice', roles: allRoles },
-        ],
-      },
-      {
-        key: 'client-management-delivery-challans',
-        label: 'Delivery Challans',
-        parentKey: 'client-management',
-        roles: allRoles,
-        children: [
-          { key: 'client-management-create-challan', label: 'Create Delivery Challan', url: '/challans/create', parentKey: 'client-management-delivery-challans', roles: allRoles },
-          { key: 'client-management-challans', label: 'List Delivery Challans', url: '/challans', parentKey: 'client-management-delivery-challans', roles: allRoles },
-        ],
-      },
+      { key: 'client-management-create', label: 'Create Client', url: '/clients/create', parentKey: 'client-management', roles: allRoles },
+      { key: 'client-management-overview', label: 'List Clients', url: '/clients', parentKey: 'client-management', roles: allRoles },
+    ],
+  },
+  {
+    key: 'invoice-management',
+    icon: 'iconamoon:cheque-duotone',
+    label: 'Invoice Management',
+    children: [
+      { key: 'invoices', label: 'List Invoices', url: '/invoices', parentKey: 'invoice-management' },
+      { key: 'create-invoice', label: 'Create Invoice', url: '/invoices/create', parentKey: 'invoice-management' },
+    ],
+  },
+  {
+    key: 'delivery-challans',
+    icon: 'iconamoon:box-duotone',
+    label: 'Delivery Challans',
+    children: [
+      { key: 'challans', label: 'List Delivery Challans', url: '/challans', parentKey: 'delivery-challans' },
+      { key: 'create-challan', label: 'Create Delivery Challan', url: '/challans/create', parentKey: 'delivery-challans' },
     ],
   },
   {
@@ -265,7 +240,7 @@ export const MENU_ITEMS: MenuItemType[] = [
   },
   {
     key: 'return-management',
-    icon: 'iconamoon:refresh-duotone',
+    icon: 'iconamoon:box-duotone',
     label: 'Return Management',
     children: [
       { key: 'return-products', label: 'Return Products', url: '/returns', parentKey: 'return-management' },

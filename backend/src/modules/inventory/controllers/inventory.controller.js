@@ -47,7 +47,7 @@ export async function listItems(req, res) {
   else filter.status = { $ne: 'inactive' };
   if (req.query.lowStock === 'true') filter.$expr = { $lte: ['$quantityInStock', '$minStockLevel'] };
   if (req.query.q?.trim()) filter.$or = [{ sku: { $regex: req.query.q.trim(), $options: 'i' } }, { productCode: { $regex: req.query.q.trim(), $options: 'i' } }, { name: { $regex: req.query.q.trim(), $options: 'i' } }];
-  const [data, total] = await Promise.all([InventoryItem.find(filter).populate('supplier', 'name contactPerson phone').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(), InventoryItem.countDocuments(filter)]);
+  const [data, total] = await Promise.all([InventoryItem.find(filter).populate('supplier', 'name contactPerson phone address').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(), InventoryItem.countDocuments(filter)]);
   return res.json({ data, meta: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) } });
 }
 export async function lowStockReport(req, res) {

@@ -8,8 +8,9 @@ import { Link, useParams } from 'react-router-dom'
 import { Alert, Badge, Button, Card, CardBody, Spinner, Table } from 'react-bootstrap'
 import type { Client } from '../client-form'
 
-type Invoice = { _id: string; invoiceNumber: string; invoiceDate: string; grandTotal: number; status: 'unpaid' | 'partially paid' | 'paid' }
-type Challan = { _id: string; challanNumber: string; challanDate: string; totalAmount: number }
+type Site = Pick<Client, '_id' | 'name' | 'siteName' | 'siteAddress' | 'status'>
+type Invoice = { _id: string; invoiceNumber: string; invoiceDate: string; grandTotal: number; status: 'unpaid' | 'partially paid' | 'paid'; site?: Site }
+type Challan = { _id: string; challanNumber: string; challanDate: string; totalAmount: number; site?: Site }
 const amount = (value?: number) => value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'
 
 const ClientOverviewPage = () => {
@@ -17,20 +18,26 @@ const ClientOverviewPage = () => {
   const [client, setClient] = useState<Client>()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [challans, setChallans] = useState<Challan[]>([])
+  const [sites, setSites] = useState<Site[]>([])
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState('')
   const token = useAuthStore((state) => state.token)
   useEffect(() => {
     if (!clientId) return
-    Promise.all([
-      apiFetch<{ data: Client }>(`/clients/${clientId}`),
-      apiFetch<{ data: Invoice[] }>(`/invoices?client=${clientId}`),
-      apiFetch<{ data: Challan[] }>(`/challans?client=${clientId}`),
-    ])
-      .then(([clientResponse, invoiceResponse, challanResponse]) => {
+    apiFetch<{ data: Client }>(`/clients/${clientId}`)
+      .then(async (clientResponse) => {
+        const parentClientId = typeof clientResponse.data.parentClient === 'string' ? clientResponse.data.parentClient : clientResponse.data.parentClient?._id
+        const documentClientId = parentClientId || clientResponse.data._id
+        const siteQuery = parentClientId ? `&site=${clientResponse.data._id}` : ''
+        const [invoiceResponse, challanResponse, siteResponse] = await Promise.all([
+          apiFetch<{ data: Invoice[] }>(`/invoices?client=${documentClientId}${siteQuery}&limit=100`),
+          apiFetch<{ data: Challan[] }>(`/challans?client=${documentClientId}${siteQuery}&limit=100`),
+          parentClientId ? Promise.resolve({ data: [] as Site[] }) : apiFetch<{ data: Site[] }>(`/clients?parentClient=${clientResponse.data._id}&limit=100`),
+        ])
         setClient(clientResponse.data)
         setInvoices(invoiceResponse.data)
         setChallans(challanResponse.data)
+        setSites(siteResponse.data)
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load client'))
   }, [clientId])
@@ -40,6 +47,7 @@ const ClientOverviewPage = () => {
   const parentClientId = client && (typeof client.parentClient === 'string' ? client.parentClient : client.parentClient?._id)
   const documentClientId = parentClientId || client?._id
   const documentQuery = client?.parentClient ? `?client=${documentClientId}&site=${client._id}` : `?client=${documentClientId}`
+  const deliveryAddress = (site?: Site) => site?.siteAddress || client?.shippingAddress || client?.billingAddress || '-'
   return (
     <>
       <PageMetaData title={client?.name || 'Client'} />
@@ -121,6 +129,36 @@ const ClientOverviewPage = () => {
               </CardBody>
             </Card>
           )}
+          {!parentClientId && (
+            <Card className="mb-3">
+              <CardBody>
+                <h5 className="mb-3">Client sites</h5>
+                <Table responsive hover className="mb-0">
+                  <thead>
+                    <tr>
+                      <th>Project</th>
+                      <th>Address</th>
+                      <th>Documents</th>
+                      <th>Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sites.map((site) => (
+                      <tr key={site._id}>
+                        <td>{site.siteName || site.name}</td>
+                        <td>{site.siteAddress || '-'}</td>
+                        <td>{invoices.filter((invoice) => invoice.site?._id === site._id).length} invoices · {challans.filter((challan) => challan.site?._id === site._id).length} challans</td>
+                        <td><Badge bg={site.status === 'active' ? 'success' : site.status === 'completed' ? 'secondary' : 'warning'}>{site.status}</Badge></td>
+                        <td className="text-end"><Link to={`/clients/${site._id}`}><Button size="sm" variant="outline-primary">View</Button></Link></td>
+                      </tr>
+                    ))}
+                    {!sites.length && <tr><td colSpan={5} className="text-center text-muted py-4">No sites yet.</td></tr>}
+                  </tbody>
+                </Table>
+              </CardBody>
+            </Card>
+          )}
           <Card className="mb-3">
             <CardBody>
               <div className="d-flex justify-content-between align-items-center mb-3">
@@ -131,6 +169,7 @@ const ClientOverviewPage = () => {
                 <thead>
                   <tr>
                     <th>Invoice</th>
+                    <th>Delivery address</th>
                     <th>Date</th>
                     <th>Amount</th>
                     <th>Status</th>
@@ -143,6 +182,7 @@ const ClientOverviewPage = () => {
                       <td>
                         <Link to={`/invoices/${invoice._id}`}>{invoice.invoiceNumber}</Link>
                       </td>
+                      <td>{deliveryAddress(invoice.site)}</td>
                       <td>{new Date(invoice.invoiceDate).toLocaleDateString()}</td>
                       <td>{amount(invoice.grandTotal)}</td>
                       <td>
@@ -175,7 +215,7 @@ const ClientOverviewPage = () => {
                   ))}
                   {!invoices.length && (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                      <td colSpan={6} className="text-center text-muted py-4">
                         No invoices yet.
                       </td>
                     </tr>
@@ -194,6 +234,7 @@ const ClientOverviewPage = () => {
                 <thead>
                   <tr>
                     <th>Challan</th>
+                    <th>Delivery address</th>
                     <th>Date</th>
                     <th>Total amount</th>
                     <th />
@@ -205,6 +246,7 @@ const ClientOverviewPage = () => {
                       <td>
                         <Link to={`/challans/${challan._id}`}>{challan.challanNumber}</Link>
                       </td>
+                      <td>{deliveryAddress(challan.site)}</td>
                       <td>{new Date(challan.challanDate).toLocaleDateString()}</td>
                       <td>{amount(challan.totalAmount)}</td>
                       <td className="text-end">
@@ -232,7 +274,7 @@ const ClientOverviewPage = () => {
                   ))}
                   {!challans.length && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         No challans yet.
                       </td>
                     </tr>

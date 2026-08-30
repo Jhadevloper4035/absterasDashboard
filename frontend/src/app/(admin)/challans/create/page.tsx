@@ -5,14 +5,17 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
-type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; parentClient?: string | { _id: string } }
-type InventoryItem = { _id: string; name: string; sku: string; unit: string; quantityInStock: number }
+type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; billingAddress?: string; shippingAddress?: string; parentClient?: string | { _id: string } }
+type Supplier = { _id: string; name: string; address?: string }
+type InventoryItem = { _id: string; name: string; sku: string; unit: string; quantityInStock: number; supplier?: Supplier }
 type Line = { inventoryItem?: string; description: string; hsnCode: string; quantity: string; unit: string; rate: string }
 type Challan = {
   challanNumber: string
   client: string | { _id: string }
   site?: string | { _id: string }
+  supplier?: string | Supplier
   challanDate: string
+  pickupAddress?: string
   transportType?: string
   vehicleNumber?: string
   eWayBillNumber?: string
@@ -28,10 +31,13 @@ const ChallanFormPage = () => {
   const [params] = useSearchParams()
   const [clients, setClients] = useState<Client[]>([])
   const [materials, setMaterials] = useState<InventoryItem[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [challanNumber, setChallanNumber] = useState(generatedChallanNumber)
   const [client, setClient] = useState(params.get('client') || '')
   const [site, setSite] = useState(params.get('site') || '')
+  const [supplier, setSupplier] = useState('')
   const [challanDate, setChallanDate] = useState(new Date().toISOString().slice(0, 10))
+  const [pickupAddress, setPickupAddress] = useState('')
   const [transportType, setTransportType] = useState('')
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [eWayBillNumber, setEWayBillNumber] = useState('')
@@ -47,13 +53,18 @@ const ChallanFormPage = () => {
     apiFetch<{ data: InventoryItem[] }>('/inventory/items?limit=100')
       .then(({ data }) => setMaterials(data))
       .catch(() => {})
+    apiFetch<{ data: Supplier[] }>('/inventory/suppliers?status=active')
+      .then(({ data }) => setSuppliers(data))
+      .catch(() => {})
     if (challanId)
       apiFetch<{ data: Challan }>(`/challans/${challanId}`)
         .then(({ data }) => {
           setChallanNumber(data.challanNumber)
           setClient(typeof data.client === 'string' ? data.client : data.client._id)
           setSite(typeof data.site === 'string' ? data.site : data.site?._id || '')
+          setSupplier(typeof data.supplier === 'string' ? data.supplier : data.supplier?._id || '')
           setChallanDate(data.challanDate.slice(0, 10))
+          setPickupAddress(data.pickupAddress || '')
           setTransportType(data.transportType || '')
           setVehicleNumber(data.vehicleNumber || '')
           setEWayBillNumber(data.eWayBillNumber || '')
@@ -73,7 +84,18 @@ const ChallanFormPage = () => {
   }, [challanId])
   const parentClients = clients.filter((entry) => !entry.parentClient)
   const sites = clients.filter((entry) => String(typeof entry.parentClient === 'string' ? entry.parentClient : entry.parentClient?._id) === client)
-  const chooseClient = (id: string) => { setClient(id); setSite('') }
+  const selectedClient = clients.find((entry) => entry._id === client)
+  const clientAddress = selectedClient?.shippingAddress || selectedClient?.billingAddress || ''
+  useEffect(() => {
+    if (!client || site || !clients.length || sites.length || !clientAddress) return
+    setSite('client-address')
+  }, [client, site, clients.length, sites.length, clientAddress])
+  const chooseClient = (id: string) => {
+    setClient(id)
+    const entry = clients.find((current) => current._id === id)
+    const hasSites = clients.some((current) => String(typeof current.parentClient === 'string' ? current.parentClient : current.parentClient?._id) === id)
+    setSite(hasSites ? '' : entry?.shippingAddress || entry?.billingAddress ? 'client-address' : '')
+  }
   const taxableAmount = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.rate) || 0), 0), [lines])
   const gstAmount = (taxableAmount * (Number(gstRate) || 0)) / 100
   const totalAmount = taxableAmount + gstAmount + (Number(freightCharge) || 0)
@@ -82,6 +104,12 @@ const ChallanFormPage = () => {
   const chooseMaterial = (index: number, id: string) => {
     const material = materials.find((item) => item._id === id)
     setLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, inventoryItem: id || undefined, description: material?.name || '', unit: material?.unit || line.unit } : line))
+    if (!supplier && material?.supplier) chooseSupplier(material.supplier._id)
+  }
+  const chooseSupplier = (id: string) => {
+    const selected = suppliers.find((entry) => entry._id === id) || materials.find((item) => item.supplier?._id === id)?.supplier
+    setSupplier(id)
+    if (selected?.address) setPickupAddress(selected.address)
   }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -91,8 +119,10 @@ const ChallanFormPage = () => {
       const body = {
         challanNumber,
         client,
-        site: site || null,
+        site: site === 'client-address' ? null : site || null,
+        supplier: supplier || null,
         challanDate,
+        pickupAddress,
         transportType,
         vehicleNumber,
         eWayBillNumber,
@@ -134,6 +164,12 @@ const ChallanFormPage = () => {
           </div>
           {error && <Alert variant="danger">{error}</Alert>}
           <Form onSubmit={submit}>
+            {!challanId && (
+              <div className="d-flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Challan type">
+                <Button type="button" variant="primary" role="tab" aria-selected>Inventory challan</Button>
+                <Link className="btn btn-outline-primary" role="tab" to="/returns/transfers/create">Return challan</Link>
+              </div>
+            )}
             <div className="row g-3">
               <div className="col-md-4">
                 <Form.Label>Generated challan number</Form.Label>
@@ -155,11 +191,24 @@ const ChallanFormPage = () => {
                 </Form.Select>
               </div>
               <div className="col-md-4">
-                <Form.Label>Site / address</Form.Label>
-                <Form.Select value={site} disabled={!client || !sites.length} required={sites.length > 0} onChange={(event) => setSite(event.target.value)}>
-                  <option value="">{client ? sites.length ? 'Select site / address' : 'No child sites available' : 'Select parent client first'}</option>
-                  {sites.map((entry) => <option key={entry._id} value={entry._id}>{entry.siteName || entry.name}{entry.siteAddress ? ` · ${entry.siteAddress}` : ''}</option>)}
+                <Form.Label>Delivery address</Form.Label>
+                <Form.Select value={site} disabled={!client || (!sites.length && !clientAddress)} required onChange={(event) => setSite(event.target.value)}>
+                  <option value="">{client ? 'Select delivery address' : 'Select client first'}</option>
+                  {sites.length
+                    ? sites.map((entry) => <option key={entry._id} value={entry._id}>{entry.siteName || entry.name}{entry.siteAddress ? ` · ${entry.siteAddress}` : ''}</option>)
+                    : clientAddress && <option value="client-address">Client address · {clientAddress}</option>}
                 </Form.Select>
+              </div>
+              <div className="col-md-4">
+                <Form.Label>Vendor</Form.Label>
+                <Form.Select value={supplier} onChange={(event) => chooseSupplier(event.target.value)}>
+                  <option value="">Select vendor</option>
+                  {suppliers.map((entry) => <option key={entry._id} value={entry._id}>{entry.name}</option>)}
+                </Form.Select>
+              </div>
+              <div className="col-md-8">
+                <Form.Label>Vendor site address</Form.Label>
+                <Form.Control as="textarea" rows={2} value={pickupAddress} onChange={(event) => setPickupAddress(event.target.value)} placeholder="Filled from the selected vendor or inventory material" />
               </div>
               <div className="col-md-4">
                 <Form.Label>Transport type</Form.Label>

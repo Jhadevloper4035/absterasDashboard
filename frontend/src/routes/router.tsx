@@ -34,7 +34,12 @@ const AppRouter = (props: RouteProps) => {
           element={
             loading ? null : !isAuthenticated ? (
               <Navigate to={{ pathname: '/auth/sign-in', search: `?redirectTo=${redirectTo}` }} replace />
-            ) : (() => { const module = typeof route.path === 'string' ? moduleForPath(route.path) : undefined; return (module ? canAccessModule(user, module) : String(route.path).startsWith('/dashboard') || !route.roles || accessRoles(user).some((role) => route.roles?.includes(role))) })() ? (
+            ) : (() => {
+              const module = typeof route.path === 'string' ? moduleForPath(route.path) : undefined
+              const roles = accessRoles(user)
+              const roleAllowed = !route.roles || roles.some((role) => route.roles?.includes(role))
+              return (!module || canAccessModule(user, module)) && roleAllowed
+            })() ? (
               <AdminLayout {...props}>{route.element}</AdminLayout>
             ) : (
               <Navigate to="/access-denied" replace />

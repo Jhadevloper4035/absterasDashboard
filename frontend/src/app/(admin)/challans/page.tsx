@@ -5,10 +5,10 @@ import { downloadPdf, printPdf } from '@/helpers/pdf'
 import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
+import { Alert, Badge, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
 type Client = { _id: string; name: string }
-type Challan = { _id: string; challanNumber: string; challanDate: string; totalAmount: number; client?: Client }
+type Challan = { _id: string; challanNumber: string; challanDate: string; totalAmount: number; transferType?: 'delivery' | 'return_transfer'; client?: Client }
 const ChallansPage = () => {
   const [clients, setClients] = useState<Client[]>([])
   const [challans, setChallans] = useState<Challan[]>([])
@@ -76,6 +76,7 @@ const ChallansPage = () => {
             <thead>
               <tr>
                 <th>Challan</th>
+                <th>Type</th>
                 <th>Client</th>
                 <th>Date</th>
                 <th>Total amount</th>
@@ -86,6 +87,7 @@ const ChallansPage = () => {
               {challans.map((challan) => (
                 <tr key={challan._id}>
                   <td>{challan.challanNumber}</td>
+                  <td><Badge bg={challan.transferType === 'return_transfer' ? 'primary' : 'secondary'}>{challan.transferType === 'return_transfer' ? 'Return transfer' : 'Delivery'}</Badge></td>
                   <td>{challan.client?.name || '-'}</td>
                   <td>{new Date(challan.challanDate).toLocaleDateString()}</td>
                   <td>{challan.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -114,7 +116,7 @@ const ChallansPage = () => {
               ))}
               {!challans.length && (
                 <tr>
-                  <td colSpan={5} className="text-center text-muted py-4">
+                  <td colSpan={6} className="text-center text-muted py-4">
                     No delivery challans found.
                   </td>
                 </tr>

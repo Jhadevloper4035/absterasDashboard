@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
-type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; state?: string; stateCode?: string; parentClient?: string | { _id: string } }
+type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; billingAddress?: string; shippingAddress?: string; state?: string; stateCode?: string; parentClient?: string | { _id: string } }
 type Line = { description: string; hsnCode: string; quantity: string; unit: string; unitPrice: string }
 const blankLine = (): Line => ({ description: '', hsnCode: '', quantity: '1', unit: 'NOS', unitPrice: '' })
 const currentFinancialYear = () => { const today = new Date(); const year = today.getFullYear() - (today.getMonth() < 3 ? 1 : 0); return `${year}-${String((year + 1) % 100).padStart(2, '0')}` }
@@ -33,6 +33,11 @@ const CreateInvoicePage = () => {
   const selectedClient = clients.find((entry) => entry._id === client)
   const parentClients = clients.filter((entry) => !entry.parentClient)
   const sites = clients.filter((entry) => String(typeof entry.parentClient === 'string' ? entry.parentClient : entry.parentClient?._id) === client)
+  const clientAddress = selectedClient?.shippingAddress || selectedClient?.billingAddress || ''
+  useEffect(() => {
+    if (!client || site || !clients.length || sites.length || !clientAddress) return
+    setSite('client-address')
+  }, [client, site, clients.length, sites.length, clientAddress])
   const taxableAmount = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0), [lines])
   const isHaryana = placeOfSupplyCode === '06' || placeOfSupply.trim().toLowerCase() === 'haryana'
   const cgstAmount = isHaryana ? taxableAmount * 0.09 : 0
@@ -42,8 +47,9 @@ const CreateInvoicePage = () => {
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)))
   const chooseClient = (id: string) => {
     setClient(id)
-    setSite('')
     const entry = clients.find((current) => current._id === id)
+    const hasSites = clients.some((current) => String(typeof current.parentClient === 'string' ? current.parentClient : current.parentClient?._id) === id)
+    setSite(hasSites ? '' : entry?.shippingAddress || entry?.billingAddress ? 'client-address' : '')
     setPlaceOfSupply(entry?.state || '')
     setPlaceOfSupplyCode(entry?.stateCode || '')
   }
@@ -64,7 +70,7 @@ const CreateInvoicePage = () => {
           invoiceNumber,
           financialYear,
           client,
-          site: site || null,
+          site: site === 'client-address' ? null : site || null,
           invoiceDate,
           placeOfSupply,
           placeOfSupplyCode,
@@ -136,10 +142,12 @@ const CreateInvoicePage = () => {
                 </Form.Select>
               </div>
               <div className="col-md-6">
-                <Form.Label>Site / address</Form.Label>
-                <Form.Select value={site} disabled={!client || !sites.length} required={sites.length > 0} onChange={(event) => chooseSite(event.target.value)}>
-                  <option value="">{client ? sites.length ? 'Select site / address' : 'No child sites available' : 'Select parent client first'}</option>
-                  {sites.map((entry) => <option value={entry._id} key={entry._id}>{entry.siteName || entry.name}{entry.siteAddress ? ` · ${entry.siteAddress}` : ''}</option>)}
+                <Form.Label>Delivery address</Form.Label>
+                <Form.Select value={site} disabled={!client || (!sites.length && !clientAddress)} required onChange={(event) => chooseSite(event.target.value)}>
+                  <option value="">{client ? 'Select delivery address' : 'Select client first'}</option>
+                  {sites.length
+                    ? sites.map((entry) => <option value={entry._id} key={entry._id}>{entry.siteName || entry.name}{entry.siteAddress ? ` · ${entry.siteAddress}` : ''}</option>)
+                    : clientAddress && <option value="client-address">Client address · {clientAddress}</option>}
                 </Form.Select>
               </div>
               <div className="col-md-4">

@@ -65,6 +65,7 @@ const InventoryMaterialDetail = lazy(() => import('@/app/(admin)/inventory/[item
 const InventoryPurchases = lazy(() => import('@/app/(admin)/inventory/purchases/page'))
 const Returns = lazy(() => import('@/app/(admin)/returns/page'))
 const CreateReturn = lazy(() => import('@/app/(admin)/returns/create/page'))
+const CreateReturnTransfer = lazy(() => import('@/app/(admin)/returns/transfers/create/page'))
 const Chat = lazy(() => import('@/app/(admin)/apps/chat/page'))
 const Email = lazy(() => import('@/app/(admin)/apps/email/page'))
 const Schedule = lazy(() => import('@/app/(admin)/calendar/schedule/page'))
@@ -356,12 +357,6 @@ const generalRoutes: RoutesProps[] = [
     roles: leadRoles,
   },
   {
-    path: '/upcoming/events-management',
-    name: 'Events Management',
-    element: <ComingSoon />,
-    roles: allRoles,
-  },
-  {
     path: '/upcoming/hr-management',
     name: 'HR Management',
     element: <ComingSoon />,
@@ -402,6 +397,7 @@ const appsRoutes: RoutesProps[] = [
   { name: 'Suppliers', path: '/inventory/suppliers', element: <InventorySuppliers /> },
   { name: 'Return Management', path: '/returns', element: <Returns /> },
   { name: 'Record Return', path: '/returns/create', element: <CreateReturn /> },
+  { name: 'Create Return Transfer', path: '/returns/transfers/create', element: <CreateReturnTransfer /> },
   {
     name: 'Products',
     path: '/ecommerce/products',

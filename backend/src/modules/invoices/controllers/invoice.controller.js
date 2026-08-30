@@ -47,10 +47,11 @@ export async function listInvoices(req, res) {
   const search = String(req.query.q || '').trim();
   const query = {};
   if (req.query.client) query.client = req.query.client;
+  if (req.query.site) query.site = req.query.site;
   if (req.query.status) query.status = req.query.status;
   if (search) query.invoiceNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
   const [invoices, total] = await Promise.all([
-    Invoice.find(query).populate('client', 'name siteName').sort({ invoiceDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    Invoice.find(query).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').sort({ invoiceDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Invoice.countDocuments(query),
   ]);
   return res.json({ data: invoices, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });

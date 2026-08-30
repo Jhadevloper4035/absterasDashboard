@@ -10,11 +10,19 @@ function clientPayload(body) {
   }, {});
 }
 
+const siteAddressQuery = (parentClient, siteAddress, excludeId) => ({
+  parentClient,
+  siteAddress: { $regex: `^${String(siteAddress).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+  ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+});
+
 export async function createClient(req, res) {
   if (!String(req.body?.name || '').trim()) return res.status(400).json({ error: { message: 'Client name is required' } });
   const payload = clientPayload(req.body);
   if (payload.parentClient && !await Client.exists({ _id: payload.parentClient, parentClient: null })) return res.status(400).json({ error: { message: 'Parent client not found' } });
   if (payload.parentClient && !String(payload.siteAddress || '').trim()) return res.status(400).json({ error: { message: 'Site address is required for a child site' } });
+  if (payload.parentClient && await Client.exists(siteAddressQuery(payload.parentClient, payload.siteAddress))) return res.status(409).json({ error: { message: 'This site address already exists for the client' } });
+  if (payload.parentClient) payload.billingAddress = payload.shippingAddress = payload.siteAddress.trim();
   if (!payload.parentClient) { payload.siteName = undefined; payload.siteAddress = undefined; }
   const client = await Client.create(payload);
   await auditEvent(req, { action: 'client.create', entity: 'client', entityId: client._id });
@@ -26,6 +34,7 @@ export async function listClients(req, res) {
   const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
   const search = String(req.query.q || '').trim();
   const query = search ? { $or: ['name', 'siteName', 'phone', 'email'].map((field) => ({ [field]: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } })) } : {};
+  if (req.query.parentClient) query.parentClient = req.query.parentClient;
   const [clients, total] = await Promise.all([Client.find(query).populate('parentClient', 'name siteName').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit), Client.countDocuments(query)]);
   return res.json({ data: clients, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
@@ -43,6 +52,9 @@ export async function updateClient(req, res) {
   if (payload.parentClient && (String(payload.parentClient) === String(client._id) || !await Client.exists({ _id: payload.parentClient, parentClient: null }))) return res.status(400).json({ error: { message: 'Choose a valid parent client' } });
   const parentClient = payload.parentClient === undefined ? client.parentClient : payload.parentClient;
   if (parentClient && !String((payload.siteAddress === undefined ? client.siteAddress : payload.siteAddress) || '').trim()) return res.status(400).json({ error: { message: 'Site address is required for a child site' } });
+  const siteAddress = payload.siteAddress === undefined ? client.siteAddress : payload.siteAddress;
+  if (parentClient && await Client.exists(siteAddressQuery(parentClient, siteAddress, client._id))) return res.status(409).json({ error: { message: 'This site address already exists for the client' } });
+  if (parentClient) payload.billingAddress = payload.shippingAddress = siteAddress.trim();
   if (!parentClient) { payload.siteName = undefined; payload.siteAddress = undefined; }
   Object.assign(client, payload);
   await client.save();

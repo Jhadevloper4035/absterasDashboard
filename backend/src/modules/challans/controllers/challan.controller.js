@@ -5,8 +5,9 @@ import { Challan } from '../models/challan.model.js';
 import { createChallanPdf } from '../services/challan-pdf.service.js';
 import { InventoryItem } from '../../inventory/models/item.model.js';
 import { StockTransaction } from '../../inventory/models/transaction.model.js';
+import { ReturnProduct } from '../../returns/models/return-product.model.js';
 
-const FIELDS = ['client', 'site', 'challanDate', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'freightCharge', 'taxableAmount', 'gstAmount', 'roundOff', 'totalAmount', 'linkedInvoice', 'pdfFileUrl'];
+const FIELDS = ['client', 'site', 'supplier', 'challanDate', 'pickupAddress', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'freightCharge', 'taxableAmount', 'gstAmount', 'roundOff', 'totalAmount', 'linkedInvoice', 'pdfFileUrl'];
 const payload = (body) => FIELDS.reduce((result, field) => (body?.[field] !== undefined ? { ...result, [field]: body[field] } : result), {});
 const required = (body) => ['client', 'challanDate', 'taxableAmount', 'totalAmount'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
 const challanNumber = () => `DC-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
@@ -47,19 +48,20 @@ export async function listChallans(req, res) {
   const search = String(req.query.q || '').trim();
   const query = {};
   if (req.query.client) query.client = req.query.client;
+  if (req.query.site) query.site = req.query.site;
   if (search) query.challanNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-  const [challans, total] = await Promise.all([Challan.find(query).populate('client', 'name siteName').sort({ challanDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit), Challan.countDocuments(query)]);
+  const [challans, total] = await Promise.all([Challan.find(query).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').sort({ challanDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit), Challan.countDocuments(query)]);
   return res.json({ data: challans, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function getChallan(req, res) {
-  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode');
+  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode').populate('supplier', 'name address');
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   return res.json({ data: challan });
 }
 
 export async function downloadChallanPdf(req, res) {
-  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode');
+  const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode').populate('supplier', 'name address');
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   const pdf = await createChallanPdf(challan);
   const filename = `challan-${challan.challanNumber.replace(/[^\w-]/g, '_')}.pdf`;
@@ -70,6 +72,7 @@ export async function downloadChallanPdf(req, res) {
 export async function updateChallan(req, res) {
   const challan = await Challan.findById(req.params.id);
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
+  if (challan.transferType === 'return_transfer') return res.status(409).json({ error: { message: 'Return transfer challans cannot be edited because their quantities are linked to return storage' } });
   const values = payload(req.body);
   const client = values.client || challan.client;
   if (values.site && !await Client.exists({ _id: values.site, parentClient: client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
@@ -84,17 +87,25 @@ export async function deleteChallan(req, res) {
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   const restored = []; const stockTransactions = [];
   try {
-    for (const line of (challan.lineItems || []).filter((entry) => entry.inventoryItem)) {
-      const quantity = Number(line.quantity);
-      const item = await InventoryItem.findByIdAndUpdate(line.inventoryItem, { $inc: { quantityInStock: quantity } });
-      if (!item) throw new Error(`Inventory item no longer exists for ${line.description}`);
-      restored.push({ item: line.inventoryItem, quantity });
-      const transaction = await StockTransaction.create({ item: line.inventoryItem, type: 'adjustment', quantity, reference: challan.challanNumber, note: `Stock restored after deleting delivery challan ${challan.challanNumber}`, purchaseDate: new Date(), performedBy: req.user._id });
-      if (transaction?._id) stockTransactions.push(transaction._id);
+    if (challan.transferType === 'return_transfer') {
+      for (const line of challan.returnProducts || []) {
+        const product = await ReturnProduct.findByIdAndUpdate(line.product, { $inc: { quantity: Number(line.quantity) }, $set: { status: 'stored' } });
+        if (!product) throw new Error('Return product no longer exists');
+        restored.push({ product: line.product, quantity: Number(line.quantity) });
+      }
+    } else {
+      for (const line of (challan.lineItems || []).filter((entry) => entry.inventoryItem)) {
+        const quantity = Number(line.quantity);
+        const item = await InventoryItem.findByIdAndUpdate(line.inventoryItem, { $inc: { quantityInStock: quantity } });
+        if (!item) throw new Error(`Inventory item no longer exists for ${line.description}`);
+        restored.push({ item: line.inventoryItem, quantity });
+        const transaction = await StockTransaction.create({ item: line.inventoryItem, type: 'adjustment', quantity, reference: challan.challanNumber, note: `Stock restored after deleting delivery challan ${challan.challanNumber}`, purchaseDate: new Date(), performedBy: req.user._id });
+        if (transaction?._id) stockTransactions.push(transaction._id);
+      }
     }
     await challan.deleteOne();
   } catch (error) {
-    await Promise.all(restored.map(({ item, quantity }) => InventoryItem.findByIdAndUpdate(item, { $inc: { quantityInStock: -quantity } })));
+    await Promise.all(restored.map(({ item, product, quantity }) => item ? InventoryItem.findByIdAndUpdate(item, { $inc: { quantityInStock: -quantity } }) : ReturnProduct.findByIdAndUpdate(product, { $inc: { quantity: -quantity } })));
     if (stockTransactions.length) await StockTransaction.deleteMany({ _id: { $in: stockTransactions } });
     throw error;
   }

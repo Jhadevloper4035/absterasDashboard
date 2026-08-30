@@ -12,12 +12,12 @@ function canAssignTasks(user) {
   return appAccessLevel(user, 'tasks') === 2;
 }
 
-function canManageTaskWorkTypes(user) {
-  return appAccessLevel(user, 'tasks') === 2;
+function isTaskAdmin(user) {
+  return [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].some((role) => role === 'superadmin' || role === 'admin');
 }
 
 function taskQueryFor(user, extra = {}) {
-  if (canManageTaskWorkTypes(user)) return extra;
+  if (isTaskAdmin(user)) return extra;
   return { $and: [extra, { $or: [{ createdBy: user._id }, { assignee: user._id }] }] };
 }
 
@@ -137,7 +137,7 @@ export async function listTaskWorkTypes(req, res) {
 }
 
 export async function createTaskWorkType(req, res) {
-  if (!canManageTaskWorkTypes(req.user)) {
+  if (!isTaskAdmin(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
@@ -162,7 +162,7 @@ export async function createTaskWorkType(req, res) {
 }
 
 export async function deleteTaskWorkType(req, res) {
-  if (!canManageTaskWorkTypes(req.user)) {
+  if (!isTaskAdmin(req.user)) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 

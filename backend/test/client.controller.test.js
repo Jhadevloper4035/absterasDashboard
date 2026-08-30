@@ -33,6 +33,23 @@ test('requires an address for a child site', async () => {
   assert.equal(response.body.error.message, 'Site address is required for a child site');
 });
 
+test('uses a site address for the child billing and shipping address', async () => {
+  let created;
+  Client.exists = async (query) => query.siteAddress ? null : { _id: 'parent-1' };
+  Client.create = async (payload) => { created = payload; return { _id: 'site-1', ...payload }; };
+  await createClient({ body: { name: 'Tower A', parentClient: '507f1f77bcf86cd799439011', siteAddress: '12 Main Street' } }, res());
+  assert.equal(created.billingAddress, '12 Main Street');
+  assert.equal(created.shippingAddress, '12 Main Street');
+});
+
+test('rejects a duplicate site address for the same client', async () => {
+  Client.exists = async (query) => query.siteAddress ? { _id: 'site-1' } : { _id: 'parent-1' };
+  const response = res();
+  await createClient({ body: { name: 'Tower B', parentClient: '507f1f77bcf86cd799439011', siteAddress: '12 Main Street' } }, response);
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.error.message, 'This site address already exists for the client');
+});
+
 test('creates and updates only documented client fields', async () => {
   let created;
   Client.create = async (payload) => { created = payload; return { _id: 'client-1', ...payload }; };

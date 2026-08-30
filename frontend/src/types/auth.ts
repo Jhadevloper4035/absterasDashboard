@@ -1,5 +1,5 @@
 export type UserRole = 'superadmin' | 'admin' | 'sales' | 'operations' | 'accounts' | 'designers'
-export type ModulePermission = { module: 'todo' | 'notifications' | 'leads' | 'tasks' | 'events' | 'hr' | 'clients' | 'inventory'; access: 'none' | 'view' | 'manage' }
+export type ModulePermission = { module: 'todo' | 'notifications' | 'leads' | 'tasks' | 'hr' | 'clients' | 'inventory' | 'returns'; access: 'none' | 'view' | 'manage' }
 
 export type UserType = {
   _id: string

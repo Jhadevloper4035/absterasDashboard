@@ -1,6 +1,6 @@
 import type { UserType } from '@/types/auth'
 
-export const APP_MODULES = ['todo', 'notifications', 'leads', 'tasks', 'events', 'hr', 'clients', 'inventory', 'returns'] as const
+export const APP_MODULES = ['todo', 'notifications', 'leads', 'tasks', 'hr', 'clients', 'inventory', 'returns'] as const
 export const BASIC_APP_MODULES = ['todo', 'notifications'] as const
 export type AppModule = (typeof APP_MODULES)[number]
 export type ModulePermission = { module: AppModule; access: 'none' | 'view' | 'manage' }
@@ -11,7 +11,6 @@ export const moduleLabel = (module: AppModule) => ({
   notifications: 'Notifications',
   leads: 'Lead Management',
   tasks: 'Task Management',
-  events: 'Events Management',
   hr: 'HR Management',
   clients: 'Client Management',
   inventory: 'Inventory Management',
@@ -25,7 +24,6 @@ export const moduleForPath = (path: string) => {
   if (path === '/notifications') return 'notifications'
   if (path.startsWith('/leads')) return 'leads'
   if (path.startsWith('/tasks')) return 'tasks'
-  if (path === '/upcoming/events-management') return 'events'
   if (path.startsWith('/hr')) return 'hr'
   if (path.startsWith('/clients') || path.startsWith('/invoices') || path.startsWith('/challans')) return 'clients'
   if (path.startsWith('/inventory')) return 'inventory'

@@ -133,6 +133,19 @@ test('assigned users cannot create role work types', async () => {
   assert.equal(response.statusCode, 403);
 });
 
+test('task managers who are not admins cannot create shared work types', async () => {
+  const response = res();
+  await createTaskWorkType(
+    {
+      user: { _id: 'sales-1', role: 'sales', modulePermissions: [{ module: 'tasks', access: 'manage' }] },
+      body: { name: 'New sales work' },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 403);
+});
+
 test('new tasks get random 6-digit ticket numbers', async () => {
   const userId = new mongoose.Types.ObjectId();
   let existsQuery;
@@ -346,6 +359,19 @@ test('task assignment pages always filter by the signed-in user', async () => {
   await listTasks({ user: { _id: 'sales-1', role: 'sales' }, query: { assignedByMe: 'true', assignedToMe: 'true', assignee: 'sales-2' } }, res());
 
   assert.deepEqual(query, { $and: [{ createdBy: 'sales-1', assignee: 'sales-1' }, { $or: [{ createdBy: 'sales-1' }, { assignee: 'sales-1' }] }] });
+});
+
+test('non-admin task managers cannot list every task', async () => {
+  let query;
+  Task.find = (filter) => {
+    query = filter;
+    return { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return Promise.resolve([]); } };
+  };
+  Task.countDocuments = async () => 0;
+
+  await listTasks({ user: { _id: 'sales-1', role: 'sales', modulePermissions: [{ module: 'tasks', access: 'manage' }] }, query: { status: 'To Do' } }, res());
+
+  assert.deepEqual(query, { $and: [{ status: 'To Do' }, { $or: [{ createdBy: 'sales-1' }, { assignee: 'sales-1' }] }] });
 });
 
 test('closed tasks cannot be updated or receive notes', async () => {

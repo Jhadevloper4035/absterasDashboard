@@ -7,7 +7,12 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Table } from 'react-bootstrap'
 
-type Invoice = { invoiceNumber: string; financialYear: string; invoiceDate: string; placeOfSupply?: string; placeOfSupplyCode?: string; reverseCharge: boolean; grRrNumber?: string; transport?: string; vehicleNumber?: string; station?: string; dispatchFromAddress?: string; taxableAmount: number; igstAmount: number; cgstAmount: number; sgstAmount: number; roundOff: number; grandTotal: number; lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; unitPrice: number; lineAmount: number }[]; client: { name: string; gstin?: string; billingAddress?: string; shippingAddress?: string }; site?: { name: string; siteName?: string; siteAddress?: string; shippingAddress?: string } }
+type Invoice = {
+  invoiceNumber: string; financialYear: string; invoiceDate: string; placeOfSupply?: string; placeOfSupplyCode?: string; reverseCharge: boolean; grRrNumber?: string; transport?: string; vehicleNumber?: string; station?: string; dispatchFromAddress?: string; taxableAmount: number; igstAmount: number; cgstAmount: number; sgstAmount: number; roundOff: number; grandTotal: number
+  lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; unitPrice: number; lineAmount: number }[]
+  client: { name: string; gstin?: string; billingAddress?: string; shippingAddress?: string }
+  site?: { name: string; siteName?: string; siteAddress?: string; billingAddress?: string; shippingAddress?: string }
+}
 const money = (value = 0) => value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const InvoiceDetailPage = () => {
@@ -15,8 +20,43 @@ const InvoiceDetailPage = () => {
   const token = useAuthStore((state) => state.token)
   const [invoice, setInvoice] = useState<Invoice>()
   const [error, setError] = useState('')
-  useEffect(() => { if (invoiceId) apiFetch<{ data: Invoice }>(`/invoices/${invoiceId}`).then(({ data }) => setInvoice(data)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load invoice')) }, [invoiceId])
-return <><PageMetaData title={invoice ? `Invoice ${invoice.invoiceNumber}` : 'Invoice'} />{error && <Alert variant="danger">{error}</Alert>}{invoice && <Card><CardBody><div className="d-flex justify-content-between mb-4"><Link to="/invoices"><Button variant="outline-secondary">Back to invoices</Button></Link><PdfActionButton action={() => printPdf(`/invoices/${invoiceId}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open invoice PDF'))}>Print PDF</PdfActionButton></div><div className="text-center border-bottom pb-3 mb-3"><h5 className="mb-1">TAX INVOICE</h5><h2 className="mb-1">ABSTERAS</h2><div>GSTIN: 06ABXFA0801H1ZK</div></div><div className="row border-bottom mb-3 pb-3"><div className="col-md-6"><strong>Invoice No.</strong> {invoice.invoiceNumber}<br /><strong>Date:</strong> {new Date(invoice.invoiceDate).toLocaleDateString()}<br /><strong>Place of Supply:</strong> {[invoice.placeOfSupply, invoice.placeOfSupplyCode && `(${invoice.placeOfSupplyCode})`].filter(Boolean).join(' ')}<br /><strong>Reverse Charge:</strong> {invoice.reverseCharge ? 'Yes' : 'No'}</div><div className="col-md-6"><strong>GR/RR No.:</strong> {invoice.grRrNumber || '-'}<br /><strong>Transport:</strong> {invoice.transport || '-'}<br /><strong>Vehicle No.:</strong> {invoice.vehicleNumber || '-'}<br /><strong>Station:</strong> {invoice.station || '-'}<br /><strong>Dispatch from:</strong> {invoice.dispatchFromAddress || '-'}</div></div><div className="row mb-3"><div className="col-md-6"><h6>Billed to</h6><strong>{invoice.client.name}</strong><br />{invoice.client.billingAddress || '-'}<br />GSTIN / UIN: {invoice.client.gstin || '-'}</div><div className="col-md-6"><h6>Shipped to</h6><strong>{invoice.site?.siteName || invoice.site?.name || invoice.client.name}</strong><br />{invoice.site?.siteAddress || invoice.site?.shippingAddress || invoice.client.shippingAddress || invoice.client.billingAddress || '-'}<br />GSTIN / UIN: {invoice.client.gstin || '-'}</div></div><Table bordered responsive><thead><tr><th>#</th><th>Description of Goods</th><th>HSN/SAC</th><th className="text-end">Qty.</th><th className="text-end">Unit Price</th><th className="text-end">Amount</th></tr></thead><tbody>{invoice.lineItems.map((item, index) => <tr key={index}><td>{index + 1}</td><td>{item.description}</td><td>{item.hsnCode || '-'}</td><td className="text-end">{item.quantity} {item.unit}</td><td className="text-end">{money(item.unitPrice)}</td><td className="text-end">{money(item.lineAmount)}</td></tr>)}</tbody><tfoot><tr><td colSpan={5} className="text-end">Taxable amount</td><td className="text-end">{money(invoice.taxableAmount)}</td></tr>{invoice.igstAmount > 0 && <tr><td colSpan={5} className="text-end">IGST</td><td className="text-end">{money(invoice.igstAmount)}</td></tr>}{invoice.cgstAmount > 0 && <tr><td colSpan={5} className="text-end">CGST</td><td className="text-end">{money(invoice.cgstAmount)}</td></tr>}{invoice.sgstAmount > 0 && <tr><td colSpan={5} className="text-end">SGST</td><td className="text-end">{money(invoice.sgstAmount)}</td></tr>}{invoice.roundOff !== 0 && <tr><td colSpan={5} className="text-end">Round off</td><td className="text-end">{money(invoice.roundOff)}</td></tr>}<tr><th colSpan={5} className="text-end">Grand total</th><th className="text-end">{money(invoice.grandTotal)}</th></tr></tfoot></Table><div className="mt-4"><strong>Terms & Conditions</strong><div>Goods once sold will not be taken back. Interest at 18% p.a. applies to overdue payments. Subject to Haryana jurisdiction.</div><div className="text-end mt-4">For ABSTERAS<br /><br />Authorised Signatory</div></div></CardBody></Card>}</>
+
+  useEffect(() => {
+    if (invoiceId) apiFetch<{ data: Invoice }>(`/invoices/${invoiceId}`).then(({ data }) => setInvoice(data)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load invoice'))
+  }, [invoiceId])
+
+  return <>
+    <PageMetaData title={invoice ? `Invoice ${invoice.invoiceNumber}` : 'Invoice'} />
+    {error && <Alert variant="danger">{error}</Alert>}
+    {invoice && <Card><CardBody>
+      <div className="d-flex justify-content-between mb-4">
+        <Link to="/invoices"><Button variant="outline-secondary">Back to invoices</Button></Link>
+        <PdfActionButton action={() => printPdf(`/invoices/${invoiceId}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open invoice PDF'))}>Print PDF</PdfActionButton>
+      </div>
+      <div className="text-center border-bottom pb-3 mb-3"><h5 className="mb-1">TAX INVOICE</h5><h2 className="mb-1">ABSTERAS</h2><div>GSTIN: 06ABXFA0801H1ZK</div></div>
+      <div className="row border-bottom mb-3 pb-3">
+        <div className="col-md-6"><strong>Invoice No.</strong> {invoice.invoiceNumber}<br /><strong>Date:</strong> {new Date(invoice.invoiceDate).toLocaleDateString()}<br /><strong>Place of Supply:</strong> {[invoice.placeOfSupply, invoice.placeOfSupplyCode && `(${invoice.placeOfSupplyCode})`].filter(Boolean).join(' ')}<br /><strong>Reverse Charge:</strong> {invoice.reverseCharge ? 'Yes' : 'No'}</div>
+        <div className="col-md-6"><strong>GR/RR No.:</strong> {invoice.grRrNumber || '-'}<br /><strong>Transport:</strong> {invoice.transport || '-'}<br /><strong>Vehicle No.:</strong> {invoice.vehicleNumber || '-'}<br /><strong>Station:</strong> {invoice.station || '-'}<br /><strong>Dispatch from:</strong> {invoice.dispatchFromAddress || '-'}</div>
+      </div>
+      <div className="row mb-3">
+        <div className="col-md-6"><h6>Billed to</h6><strong>{invoice.client.name}</strong><br />{invoice.site?.billingAddress || invoice.site?.siteAddress || invoice.client.billingAddress || '-'}<br />GSTIN / UIN: {invoice.client.gstin || '-'}</div>
+        <div className="col-md-6"><h6>Shipped to</h6><strong>{invoice.site?.siteName || invoice.site?.name || invoice.client.name}</strong><br />{invoice.site?.shippingAddress || invoice.site?.siteAddress || invoice.client.shippingAddress || invoice.client.billingAddress || '-'}<br />GSTIN / UIN: {invoice.client.gstin || '-'}</div>
+      </div>
+      <Table bordered responsive>
+        <thead><tr><th>#</th><th>Description of Goods</th><th>HSN/SAC</th><th className="text-end">Qty.</th><th className="text-end">Unit Price</th><th className="text-end">Amount</th></tr></thead>
+        <tbody>{invoice.lineItems.map((item, index) => <tr key={index}><td>{index + 1}</td><td>{item.description}</td><td>{item.hsnCode || '-'}</td><td className="text-end">{item.quantity} {item.unit}</td><td className="text-end">{money(item.unitPrice)}</td><td className="text-end">{money(item.lineAmount)}</td></tr>)}</tbody>
+        <tfoot>
+          <tr><td colSpan={5} className="text-end">Taxable amount</td><td className="text-end">{money(invoice.taxableAmount)}</td></tr>
+          {invoice.igstAmount > 0 && <tr><td colSpan={5} className="text-end">IGST</td><td className="text-end">{money(invoice.igstAmount)}</td></tr>}
+          {invoice.cgstAmount > 0 && <tr><td colSpan={5} className="text-end">CGST</td><td className="text-end">{money(invoice.cgstAmount)}</td></tr>}
+          {invoice.sgstAmount > 0 && <tr><td colSpan={5} className="text-end">SGST</td><td className="text-end">{money(invoice.sgstAmount)}</td></tr>}
+          {invoice.roundOff !== 0 && <tr><td colSpan={5} className="text-end">Round off</td><td className="text-end">{money(invoice.roundOff)}</td></tr>}
+          <tr><th colSpan={5} className="text-end">Grand total</th><th className="text-end">{money(invoice.grandTotal)}</th></tr>
+        </tfoot>
+      </Table>
+      <div className="mt-4"><strong>Terms & Conditions</strong><div>Goods once sold will not be taken back. Interest at 18% p.a. applies to overdue payments. Subject to Haryana jurisdiction.</div><div className="text-end mt-4">For ABSTERAS<br /><br />Authorised Signatory</div></div>
+    </CardBody></Card>}
+  </>
 }
 
 export default InvoiceDetailPage

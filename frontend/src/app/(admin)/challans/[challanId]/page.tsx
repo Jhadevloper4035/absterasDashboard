@@ -10,6 +10,7 @@ import { Alert, Button, Card, CardBody, Spinner, Table } from 'react-bootstrap'
 type Challan = {
   challanNumber: string
   challanDate: string
+  pickupAddress?: string
   transportType?: string
   vehicleNumber?: string
   eWayBillNumber?: string
@@ -18,9 +19,11 @@ type Challan = {
   gstAmount: number
   roundOff: number
   totalAmount: number
+  transferType?: 'delivery' | 'return_transfer'
   lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; rate: number; amount: number }[]
   client: { name: string; siteName?: string; siteAddress?: string; gstin?: string; phone?: string; shippingAddress?: string; billingAddress?: string; state?: string; stateCode?: string }
   site?: { name: string; siteName?: string; siteAddress?: string; shippingAddress?: string; state?: string; stateCode?: string }
+  supplier?: { name: string; address?: string }
 }
 const money = (value = 0) => value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const ChallanDetailPage = () => {
@@ -49,11 +52,7 @@ const ChallanDetailPage = () => {
                 <Button variant="outline-secondary">Back to delivery challans</Button>
               </Link>
               <div>
-                <Link to={`/challans/${challanId}/edit`}>
-                  <Button variant="outline-primary" className="me-2">
-                    Edit
-                  </Button>
-                </Link>
+                {challan.transferType !== 'return_transfer' && <Link to={`/challans/${challanId}/edit`}><Button variant="outline-primary" className="me-2">Edit</Button></Link>}
                 <PdfActionButton className="me-2" action={() => printPdf(`/challans/${challanId}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open delivery challan PDF'))}>
                   Print PDF
                 </PdfActionButton>
@@ -95,6 +94,10 @@ const ChallanDetailPage = () => {
                 <br />
                 DATE: {new Date(challan.challanDate).toLocaleDateString()}
                 <br />
+                <br />
+                VENDOR: {challan.supplier?.name || '-'}
+                <br />
+                PICKUP ADDRESS: {challan.pickupAddress || challan.supplier?.address || 'Inventory / vendor location'}
                 <br />
                 TRANSPORT TYPE: {challan.transportType || '-'}
                 <br />
