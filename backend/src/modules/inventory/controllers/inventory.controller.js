@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { CategoryDefinition } from '../models/category-definition.model.js';
-import { InventoryItem } from '../models/item.model.js';
+import { DEFAULT_HSN_CODE, InventoryItem, laserCutMaterialDetails } from '../models/item.model.js';
 import { StockTransaction } from '../models/transaction.model.js';
 import { Supplier } from '../models/supplier.model.js';
 import { validateSpecs } from '../services/validate-specs.service.js';
@@ -8,11 +8,16 @@ import { auditEvent } from '../../../services/audit.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
 
 const categoryFields = ['slug', 'label', 'fields'];
-const itemFields = ['sku', 'productCode', 'category', 'name', 'description', 'unit', 'quantityInStock', 'minStockLevel', 'location', 'supplier', 'unitCost', 'status', 'productImage', 'shadeImage', 'specs'];
+const itemFields = ['sku', 'productCode', 'category', 'name', 'description', 'hsnCode', 'unit', 'materialType', 'defaultDimensions', 'quantityInStock', 'minStockLevel', 'location', 'supplier', 'shadeName', 'shadeCode', 'unitCost', 'status', 'productImage', 'shadeImage', 'specs'];
 const pick = (body, fields) => Object.fromEntries(fields.filter((key) => body[key] !== undefined).map((key) => [key, body[key]]));
 const invalid = (res, id) => !mongoose.isObjectIdOrHexString(id) && (res.status(400).json({ error: { message: 'Invalid id' } }), true);
 const pageParams = (query) => ({ page: Math.max(Number.parseInt(query.page, 10) || 1, 1), limit: Math.min(Math.max(Number.parseInt(query.limit, 10) || 25, 1), 100) });
-const supplierFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'taxId', 'notes', 'status'];
+const supplierFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'taxId', 'notes', 'serviceTypes', 'status'];
+export function validateMaterialDimensions(materialType, dimensions = {}) {
+  const height = Number(dimensions.heightFt); const width = Number(dimensions.widthFt); const length = Number(dimensions.lengthFt);
+  if (materialType === 'SHEET' && (!Number.isFinite(height) || height <= 0 || !Number.isFinite(width) || width <= 0)) throw Object.assign(new Error('Sheet height and width must be greater than zero'), { statusCode: 400 });
+  if (materialType === 'TUBE' && (!Number.isFinite(length) || length <= 0)) throw Object.assign(new Error('Tube length must be greater than zero'), { statusCode: 400 });
+}
 
 export async function listCategories(req, res) { return res.json({ data: await CategoryDefinition.find().sort({ label: 1 }).lean() }); }
 export async function createCategory(req, res) {
@@ -36,7 +41,14 @@ export async function deleteCategory(req, res) {
   await auditEvent(req, { action: 'inventory.category.delete', entity: 'inventory_category', entityId: category._id, before: category.toObject() });
   return res.status(204).end();
 }
-export async function listSuppliers(req, res) { return res.json({ data: await Supplier.find(req.query.status ? { status: req.query.status } : {}).sort({ name: 1 }).lean() }); }
+export async function listSuppliers(req, res) {
+  const filter = req.query.status ? { status: req.query.status } : {};
+  if (req.query.serviceType) {
+    if (!['laser_cut', 'powder_coating'].includes(req.query.serviceType)) return res.status(400).json({ error: { message: 'Invalid supplier service type' } });
+    filter.serviceTypes = req.query.serviceType;
+  }
+  return res.json({ data: await Supplier.find(filter).sort({ name: 1 }).lean() });
+}
 export async function createSupplier(req, res) { const supplier = await Supplier.create(pick(req.body, supplierFields)); await auditEvent(req, { action: 'inventory.supplier.create', entity: 'inventory_supplier', entityId: supplier._id, after: supplier.toObject() }); return res.status(201).json({ data: supplier }); }
 export async function updateSupplier(req, res) { if (invalid(res, req.params.id)) return; const supplier = await Supplier.findByIdAndUpdate(req.params.id, pick(req.body, supplierFields), { new: true, runValidators: true }); return supplier ? res.json({ data: supplier }) : res.status(404).json({ error: { message: 'Supplier not found' } }); }
 export async function listItems(req, res) {
@@ -48,7 +60,8 @@ export async function listItems(req, res) {
   if (req.query.lowStock === 'true') filter.$expr = { $lte: ['$quantityInStock', '$minStockLevel'] };
   if (req.query.q?.trim()) filter.$or = [{ sku: { $regex: req.query.q.trim(), $options: 'i' } }, { productCode: { $regex: req.query.q.trim(), $options: 'i' } }, { name: { $regex: req.query.q.trim(), $options: 'i' } }];
   const [data, total] = await Promise.all([InventoryItem.find(filter).populate('supplier', 'name contactPerson phone address').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(), InventoryItem.countDocuments(filter)]);
-  return res.json({ data, meta: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) } });
+  const items = await Promise.all(data.map(async (item) => ({ ...item, hsnCode: item.hsnCode || DEFAULT_HSN_CODE, ...laserCutMaterialDetails(item), shadeImage: item.shadeImage ? (await signAttachmentUrls([item.shadeImage]))[0] : undefined })));
+  return res.json({ data: items, meta: { page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) } });
 }
 export async function lowStockReport(req, res) {
   const data = await InventoryItem.find({ status: 'active', $expr: { $lte: ['$quantityInStock', '$minStockLevel'] } }).sort({ quantityInStock: 1, name: 1 }).lean();
@@ -58,11 +71,16 @@ export async function getItem(req, res) {
   if (invalid(res, req.params.id)) return;
   const item = await InventoryItem.findById(req.params.id).populate('supplier', 'name contactPerson phone email address').lean();
   if (!item) return res.status(404).json({ error: { message: 'Item not found' } });
-  return res.json({ data: { ...item, productImage: item.productImage ? (await signAttachmentUrls([item.productImage]))[0] : undefined, shadeImage: item.shadeImage ? (await signAttachmentUrls([item.shadeImage]))[0] : undefined } });
+  return res.json({ data: { ...item, hsnCode: item.hsnCode || DEFAULT_HSN_CODE, ...laserCutMaterialDetails(item), productImage: item.productImage ? (await signAttachmentUrls([item.productImage]))[0] : undefined, shadeImage: item.shadeImage ? (await signAttachmentUrls([item.shadeImage]))[0] : undefined } });
 }
 export async function createItem(req, res) {
   const input = pick(req.body, itemFields);
   if (!input.sku || !input.category || !input.name) return res.status(400).json({ error: { message: 'SKU, category, and name are required' } });
+  input.hsnCode = String(input.hsnCode || '').trim() || DEFAULT_HSN_CODE;
+  input.shadeName = String(input.shadeName || '').trim();
+  input.shadeCode = String(input.shadeCode || '').trim().toUpperCase();
+  if (!input.shadeName || !input.shadeCode) return res.status(400).json({ error: { message: 'Shade name and shade code are required' } });
+  validateMaterialDimensions(input.materialType, input.defaultDimensions);
   for (const key of ['productImage', 'shadeImage']) if (input[key] && !(input[key] = trustedAttachment(input[key]))) return res.status(400).json({ error: { message: `Invalid ${key}` } });
   await validateSpecs(input.category, input.specs || {});
   const item = await InventoryItem.create(input);
@@ -74,8 +92,12 @@ export async function updateItem(req, res) {
   const item = await InventoryItem.findById(req.params.id);
   if (!item) return res.status(404).json({ error: { message: 'Item not found' } });
   const input = pick(req.body, itemFields.filter((field) => !['quantityInStock', 'minStockLevel'].includes(field)));
+  if (input.hsnCode !== undefined) input.hsnCode = String(input.hsnCode || '').trim() || DEFAULT_HSN_CODE;
+  if (input.shadeName !== undefined) input.shadeName = String(input.shadeName || '').trim();
+  if (input.shadeCode !== undefined) input.shadeCode = String(input.shadeCode || '').trim().toUpperCase();
   for (const key of ['productImage', 'shadeImage']) if (input[key] && !(input[key] = trustedAttachment(input[key]))) return res.status(400).json({ error: { message: `Invalid ${key}` } });
   const category = input.category || item.category;
+  validateMaterialDimensions(input.materialType || item.materialType, input.defaultDimensions === undefined ? item.defaultDimensions : input.defaultDimensions);
   if (input.specs !== undefined || input.category !== undefined) await validateSpecs(category, input.specs === undefined ? item.specs.toObject() : input.specs);
   Object.assign(item, input); await item.save();
   await auditEvent(req, { action: 'inventory.item.update', entity: 'inventory_item', entityId: item._id, after: item.toObject() });

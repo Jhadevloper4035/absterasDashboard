@@ -3,19 +3,37 @@ import { auditEvent } from '../../../services/audit.service.js';
 import { Client } from '../../clients/models/client.model.js';
 import { Challan } from '../models/challan.model.js';
 import { createChallanPdf } from '../services/challan-pdf.service.js';
-import { InventoryItem } from '../../inventory/models/item.model.js';
+import { DEFAULT_HSN_CODE, InventoryItem } from '../../inventory/models/item.model.js';
 import { StockTransaction } from '../../inventory/models/transaction.model.js';
 import { ReturnProduct } from '../../returns/models/return-product.model.js';
 
-const FIELDS = ['client', 'site', 'supplier', 'challanDate', 'pickupAddress', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'freightCharge', 'taxableAmount', 'gstAmount', 'roundOff', 'totalAmount', 'linkedInvoice', 'pdfFileUrl'];
+const FIELDS = ['client', 'site', 'supplier', 'challanDate', 'pickupAddress', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'linkedInvoice', 'pdfFileUrl'];
 const payload = (body) => FIELDS.reduce((result, field) => (body?.[field] !== undefined ? { ...result, [field]: body[field] } : result), {});
-const required = (body) => ['client', 'challanDate', 'taxableAmount', 'totalAmount'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
+const required = (body) => ['client', 'challanDate'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
 const challanNumber = () => `DC-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
 const requestedChallanNumber = (value) => /^DC-[A-F0-9]{10}$/.test(String(value || '')) ? value : undefined;
 
+export function inventoryLineFor(material, line) {
+  const quantity = Number(line?.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) throw Object.assign(new Error('Item quantity must be greater than zero'), { statusCode: 400 });
+  return { inventoryItem: material._id, description: material.name, hsnCode: material.hsnCode || DEFAULT_HSN_CODE, quantity, unit: material.unit };
+}
+
+async function inventoryLines(lines) {
+  if (!Array.isArray(lines) || !lines.length || lines.some((line) => !line?.inventoryItem)) throw Object.assign(new Error('Select at least one inventory material'), { statusCode: 400 });
+  const items = await InventoryItem.find({ _id: { $in: lines.map((line) => line.inventoryItem) }, status: 'active' }).lean();
+  const byId = new Map(items.map((item) => [String(item._id), item]));
+  return lines.map((line) => {
+    const material = byId.get(String(line.inventoryItem));
+    if (!material) throw Object.assign(new Error('Inventory material not found or inactive'), { statusCode: 400 });
+    return inventoryLineFor(material, line);
+  });
+}
+
 export async function createChallan(req, res) {
-  if (!required(req.body)) return res.status(400).json({ error: { message: 'Client, date, taxable amount, and total amount are required' } });
+  if (!required(req.body)) return res.status(400).json({ error: { message: 'Client and date are required' } });
   let challan; const values = payload(req.body); const requestedNumber = requestedChallanNumber(req.body?.challanNumber);
+  values.lineItems = await inventoryLines(values.lineItems);
   if (values.site && !await Client.exists({ _id: values.site, parentClient: values.client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try { challan = await Challan.create({ ...values, challanNumber: attempt === 0 && requestedNumber ? requestedNumber : challanNumber() }); break; }
@@ -49,6 +67,10 @@ export async function listChallans(req, res) {
   const query = {};
   if (req.query.client) query.client = req.query.client;
   if (req.query.site) query.site = req.query.site;
+  if (req.query.type) {
+    if (!['delivery', 'return_transfer'].includes(req.query.type)) return res.status(400).json({ error: { message: 'Invalid challan type' } });
+    query.transferType = req.query.type;
+  }
   if (search) query.challanNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
   const [challans, total] = await Promise.all([Challan.find(query).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').sort({ challanDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit), Challan.countDocuments(query)]);
   return res.json({ data: challans, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
@@ -74,6 +96,7 @@ export async function updateChallan(req, res) {
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   if (challan.transferType === 'return_transfer') return res.status(409).json({ error: { message: 'Return transfer challans cannot be edited because their quantities are linked to return storage' } });
   const values = payload(req.body);
+  if (values.lineItems !== undefined) return res.status(409).json({ error: { message: 'Challan items cannot be changed after inventory stock is transferred' } });
   const client = values.client || challan.client;
   if (values.site && !await Client.exists({ _id: values.site, parentClient: client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
   Object.assign(challan, values);

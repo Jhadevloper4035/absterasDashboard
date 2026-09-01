@@ -5,8 +5,6 @@ import ActivityStreamToggle from './components/ActivityStreamToggle'
 import LeftSideBarToggle from './components/LeftSideBarToggle'
 import ProfileDropdown from './components/ProfileDropdown'
 import SearchBox from './components/SearchBox'
-import ThemeCustomizerToggle from './components/ThemeCustomizerToggle'
-import ThemeModeToggle from './components/ThemeModeToggle'
 
 const AppsDropdown = lazy(() => import('./components/AppsDropdown'))
 const Notifications = lazy(() => import('./components/Notifications'))
@@ -22,9 +20,6 @@ const TopNavigationBar = () => {
             <SearchBox />
           </div>
           <div className="d-flex align-items-center gap-1">
-            {/* Toggle Theme Mode */}
-            <ThemeModeToggle />
-
             {/* Apps Dropdown */}
             <Suspense>
               <AppsDropdown />
@@ -34,9 +29,6 @@ const TopNavigationBar = () => {
             <Suspense>
               <Notifications />
             </Suspense>
-
-            {/* Toggle for Theme Customizer */}
-            <ThemeCustomizerToggle />
 
             {/* Toggle for Activity Stream */}
             <ActivityStreamToggle />

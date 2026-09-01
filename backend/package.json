@@ -10,6 +10,8 @@
     "worker": "node src/worker.js",
     "db:seed": "node src/seed.js",
     "inventory:seed": "node src/seed.js",
+    "inventory:reset-demo": "NODE_ENV=development SEED_DEMO_DATA=true RESET_DEMO_INVENTORY=true node src/seed.js",
+    "inventory:fill-hsn": "node scripts/fill-missing-inventory-hsn.mjs",
     "hr:migrate-users": "node scripts/migrate-users-to-employees.mjs",
     "hr:seed-employees": "node scripts/seed-dummy-employees.mjs",
     "hr:seed-demo-data": "node scripts/seed-employee-demo-data.mjs",

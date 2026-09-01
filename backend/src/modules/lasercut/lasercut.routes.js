@@ -1,0 +1,25 @@
+import { Router } from 'express';
+import { asyncHandler } from '../../middleware/async-handler.js';
+import { authenticate, authorizeInventoryModule } from '../auth/middleware/auth.middleware.js';
+import * as controller from './lasercut.controller.js';
+
+export const laserCutRouter = Router();
+laserCutRouter.use(asyncHandler(authenticate), authorizeInventoryModule('items'));
+laserCutRouter.get('/summary', asyncHandler(controller.summary));
+laserCutRouter.get('/vendors', asyncHandler(controller.listVendors));
+laserCutRouter.post('/vendors', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.createVendor));
+laserCutRouter.patch('/vendors/:id', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.updateVendor));
+laserCutRouter.delete('/vendors/:id', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.deleteVendor));
+laserCutRouter.get('/orders', asyncHandler(controller.listOrders));
+laserCutRouter.post('/orders', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.createOrder));
+laserCutRouter.get('/orders/:id', asyncHandler(controller.getOrder));
+laserCutRouter.patch('/orders/:id', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.updateOrder));
+laserCutRouter.delete('/orders/:id', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.deleteOrder));
+laserCutRouter.get('/challans', asyncHandler(controller.listChallans));
+laserCutRouter.post('/challans', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.createChallan));
+laserCutRouter.post('/challans/:id/dispatch', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.dispatchChallan));
+laserCutRouter.post('/challans/:id/receive', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.receiveChallan));
+laserCutRouter.get('/stock', asyncHandler(controller.listStock));
+laserCutRouter.post('/usage-entries', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.createUsage));
+laserCutRouter.get('/usage-entries', asyncHandler(controller.listUsage));
+laserCutRouter.get('/audit', asyncHandler(controller.listAudit));

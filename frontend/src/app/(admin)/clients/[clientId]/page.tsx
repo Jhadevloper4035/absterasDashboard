@@ -10,7 +10,7 @@ import type { Client } from '../client-form'
 
 type Site = Pick<Client, '_id' | 'name' | 'siteName' | 'siteAddress' | 'status'>
 type Invoice = { _id: string; invoiceNumber: string; invoiceDate: string; grandTotal: number; status: 'unpaid' | 'partially paid' | 'paid'; site?: Site }
-type Challan = { _id: string; challanNumber: string; challanDate: string; totalAmount: number; site?: Site }
+type Challan = { _id: string; challanNumber: string; challanDate: string; site?: Site }
 const amount = (value?: number) => value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'
 
 const ClientOverviewPage = () => {
@@ -42,7 +42,6 @@ const ClientOverviewPage = () => {
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load client'))
   }, [clientId])
   const totalInvoiced = invoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0)
-  const totalChallans = challans.reduce((sum, challan) => sum + challan.totalAmount, 0)
   const download = (path: string, filename: string) => downloadPdf(path, filename, token)
   const parentClientId = client && (typeof client.parentClient === 'string' ? client.parentClient : client.parentClient?._id)
   const documentClientId = parentClientId || client?._id
@@ -228,7 +227,6 @@ const ClientOverviewPage = () => {
             <CardBody>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="mb-0">Delivery challans</h5>
-                <strong>Total challan value: {amount(totalChallans)}</strong>
               </div>
               <Table responsive hover className="mb-0">
                 <thead>
@@ -236,7 +234,6 @@ const ClientOverviewPage = () => {
                     <th>Challan</th>
                     <th>Delivery address</th>
                     <th>Date</th>
-                    <th>Total amount</th>
                     <th />
                   </tr>
                 </thead>
@@ -248,7 +245,6 @@ const ClientOverviewPage = () => {
                       </td>
                       <td>{deliveryAddress(challan.site)}</td>
                       <td>{new Date(challan.challanDate).toLocaleDateString()}</td>
-                      <td>{amount(challan.totalAmount)}</td>
                       <td className="text-end">
                         <Link to={`/challans/${challan._id}`}>
                           <Button size="sm" variant="outline-primary" className="me-2">
@@ -274,7 +270,7 @@ const ClientOverviewPage = () => {
                   ))}
                   {!challans.length && (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                    <td colSpan={4} className="text-center text-muted py-4">
                         No challans yet.
                       </td>
                     </tr>

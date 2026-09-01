@@ -27,6 +27,8 @@ export const moduleForPath = (path: string) => {
   if (path.startsWith('/hr')) return 'hr'
   if (path.startsWith('/clients') || path.startsWith('/invoices') || path.startsWith('/challans')) return 'clients'
   if (path.startsWith('/inventory')) return 'inventory'
+  if (path.startsWith('/laser-cut-management')) return 'inventory'
+  if (path.startsWith('/powder-coating-management')) return 'inventory'
   if (path.startsWith('/returns')) return 'returns'
   return undefined
 }

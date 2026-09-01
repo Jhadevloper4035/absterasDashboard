@@ -8,12 +8,13 @@ import { Link } from 'react-router-dom'
 import { Alert, Badge, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
 type Client = { _id: string; name: string }
-type Challan = { _id: string; challanNumber: string; challanDate: string; totalAmount: number; transferType?: 'delivery' | 'return_transfer'; client?: Client }
+type Challan = { _id: string; challanNumber: string; challanDate: string; transferType?: 'delivery' | 'return_transfer'; client?: Client }
 const ChallansPage = () => {
   const [clients, setClients] = useState<Client[]>([])
   const [challans, setChallans] = useState<Challan[]>([])
   const [search, setSearch] = useState('')
   const [client, setClient] = useState('')
+  const [transferType, setTransferType] = useState('')
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState('')
   const token = useAuthStore((state) => state.token)
@@ -21,6 +22,7 @@ const ChallansPage = () => {
     const query = new URLSearchParams()
     if (search) query.set('q', search)
     if (client) query.set('client', client)
+    if (transferType) query.set('type', transferType)
     apiFetch<{ data: Challan[] }>(`/challans?${query}`)
       .then(({ data }) => setChallans(data))
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load challans'))
@@ -32,7 +34,7 @@ const ChallansPage = () => {
   }, [])
   useEffect(() => {
     load()
-  }, [search, client])
+  }, [search, client, transferType])
   const download = (challan: Challan) => downloadPdf(`/challans/${challan._id}/pdf`, `challan-${challan.challanNumber}.pdf`, token)
   return (
     <>
@@ -42,11 +44,12 @@ const ChallansPage = () => {
           <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
             <div>
               <h4 className="card-title mb-1">Delivery challans</h4>
-              <p className="text-muted mb-0">Filter by challan number or client.</p>
+              <p className="text-muted mb-0">Filter by challan number, client, or type.</p>
             </div>
-            <Link to="/challans/create">
-              <Button>Create challan</Button>
-            </Link>
+            <div className="d-flex gap-2">
+              <Link to="/challans/create?type=hardware"><Button variant="outline-primary">Send hardware</Button></Link>
+              <Link to="/challans/create"><Button>Create challan</Button></Link>
+            </div>
           </div>
           {error && (
             <Alert className="mt-3 mb-0" variant="danger">
@@ -58,10 +61,10 @@ const ChallansPage = () => {
       <Card>
         <CardBody>
           <div className="row g-2 mb-3">
-            <div className="col-md-6">
+            <div className="col-md-4">
               <Form.Control placeholder="Search challan number" value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
-            <div className="col-md-6">
+            <div className="col-md-4">
               <Form.Select value={client} onChange={(event) => setClient(event.target.value)}>
                 <option value="">All clients</option>
                 {clients.map((entry) => (
@@ -69,6 +72,13 @@ const ChallansPage = () => {
                     {entry.name}
                   </option>
                 ))}
+              </Form.Select>
+            </div>
+            <div className="col-md-4">
+              <Form.Select value={transferType} onChange={(event) => setTransferType(event.target.value)}>
+                <option value="">All challan types</option>
+                <option value="delivery">Delivery</option>
+                <option value="return_transfer">Return transfer</option>
               </Form.Select>
             </div>
           </div>
@@ -79,7 +89,6 @@ const ChallansPage = () => {
                 <th>Type</th>
                 <th>Client</th>
                 <th>Date</th>
-                <th>Total amount</th>
                 <th />
               </tr>
             </thead>
@@ -90,7 +99,6 @@ const ChallansPage = () => {
                   <td><Badge bg={challan.transferType === 'return_transfer' ? 'primary' : 'secondary'}>{challan.transferType === 'return_transfer' ? 'Return transfer' : 'Delivery'}</Badge></td>
                   <td>{challan.client?.name || '-'}</td>
                   <td>{new Date(challan.challanDate).toLocaleDateString()}</td>
-                  <td>{challan.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   <td className="text-end">
                     <Link to={`/challans/${challan._id}`}>
                       <Button size="sm" variant="outline-primary" className="me-2">
@@ -116,7 +124,7 @@ const ChallansPage = () => {
               ))}
               {!challans.length && (
                 <tr>
-                  <td colSpan={6} className="text-center text-muted py-4">
+                    <td colSpan={5} className="text-center text-muted py-4">
                     No delivery challans found.
                   </td>
                 </tr>

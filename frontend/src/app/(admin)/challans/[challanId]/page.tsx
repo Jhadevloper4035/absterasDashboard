@@ -14,18 +14,12 @@ type Challan = {
   transportType?: string
   vehicleNumber?: string
   eWayBillNumber?: string
-  freightCharge: number
-  taxableAmount: number
-  gstAmount: number
-  roundOff: number
-  totalAmount: number
   transferType?: 'delivery' | 'return_transfer'
-  lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; rate: number; amount: number }[]
+  lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string }[]
   client: { name: string; siteName?: string; siteAddress?: string; gstin?: string; phone?: string; shippingAddress?: string; billingAddress?: string; state?: string; stateCode?: string }
   site?: { name: string; siteName?: string; siteAddress?: string; shippingAddress?: string; state?: string; stateCode?: string }
   supplier?: { name: string; address?: string }
 }
-const money = (value = 0) => value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const ChallanDetailPage = () => {
   const { challanId } = useParams()
   const [challan, setChallan] = useState<Challan>()
@@ -114,8 +108,6 @@ const ChallanDetailPage = () => {
                   <th>HSN Code</th>
                   <th className="text-end">Qty.</th>
                   <th>Unit</th>
-                  <th className="text-end">Rate</th>
-                  <th className="text-end">Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,8 +118,6 @@ const ChallanDetailPage = () => {
                     <td>{line.hsnCode || '-'}</td>
                     <td className="text-end">{line.quantity}</td>
                     <td>{line.unit}</td>
-                    <td className="text-end">{money(line.rate)}</td>
-                    <td className="text-end">{money(line.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -137,46 +127,10 @@ const ChallanDetailPage = () => {
                     TOTAL
                   </th>
                   <th className="text-end">{challan.lineItems.reduce((sum, line) => sum + line.quantity, 0)}</th>
-                  <th colSpan={2} />
-                  <th className="text-end">{money(challan.taxableAmount)}</th>
+                  <th />
                 </tr>
               </tfoot>
             </Table>
-            <div className="row border">
-              <div className="col-md-7 p-3">
-                <strong>Total Amount</strong>
-                <br />
-                Freight and taxes are included in the total below.
-              </div>
-              <div className="col-md-5 p-0">
-                <Table bordered className="mb-0">
-                  <tbody>
-                    <tr>
-                      <th>Freight Charge</th>
-                      <td className="text-end">{money(challan.freightCharge)}</td>
-                    </tr>
-                    <tr>
-                      <th>Goods Assessable Value</th>
-                      <td className="text-end">{money(challan.taxableAmount)}</td>
-                    </tr>
-                    <tr>
-                      <th>GST</th>
-                      <td className="text-end">{money(challan.gstAmount)}</td>
-                    </tr>
-                    {challan.roundOff !== 0 && (
-                      <tr>
-                        <th>Round Off</th>
-                        <td className="text-end">{money(challan.roundOff)}</td>
-                      </tr>
-                    )}
-                    <tr>
-                      <th>TOTAL AMOUNT</th>
-                      <th className="text-end">{money(challan.totalAmount)}</th>
-                    </tr>
-                  </tbody>
-                </Table>
-              </div>
-            </div>
             <div className="border p-3 mt-3">
               <strong>TERMS AND CONDITIONS</strong>
               <br />

@@ -117,10 +117,8 @@ export async function createReturnTransfer(req, res) {
     eWayBillNumber,
     lineItems: items.map((item) => {
       const product = productById.get(item.returnProduct);
-      return { description: product?.name || item.name, quantity: item.quantity, unit: product?.unit || item.unit, rate: 0, amount: 0 };
+      return { description: product?.name || item.name, quantity: item.quantity, unit: product?.unit || item.unit };
     }),
-    taxableAmount: 0,
-    totalAmount: 0,
   }, challanNumber);
   if (!challan) return res.status(409).json({ error: { message: 'Unable to generate a unique challan number. Please try again.' } });
 

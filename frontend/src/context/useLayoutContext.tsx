@@ -3,7 +3,7 @@ import { createContext, useContext, useCallback, useEffect, useMemo, useState } 
 import useLocalStorage from '@/hooks/useLocalStorage'
 import useQueryParams from '@/hooks/useQueryParams'
 import type { ChildrenType } from '@/types/component-props'
-import type { LayoutState, LayoutType, MenuType, OffcanvasControlType, LayoutOffcanvasStatesType, ThemeType } from '@/types/context'
+import type { LayoutState, LayoutType, MenuType, OffcanvasControlType, LayoutOffcanvasStatesType } from '@/types/context'
 import { toggleDocumentAttribute } from '@/utils/layout'
 
 const ThemeContext = createContext<LayoutType | undefined>(undefined)
@@ -16,65 +16,34 @@ const useLayoutContext = () => {
   return context
 }
 
-const getPreferredTheme = (): ThemeType => (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-
 const LayoutProvider = ({ children }: ChildrenType) => {
   const queryParams = useQueryParams()
 
-  const override = !!(queryParams.layout_theme || queryParams.topbar_theme || queryParams.menu_theme || queryParams.menu_size);
-
   const INIT_STATE: LayoutState = {
-    theme: queryParams['layout_theme'] ? (queryParams['layout_theme'] as ThemeType) : getPreferredTheme(),
-    topbarTheme: queryParams['topbar_theme'] ? (queryParams['topbar_theme'] as ThemeType) : 'light',
+    theme: 'dark',
+    topbarTheme: 'dark',
     menu: {
-      theme: queryParams['menu_theme'] ? (queryParams['menu_theme'] as MenuType['theme']) : 'light',
+      theme: 'dark',
       size: queryParams['menu_size'] ? (queryParams['menu_size'] as MenuType['size']) : 'sm-hover-active',
     },
   }
 
-  const [settings, setSettings] = useLocalStorage<LayoutState>('__REBACK_NEXT_CONFIG__', INIT_STATE,override)
+  const [settings, setSettings] = useLocalStorage<LayoutState>('__REBACK_NEXT_CONFIG__', INIT_STATE, true)
   const [offcanvasStates, setOffcanvasStates] = useState<LayoutOffcanvasStatesType>({
-    showThemeCustomizer: false,
     showActivityStream: false,
     showBackdrop: false,
   })
 
-  // update settings
-  const updateSettings = (_newSettings: Partial<LayoutState>) => setSettings({ ...settings, ..._newSettings })
-
-  // update theme mode
-  const changeTheme = (newTheme: ThemeType) => {
-    updateSettings({ theme: newTheme })
-  }
-
-  // change topbar theme
-  const changeTopbarTheme = (newTheme: ThemeType) => {
-    updateSettings({ topbarTheme: newTheme })
-  }
-
-  // change menu theme
-  const changeMenuTheme = (newTheme: MenuType['theme']) => {
-    updateSettings({ menu: { ...settings.menu, theme: newTheme } })
-  }
+  const updateSettings = (newSettings: Partial<LayoutState>) => setSettings({ ...settings, ...newSettings, theme: 'dark', topbarTheme: 'dark', menu: { ...settings.menu, ...newSettings.menu, theme: 'dark' } })
 
   // change menu theme
   const changeMenuSize = (newSize: MenuType['size']) => {
     updateSettings({ menu: { ...settings.menu, size: newSize } })
   }
 
-  // toggle theme customizer offcanvas
-  const toggleThemeCustomizer: OffcanvasControlType['toggle'] = () => {
-    setOffcanvasStates({ ...offcanvasStates, showThemeCustomizer: !offcanvasStates.showThemeCustomizer })
-  }
-
   // toggle activity stream offcanvas
   const toggleActivityStream: OffcanvasControlType['toggle'] = () => {
     setOffcanvasStates({ ...offcanvasStates, showActivityStream: !offcanvasStates.showActivityStream })
-  }
-
-  const themeCustomizer: LayoutType['themeCustomizer'] = {
-    open: offcanvasStates.showThemeCustomizer,
-    toggle: toggleThemeCustomizer,
   }
 
   const activityStream: LayoutType['activityStream'] = {
@@ -112,13 +81,9 @@ const LayoutProvider = ({ children }: ChildrenType) => {
         () => ({
           ...settings,
           themeMode: settings.theme,
-          changeTheme,
-          changeTopbarTheme,
           changeMenu: {
-            theme: changeMenuTheme,
             size: changeMenuSize,
           },
-          themeCustomizer,
           activityStream,
           toggleBackdrop,
           resetSettings,

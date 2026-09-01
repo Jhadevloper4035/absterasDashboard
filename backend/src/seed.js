@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { connectDatabase } from './config/db.js';
+import { env } from './config/env.js';
 import { Architect } from './modules/leads/models/architect.model.js';
 import { Lead } from './modules/leads/models/lead.model.js';
 import { Client } from './modules/clients/models/client.model.js';
@@ -11,27 +12,68 @@ import { hashPassword } from './modules/auth/services/password.service.js';
 import { CategoryDefinition } from './modules/inventory/models/category-definition.model.js';
 import { InventoryItem } from './modules/inventory/models/item.model.js';
 import { InventoryPermission, INVENTORY_MODULES } from './modules/inventory/models/permission.model.js';
+import { Supplier } from './modules/inventory/models/supplier.model.js';
+import { StockTransaction } from './modules/inventory/models/transaction.model.js';
+import { LaserCutVendor } from './modules/lasercut/models.js';
+import { PowderCoatVendor } from './modules/powdercoating/models.js';
 
 const inventoryCategories = [
   ['tube', 'Tube', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm'], ['coating', 'Coating/Paint', 'string']]],
-  ['sheet', 'Sheet', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['width', 'Width (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm'], ['coating', 'Coating/Shade', 'string']]],
+  ['sheet', 'Sheet', [['size', 'Size (ft)', 'string'], ['thickness', 'Thickness (mm)', 'number', true, 'mm'], ['coating', 'Coating/Shade', 'string']]],
   ['profile', 'Profile / Section', [['codeOrSize', 'Code/Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['width', 'Width (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
   ['hand_rail', 'Hand Rail', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
   ['bottom_rail', 'Bottom Rail', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
   ['hardware', 'Hardware', [['hardwareType', 'Hardware Type', 'string', true], ['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm']]],
 ].map(([slug, label, fields]) => ({ slug, label, fields: fields.map(([key, fieldLabel, type, required = false, unit]) => ({ key, label: fieldLabel, type, required, unit })) }));
 const demoInventoryItems = [
-  ['TUBE-0001', 'tube', 'Aluminium Tube 25x50', 'pcs', 100, 25, 'A-01', 42, { size: '25x50', length: 3657, thickness: 1, coating: 'Powder coated white' }],
-  ['TUBE-0002', 'tube', 'Aluminium Tube 50x50', 'pcs', 18, 25, 'A-02', 54, { size: '50x50', length: 3657, thickness: 1.2, coating: 'Mill finish' }],
-  ['SHT-0001', 'sheet', 'Aluminium Sheet 1220x2440', 'sheet', 30, 10, 'B-01', 180, { size: '1220x2440', length: 2440, width: 1220, thickness: 1.2, coating: 'Silver' }],
-  ['SHT-0002', 'sheet', 'Aluminium Sheet 1220x3050', 'sheet', 8, 10, 'B-02', 225, { size: '1220x3050', length: 3050, width: 1220, thickness: 1.5, coating: 'Black' }],
-  ['PRF-0001', 'profile', 'U Profile 40mm', 'meter', 80, 20, 'C-01', 18, { codeOrSize: 'U-40', length: 6000, width: 40, thickness: 1.2 }],
-  ['PRF-0002', 'profile', 'L Profile 25mm', 'meter', 12, 20, 'C-02', 12, { codeOrSize: 'L-25', length: 6000, width: 25, thickness: 1 }],
-  ['HR-0001', 'hand_rail', 'Hand Rail 50x25', 'meter', 44, 15, 'D-01', 35, { size: '50x25', length: 6000, thickness: 1.5 }],
-  ['BR-0001', 'bottom_rail', 'Bottom Rail 60x30', 'meter', 10, 15, 'D-02', 31, { size: '60x30', length: 6000, thickness: 1.5 }],
-  ['HW-0001', 'hardware', 'Truss Head Screw', 'pcs', 500, 100, 'E-01', 0.35, { hardwareType: 'truss_head', size: 'M4', length: 16 }],
-  ['HW-0002', 'hardware', 'Shelf Screw', 'pcs', 45, 100, 'E-02', 0.45, { hardwareType: 'shelf_screw', size: 'M5', length: 25 }],
-].map(([sku, category, name, unit, quantityInStock, minStockLevel, location, unitCost, specs]) => ({ sku, category, name, unit, quantityInStock, minStockLevel, location, unitCost, specs }));
+  ['TUBE-0001', 'tube', 'Aluminium Tube 25x50', 'pcs', 100, 25, 'A-01', 42, '7608', { size: '25x50', length: 3657, thickness: 1, coating: 'Powder coated white' }],
+  ['TUBE-0002', 'tube', 'Aluminium Tube 50x50', 'pcs', 18, 25, 'A-02', 54, '7608', { size: '50x50', length: 3657, thickness: 1.2, coating: 'Mill finish' }],
+  ['TUBE-0003', 'tube', 'Aluminium Tube 25x25', 'pcs', 72, 20, 'A-03', 35, '7608', { size: '25x25', length: 3657, thickness: 1, coating: 'Anodized silver' }],
+  ['SHT-0001', 'sheet', 'Aluminium Sheet 4x8 ft', 'sheet', 30, 10, 'B-01', 180, '7606', { size: '4 × 8 ft', thickness: 1.2, coating: 'Silver' }, { heightFt: 8, widthFt: 4 }],
+  ['SHT-0002', 'sheet', 'Aluminium Sheet 4x10 ft', 'sheet', 8, 10, 'B-02', 225, '7606', { size: '4 × 10 ft', thickness: 1.5, coating: 'Black' }, { heightFt: 10, widthFt: 4 }],
+  ['SHT-0003', 'sheet', 'Aluminium Sheet 5x10 ft', 'sheet', 16, 8, 'B-03', 270, '7606', { size: '5 × 10 ft', thickness: 2, coating: 'White' }, { heightFt: 10, widthFt: 5 }],
+  ['PRF-0001', 'profile', 'U Profile 40mm', 'meter', 80, 20, 'C-01', 18, '7604', { codeOrSize: 'U-40', length: 6000, width: 40, thickness: 1.2 }],
+  ['HR-0001', 'hand_rail', 'Hand Rail 50x25', 'meter', 44, 15, 'D-01', 35, '7604', { size: '50x25', length: 6000, thickness: 1.5 }],
+  ['BR-0001', 'bottom_rail', 'Bottom Rail 60x30', 'meter', 10, 15, 'D-02', 31, '7604', { size: '60x30', length: 6000, thickness: 1.5 }],
+  ['HW-0001', 'hardware', 'Truss Head Screw', 'pcs', 500, 100, 'E-01', 0.35, '7318', { hardwareType: 'truss_head', size: 'M4', length: 16 }],
+].map(([sku, category, name, unit, quantityInStock, minStockLevel, location, unitCost, hsnCode, specs, defaultDimensions], index) => ({
+  sku,
+  category,
+  name,
+  unit,
+  quantityInStock,
+  minStockLevel,
+  location,
+  unitCost,
+  hsnCode,
+  specs,
+  shadeName: specs.coating || 'Natural finish',
+  shadeCode: `PC-${String(index + 1).padStart(4, '0')}`,
+  materialType: category === 'sheet' ? 'SHEET' : category === 'tube' ? 'TUBE' : 'OTHER',
+  defaultDimensions: defaultDimensions || (category === 'sheet'
+    ? { heightFt: specs.length / 304.8, widthFt: specs.width / 304.8 }
+    : category === 'tube'
+      ? { lengthFt: specs.length / 304.8 }
+      : {}),
+}));
+
+const demoSuppliers = [
+  ['Apex Aluminium Supplies', 'Ravi Sharma', '+919810000101', 'orders@apexaluminium.example.com', 'Plot 18, Sector 6, IMT Manesar, Gurugram, Haryana 122050', '06AABCA0001A1Z1'],
+  ['Metro Metal Traders', 'Neha Verma', '+919810000102', 'sales@metrometal.example.com', 'Shed 42, Udyog Vihar Phase 4, Gurugram, Haryana 122016', '06AABCM0002B1Z2'],
+  ['Prime Facade Materials', 'Arjun Singh', '+919810000103', 'dispatch@primefacade.example.com', 'Plot 7, Industrial Area, Sector 58, Faridabad, Haryana 121004', '06AABCP0003C1Z3'],
+  ['Vertex Hardware House', 'Pooja Mehta', '+919810000104', 'purchases@vertexhardware.example.com', '17 Okhla Industrial Estate Phase 2, New Delhi 110020', '07AABCV0004D1Z4'],
+  ['North Star Profiles', 'Karan Malhotra', '+919810000105', 'supply@northstarprofiles.example.com', 'Plot 91, Noida Special Economic Zone, Noida, Uttar Pradesh 201305', '09AABCN0005E1Z5'],
+].map(([name, contactPerson, phone, email, address, taxId]) => ({ name, contactPerson, phone, email, address, taxId, notes: 'Development dummy supplier', status: 'active' }));
+
+const demoLaserCutVendors = [
+  ['Precision Laser Works', 'Amit Bansal', '+919810000106', 'orders@precisionlaser.example.com', 'Plot 12, Udyog Vihar, Gurugram, Haryana 122016'],
+  ['Cutline Fabrication', 'Sonal Gupta', '+919810000107', 'dispatch@cutline.example.com', 'Shed 21, Sector 37, Faridabad, Haryana 121003'],
+].map(([name, contactPerson, phone, email, address]) => ({ name, contactPerson, phone, email, address, notes: 'Development dummy laser-cut vendor', status: 'active' }));
+
+const demoPowderCoatVendors = [
+  ['Spectrum Powder Coats', 'Manish Arora', '+919810000108', 'orders@spectrumpowder.example.com', 'Plot 44, IMT Manesar, Gurugram, Haryana 122051'],
+  ['FinishPro Coatings', 'Ritika Jain', '+919810000109', 'dispatch@finishpro.example.com', 'Shed 8, Udyog Vihar Phase 2, Gurugram, Haryana 122008'],
+].map(([name, contactPerson, phone, email, address]) => ({ name, contactPerson, phone, email, address, notes: 'Development dummy powder-coating vendor', status: 'active' }));
 
 const demoUsers = [
   {
@@ -181,7 +223,22 @@ const demoTasks = [
 }));
 
 async function seed() {
+  const databaseName = env.mongoUri?.split('/').at(-1)?.split('?')[0] || '';
+  if (process.env.NODE_ENV !== 'development' || process.env.SEED_DEMO_DATA !== 'true' || !/(dev|test|local)/i.test(databaseName)) {
+    throw new Error('Demo seed requires NODE_ENV=development, SEED_DEMO_DATA=true, and a development database');
+  }
+
   await connectDatabase();
+
+  let deletedInventoryCount = 0;
+  let deletedTransactionCount = 0;
+  if (process.env.RESET_DEMO_INVENTORY === 'true') {
+    const itemIds = (await InventoryItem.find({}).select('_id').lean()).map((item) => item._id);
+    if (itemIds.length) {
+      deletedTransactionCount = (await StockTransaction.deleteMany({ item: { $in: itemIds } })).deletedCount;
+      deletedInventoryCount = (await InventoryItem.deleteMany({})).deletedCount;
+    }
+  }
 
   let userCount = 0;
   for (const { password, ...user } of demoUsers) {
@@ -196,7 +253,26 @@ async function seed() {
   const superadmin = await User.findOne({ role: 'superadmin', status: 'active' });
   if (superadmin) await Promise.all(INVENTORY_MODULES.map((module) => InventoryPermission.findOneAndUpdate({ user: superadmin._id, module }, { access: 'manage', grantedBy: superadmin._id }, { upsert: true, runValidators: true })));
   for (const category of inventoryCategories) await CategoryDefinition.updateOne({ slug: category.slug }, { $set: category }, { upsert: true, runValidators: true });
-  for (const item of demoInventoryItems) await InventoryItem.updateOne({ sku: item.sku }, { $set: { ...item, status: 'active' } }, { upsert: true, runValidators: true });
+  const suppliers = await Promise.all(demoSuppliers.map((supplier) => Supplier.findOneAndUpdate({ email: supplier.email }, { $set: supplier }, { new: true, upsert: true, runValidators: true })));
+  await Promise.all(demoLaserCutVendors.map((vendor) => LaserCutVendor.findOneAndUpdate({ email: vendor.email }, { $set: vendor }, { new: true, upsert: true, runValidators: true })));
+  await Promise.all(demoPowderCoatVendors.map((vendor) => PowderCoatVendor.findOneAndUpdate({ email: vendor.email }, { $set: vendor }, { new: true, upsert: true, runValidators: true })));
+  for (const [index, item] of demoInventoryItems.entries()) await InventoryItem.updateOne({ sku: item.sku }, { $set: { ...item, supplier: suppliers[index % suppliers.length]._id, status: 'active' } }, { upsert: true, runValidators: true });
+
+  const creator = await User.findOne({ status: 'active', role: { $in: ['admin', 'superadmin'] } }).sort({ role: 1, createdAt: 1 });
+  const inventoryItems = await InventoryItem.find({}).select('_id sku supplier quantityInStock').sort({ sku: 1 });
+  let assignedSupplierCount = 0;
+  let purchaseCount = 0;
+  for (const [index, item] of inventoryItems.entries()) {
+    const supplier = item.supplier || suppliers[index % suppliers.length]._id;
+    if (!item.supplier) {
+      await InventoryItem.updateOne({ _id: item._id }, { $set: { supplier } });
+      assignedSupplierCount += 1;
+    }
+    if (creator && item.quantityInStock > 0 && !(await StockTransaction.exists({ item: item._id, type: 'in' }))) {
+      await StockTransaction.create({ item: item._id, type: 'in', quantity: item.quantityInStock, reference: `DEV-OPENING-${item.sku}`, note: 'Development opening purchase', performedBy: creator._id });
+      purchaseCount += 1;
+    }
+  }
 
   for (const lead of demoLeads) {
     if (!(await Lead.exists({ email: lead.email }))) {
@@ -252,7 +328,6 @@ async function seed() {
     challanCount += 1;
   }
 
-  const creator = await User.findOne({ status: 'active', role: { $in: ['admin', 'superadmin'] } }).sort({ role: 1, createdAt: 1 });
   const assignees = await User.find({ status: 'active', role: { $ne: 'superadmin' } }).sort({ createdAt: 1 });
   let taskCount = 0;
 
@@ -280,6 +355,8 @@ async function seed() {
   console.log(`Seeded ${challanCount} demo challans`);
   console.log(`Seeded ${taskCount} demo tasks`);
   console.log(`Seeded ${inventoryCategories.length} inventory categories and ${demoInventoryItems.length} inventory items`);
+  console.log(`Ensured ${demoSuppliers.length} demo suppliers, ${demoLaserCutVendors.length} laser-cut vendors, ${demoPowderCoatVendors.length} powder-coating vendors, assigned ${assignedSupplierCount} missing product suppliers, and added ${purchaseCount} opening purchases`);
+  if (process.env.RESET_DEMO_INVENTORY === 'true') console.log(`Removed ${deletedInventoryCount} inventory products and ${deletedTransactionCount} stock transactions before seeding`);
 }
 
 seed()

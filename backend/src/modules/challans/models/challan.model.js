@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const { ObjectId } = mongoose.Schema.Types;
-const lineItemSchema = new mongoose.Schema({ inventoryItem: { type: ObjectId, ref: 'InventoryItem' }, description: { type: String, required: true, trim: true }, hsnCode: { type: String, trim: true }, quantity: { type: Number, required: true, min: 0 }, unit: { type: String, trim: true }, rate: { type: Number, min: 0, default: 0 }, amount: { type: Number, required: true, min: 0 } }, { _id: false });
+const lineItemSchema = new mongoose.Schema({ inventoryItem: { type: ObjectId, ref: 'InventoryItem' }, description: { type: String, required: true, trim: true }, hsnCode: { type: String, trim: true }, quantity: { type: Number, required: true, min: 0 }, unit: { type: String, trim: true } }, { _id: false });
 const returnProductLineSchema = new mongoose.Schema({ product: { type: ObjectId, ref: 'ReturnProduct', required: true }, quantity: { type: Number, required: true, min: 0 } }, { _id: false });
 
 const challanSchema = new mongoose.Schema({
@@ -19,11 +19,6 @@ const challanSchema = new mongoose.Schema({
   vehicleNumber: { type: String, trim: true, uppercase: true },
   eWayBillNumber: { type: String, trim: true },
   lineItems: { type: [lineItemSchema], default: [] },
-  freightCharge: { type: Number, min: 0, default: 0 },
-  taxableAmount: { type: Number, required: true, min: 0 },
-  gstAmount: { type: Number, min: 0, default: 0 },
-  roundOff: { type: Number, default: 0 },
-  totalAmount: { type: Number, required: true, min: 0 },
   linkedInvoice: { type: ObjectId, ref: 'Invoice' },
   pdfFileUrl: { type: String, trim: true },
 }, { timestamps: true });

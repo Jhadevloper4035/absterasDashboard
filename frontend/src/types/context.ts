@@ -19,20 +19,15 @@ export type LayoutState = {
 }
 
 export type LayoutOffcanvasStatesType = {
-  showThemeCustomizer: boolean
   showActivityStream: boolean
   showBackdrop: boolean
 }
 
 export type LayoutType = LayoutState & {
   themeMode: ThemeType
-  changeTheme: (theme: ThemeType) => void
-  changeTopbarTheme: (theme: ThemeType) => void
   changeMenu: {
-    theme: (theme: MenuType['theme']) => void
     size: (size: MenuType['size']) => void
   }
-  themeCustomizer: OffcanvasControlType
   activityStream: OffcanvasControlType
   toggleBackdrop: () => void
   resetSettings: () => void

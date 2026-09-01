@@ -1,14 +1,14 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
 import { generatedChallanNumber } from '@/helpers/documentNumber'
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
 type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; billingAddress?: string; shippingAddress?: string; parentClient?: string | { _id: string } }
 type Supplier = { _id: string; name: string; address?: string }
-type InventoryItem = { _id: string; name: string; sku: string; unit: string; quantityInStock: number; supplier?: Supplier }
-type Line = { inventoryItem?: string; description: string; hsnCode: string; quantity: string; unit: string; rate: string }
+type InventoryItem = { _id: string; name: string; sku: string; category?: string; hsnCode?: string; unit: string; quantityInStock: number; supplier?: Supplier }
+type Line = { inventoryItem?: string; description: string; hsnCode: string; quantity: string; unit: string }
 type Challan = {
   challanNumber: string
   client: string | { _id: string }
@@ -19,16 +19,15 @@ type Challan = {
   transportType?: string
   vehicleNumber?: string
   eWayBillNumber?: string
-  freightCharge: number
-  gstAmount: number
-  lineItems: { inventoryItem?: string; description: string; hsnCode?: string; quantity: number; unit?: string; rate: number }[]
+  lineItems: { inventoryItem?: string; description: string; hsnCode?: string; quantity: number; unit?: string }[]
 }
-const blank = (): Line => ({ description: '', hsnCode: '', quantity: '1', unit: 'NOS', rate: '' })
+const blank = (): Line => ({ description: '', hsnCode: '', quantity: '1', unit: 'NOS' })
 
 const ChallanFormPage = () => {
   const { challanId } = useParams()
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const hardwareOnly = params.get('type') === 'hardware'
   const [clients, setClients] = useState<Client[]>([])
   const [materials, setMaterials] = useState<InventoryItem[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -41,8 +40,6 @@ const ChallanFormPage = () => {
   const [transportType, setTransportType] = useState('')
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [eWayBillNumber, setEWayBillNumber] = useState('')
-  const [freightCharge, setFreightCharge] = useState('0')
-  const [gstRate, setGstRate] = useState('18')
   const [lines, setLines] = useState<Line[]>([blank()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -68,7 +65,6 @@ const ChallanFormPage = () => {
           setTransportType(data.transportType || '')
           setVehicleNumber(data.vehicleNumber || '')
           setEWayBillNumber(data.eWayBillNumber || '')
-          setFreightCharge(String(data.freightCharge))
           setLines(
             data.lineItems.map((line) => ({
               description: line.description,
@@ -76,13 +72,13 @@ const ChallanFormPage = () => {
           quantity: String(line.quantity),
           inventoryItem: line.inventoryItem,
               unit: line.unit || '',
-              rate: String(line.rate),
             })),
           )
         })
         .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load challan'))
   }, [challanId])
   const parentClients = clients.filter((entry) => !entry.parentClient)
+  const selectableMaterials = hardwareOnly ? materials.filter((item) => item.category === 'hardware') : materials
   const sites = clients.filter((entry) => String(typeof entry.parentClient === 'string' ? entry.parentClient : entry.parentClient?._id) === client)
   const selectedClient = clients.find((entry) => entry._id === client)
   const clientAddress = selectedClient?.shippingAddress || selectedClient?.billingAddress || ''
@@ -96,14 +92,11 @@ const ChallanFormPage = () => {
     const hasSites = clients.some((current) => String(typeof current.parentClient === 'string' ? current.parentClient : current.parentClient?._id) === id)
     setSite(hasSites ? '' : entry?.shippingAddress || entry?.billingAddress ? 'client-address' : '')
   }
-  const taxableAmount = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.rate) || 0), 0), [lines])
-  const gstAmount = (taxableAmount * (Number(gstRate) || 0)) / 100
-  const totalAmount = taxableAmount + gstAmount + (Number(freightCharge) || 0)
   const setLine = (index: number, field: keyof Line, value: string) =>
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)))
   const chooseMaterial = (index: number, id: string) => {
     const material = materials.find((item) => item._id === id)
-    setLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, inventoryItem: id || undefined, description: material?.name || '', unit: material?.unit || line.unit } : line))
+    setLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, inventoryItem: id || undefined, description: material?.name || '', hsnCode: material?.hsnCode || '0000', unit: material?.unit || line.unit } : line))
     if (!supplier && material?.supplier) chooseSupplier(material.supplier._id)
   }
   const chooseSupplier = (id: string) => {
@@ -126,16 +119,10 @@ const ChallanFormPage = () => {
         transportType,
         vehicleNumber,
         eWayBillNumber,
-        freightCharge: Number(freightCharge),
-        lineItems: lines.map((line) => ({
+        ...(challanId ? {} : { lineItems: lines.map((line) => ({
           ...line,
           quantity: Number(line.quantity),
-          rate: Number(line.rate),
-          amount: Number(line.quantity) * Number(line.rate),
-        })),
-        taxableAmount,
-        gstAmount,
-        totalAmount,
+        })) }),
       }
       const result = await apiFetch<{ data: { _id: string } }>(challanId ? `/challans/${challanId}` : '/challans', {
         method: challanId ? 'PATCH' : 'POST',
@@ -155,8 +142,8 @@ const ChallanFormPage = () => {
         <CardBody>
           <div className="d-flex justify-content-between align-items-start mb-4">
             <div>
-              <h4 className="card-title mb-1">{challanId ? 'Update delivery challan' : 'Create delivery challan'}</h4>
-              <p className="text-muted mb-0">A unique challan number is generated automatically when you save.</p>
+              <h4 className="card-title mb-1">{challanId ? 'Update delivery challan' : hardwareOnly ? 'Send hardware to client site' : 'Create delivery challan'}</h4>
+              <p className="text-muted mb-0">{hardwareOnly ? 'Hardware is sent directly from inventory to the selected client address.' : 'A unique challan number is generated automatically when you save.'}</p>
             </div>
             <Link to="/challans">
               <Button variant="outline-secondary">Cancel</Button>
@@ -166,7 +153,8 @@ const ChallanFormPage = () => {
           <Form onSubmit={submit}>
             {!challanId && (
               <div className="d-flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Challan type">
-                <Button type="button" variant="primary" role="tab" aria-selected>Inventory challan</Button>
+                <Link className={`btn ${hardwareOnly ? 'btn-outline-primary' : 'btn-primary'}`} role="tab" aria-selected={!hardwareOnly} to="/challans/create">Inventory challan</Link>
+                <Link className={`btn ${hardwareOnly ? 'btn-primary' : 'btn-outline-primary'}`} role="tab" aria-selected={hardwareOnly} to="/challans/create?type=hardware">Hardware challan</Link>
                 <Link className="btn btn-outline-primary" role="tab" to="/returns/transfers/create">Return challan</Link>
               </div>
             )}
@@ -191,7 +179,7 @@ const ChallanFormPage = () => {
                 </Form.Select>
               </div>
               <div className="col-md-4">
-                <Form.Label>Delivery address</Form.Label>
+                <Form.Label>{hardwareOnly ? 'Client delivery site' : 'Delivery address'}</Form.Label>
                 <Form.Select value={site} disabled={!client || (!sites.length && !clientAddress)} required onChange={(event) => setSite(event.target.value)}>
                   <option value="">{client ? 'Select delivery address' : 'Select client first'}</option>
                   {sites.length
@@ -224,8 +212,11 @@ const ChallanFormPage = () => {
               </div>
             </div>
             <div className="d-flex justify-content-between align-items-center mt-4 mb-2">
-              <h5 className="mb-0">Goods</h5>
-              <Button type="button" size="sm" variant="outline-primary" onClick={() => setLines((current) => [...current, blank()])}>
+              <div>
+                <h5 className="mb-0">Goods</h5>
+                {challanId && <small className="text-muted">Items are locked after inventory stock is transferred.</small>}
+              </div>
+              <Button type="button" size="sm" variant="outline-primary" disabled={Boolean(challanId)} onClick={() => setLines((current) => [...current, blank()])}>
                 Add item
               </Button>
             </div>
@@ -236,21 +227,20 @@ const ChallanFormPage = () => {
                   <th>HSN</th>
                   <th>Qty</th>
                   <th>Unit</th>
-                  <th>Rate</th>
-                  <th>Amount</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {lines.map((line, index) => (
                   <tr key={index}>
-                    <td><Form.Select required value={line.inventoryItem || ''} onChange={(event) => chooseMaterial(index, event.target.value)}><option value="">Select inventory material</option>{materials.map((item) => <option key={item._id} value={item._id}>{item.name} ({item.sku}) · {item.quantityInStock} {item.unit}</option>)}</Form.Select></td>
+                    <td><Form.Select required disabled={Boolean(challanId)} value={line.inventoryItem || ''} onChange={(event) => chooseMaterial(index, event.target.value)}><option value="">Select inventory material</option>{selectableMaterials.map((item) => <option key={item._id} value={item._id}>{item.name} ({item.sku}) · {item.quantityInStock} {item.unit}</option>)}</Form.Select></td>
                     <td>
-                      <Form.Control value={line.hsnCode} onChange={(event) => setLine(index, 'hsnCode', event.target.value)} />
+                      <Form.Control readOnly value={line.hsnCode} />
                     </td>
                     <td>
                       <Form.Control
                         required
+                        disabled={Boolean(challanId)}
                         type="number"
                         min="0"
                         step="any"
@@ -262,18 +252,7 @@ const ChallanFormPage = () => {
                       <Form.Control readOnly value={line.unit} />
                     </td>
                     <td>
-                      <Form.Control
-                        required
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={line.rate}
-                        onChange={(event) => setLine(index, 'rate', event.target.value)}
-                      />
-                    </td>
-                    <td>{((Number(line.quantity) || 0) * (Number(line.rate) || 0)).toFixed(2)}</td>
-                    <td>
-                      {lines.length > 1 && (
+                      {!challanId && lines.length > 1 && (
                         <Button
                           type="button"
                           size="sm"
@@ -287,21 +266,6 @@ const ChallanFormPage = () => {
                 ))}
               </tbody>
             </Table>
-            <div className="row justify-content-end">
-              <div className="col-md-4">
-                <Form.Label>Freight charge</Form.Label>
-                <Form.Control type="number" min="0" step="0.01" value={freightCharge} onChange={(event) => setFreightCharge(event.target.value)} />
-                <Form.Label className="mt-2">GST rate (%)</Form.Label>
-                <Form.Control type="number" min="0" step="0.01" value={gstRate} onChange={(event) => setGstRate(event.target.value)} />
-                <div className="text-end mt-3">
-                  Taxable: {taxableAmount.toFixed(2)}
-                  <br />
-                  GST: {gstAmount.toFixed(2)}
-                  <br />
-                  <strong>Total: {totalAmount.toFixed(2)}</strong>
-                </div>
-              </div>
-            </div>
             <div className="d-flex justify-content-end mt-4">
               <Button type="submit" disabled={saving}>
                 {saving && <Spinner size="sm" className="me-2" />}
