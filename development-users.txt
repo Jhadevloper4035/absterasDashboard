@@ -1,38 +1,96 @@
-Development users
+Development user and employee report
 Source database: development
+Snapshot: 2026-09-10
 
-1. Abhay
-   Email: raj.abhay6860@gmail.com
-   Access: director; role=sales; todo=manage, notifications=manage, leads=manage, tasks=manage
+This report contains 9 user accounts. Passwords, password-reset data, sessions,
+authentication tokens, and document storage keys are excluded.
 
-2. Absteras admin
-   Email: absterasdigital@gmail.com
-   Access: admin; role=user; full administrative access
+1. Navroj kumar jha
+   Account: navrojjha21@gmail.com | phone 8448520798 | role superadmin | work profile superadmin | active
+   Access: full administrative access
+   Other: timezone UTC; teams none; territories none; additional roles none; access types none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-09T16:54:01.927Z | created 2026-07-27T07:18:16.017Z | updated 2026-09-09T16:54:01.928Z
+   Employee record: none
+
+2. Abhay
+   Account: raj.abhay6860@gmail.com | phone 9838034555 | role sales | work profile director | active
+   Access: todo=manage, notifications=manage, leads=manage, tasks=manage; hr=none, clients=none, inventory=none, returns=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none; access types none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login not recorded | created 2026-08-10T15:10:54.154Z | updated 2026-09-08T15:50:46.967Z
+   Employee record: none
 
 3. Harpreet
-   Email: mrharpreet6@gmail.com
-   Access: director; role=sales; todo=manage, notifications=manage, leads=manage, tasks=manage
+   Account: mrharpreet6@gmail.com | phone 9728896848 | role sales | work profile director | active
+   Access: todo=manage, notifications=manage, leads=manage, tasks=manage; hr=none, clients=none, inventory=none, returns=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none; access types none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-09T16:14:47.950Z | created 2026-08-10T15:10:54.286Z | updated 2026-09-09T16:14:47.950Z
+   Employee record: none
 
-4. Lalit
-   Email: absteras.lalitverma@gmail.com
-   Access: employee; role=designers; accessTypes=employee; todo=manage, notifications=manage, tasks=manage
+4. Shailender
+   Account: shailendrakumardpmt@gmail.com | phone 9871779939 | role sales | work profile director | active
+   Access: todo=manage, notifications=manage, leads=manage, tasks=manage; hr=none, clients=none, inventory=none, returns=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none; access types none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-08T17:16:10.740Z | created 2026-08-10T15:10:54.396Z | updated 2026-09-08T17:16:10.741Z
+   Employee record: none
 
-5. Manish
-   Email: absteras.manishsangwan@gmail.com
-   Access: employee; role=operations; accessTypes=employee; todo=manage, notifications=manage, tasks=manage, clients=manage, challans=manage, inventory=manage, laser-cut=manage, powder-coating=manage, returns=manage
+5. Ritu
+   Account: absteras.ritu@gmail.com | phone 7678570551 | role accounts | work profile employee | active
+   Access: employee, hr-management; todo=manage, notifications=manage, tasks=manage, hr=manage, clients=manage, invoices=manage; leads=none, challans=none, inventory=none, laser-cut=none, powder-coating=none, returns=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-09T19:12:47.982Z | created 2026-08-10T15:10:54.506Z | updated 2026-09-09T19:22:19.186Z
+   Employee: office | active | Accounts department (Dummy employee data) | Accountant (Dummy employee data)
+   Employment: manager not assigned | joined 2026-08-10 | date of birth and last working date not recorded
+   Contact/documents: emergency contact not recorded | photo not recorded | documents none
+   Salary: CTC 21000 | basic 21000 | HRA 0 | allowances none | effective from 2026-08-10
+   Employee record: created 2026-08-10T16:35:55.137Z | updated 2026-09-07T19:14:38.477Z
 
-6. Navroj kumar jha
-   Email: navrojjha21@gmail.com
-   Access: superadmin; role=superadmin; full administrative access
+6. Manish
+   Account: absteras.manishsangwan@gmail.com | phone 8930050145 | role operations | work profile employee | active
+   Access: employee; todo=manage, notifications=manage, tasks=manage, clients=manage, challans=manage, inventory=manage, laser-cut=manage, powder-coating=manage, returns=manage; leads=none, hr=none, invoices=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-10T07:45:59.847Z | created 2026-08-10T15:10:54.619Z | updated 2026-09-10T07:45:59.847Z
+   Employee: office | active | Operations department (Dummy employee data) | Executive (Dummy employee data)
+   Employment: manager not assigned | joined 2026-08-10 | date of birth and last working date not recorded
+   Contact/documents: emergency contact not recorded | photo not recorded | documents none
+   Salary: CTC 22000 | basic 22000 | HRA 0 | allowances none | effective from 2026-08-10
+   Employee record: created 2026-08-10T16:32:44.714Z | updated 2026-08-26T18:04:22.163Z
 
-7. Ritu
-   Email: absteras.ritu@gmail.com
-   Access: employee; role=accounts; accessTypes=employee, hr-management; todo=manage, notifications=manage, tasks=manage, hr=manage, clients=manage, invoices=manage
+7. Lalit
+   Account: absteras.lalitverma@gmail.com | phone 9518611389 | role designers | work profile employee | active
+   Access: employee; todo=manage, notifications=manage, tasks=manage; leads=none, hr=none, clients=none, inventory=none, returns=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login not recorded | created 2026-08-10T15:10:54.723Z | updated 2026-09-08T15:25:34.425Z
+   Employee: office | active | Design department (Dummy employee data) | Designer (Dummy employee data)
+   Employment: manager not assigned | joined 2026-08-10 | date of birth and last working date not recorded
+   Contact/documents: emergency contact not recorded | photo not recorded | documents none
+   Salary: CTC 20000 | basic 20000 | HRA 0 | allowances none | effective from 2026-08-10
+   Employee record: created 2026-08-10T16:32:13.541Z | updated 2026-09-08T15:21:59.619Z
 
 8. Saurav
-   Email: absteras.sauravpanday@gmail.com
-   Access: employee; role=designers; accessTypes=employee; todo=manage, notifications=manage, tasks=manage
+   Account: absteras.sauravpanday@gmail.com | phone 9616009190 | role designers | work profile employee | active
+   Access: employee; todo=manage, notifications=manage, tasks=manage; leads=none, hr=none, clients=none, inventory=none, returns=none
+   Other: timezone Asia/Kolkata; teams none; territories none; additional roles none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-07T19:15:36.951Z | created 2026-08-10T15:10:54.820Z | updated 2026-09-08T15:17:35.145Z
+   Employee: office | active | Design department (Dummy employee data) | Designer (Dummy employee data)
+   Employment: manager not assigned | joined 2026-08-10 | date of birth and last working date not recorded
+   Contact/documents: emergency contact not recorded | photo not recorded | documents none
+   Salary: CTC 18000 | basic 18000 | HRA 0 | allowances none | effective from 2026-08-10
+   Employee record: created 2026-08-10T16:31:40.763Z | updated 2026-09-07T12:29:32.385Z
 
-9. Shailender
-   Email: shailendrakumardpmt@gmail.com
-   Access: director; role=sales; todo=manage, notifications=manage, leads=manage, tasks=manage
+9. Absteras admin
+   Account: absterasdigital@gmail.com | phone 8448520798 | role user | work profile admin | active
+   Access: full administrative access
+   Other: timezone Asia/Calcutta; teams none; territories none; additional roles none; access types none
+   Notifications: in-app enabled; WhatsApp disabled; morning summary disabled (08:00)
+   Activity: last login 2026-09-10T18:56:27.391Z | created 2026-09-08T18:43:03.181Z | updated 2026-09-10T18:56:27.391Z
+   Employee record: none
+
+Data note: four additional employee records exist without a matching current user account. They are not listed as development users.
