@@ -67,11 +67,15 @@ const CreateReturnTransfer = lazy(() => import('@/app/(admin)/returns/transfers/
 const LaserCutDashboard = lazy(() => import('@/app/(admin)/laser-cut-management/dashboard/page'))
 const LaserCutCurrentOrders = lazy(() => import('@/app/(admin)/laser-cut-management/orders/page'))
 const LaserCutOrderDetail = lazy(() => import('@/app/(admin)/laser-cut-management/orders/[orderId]/page'))
+const CreateLaserCutChallan = lazy(() => import('@/app/(admin)/laser-cut-management/challans/create/page'))
+const LaserCutMoveOut = lazy(() => import('@/app/(admin)/laser-cut-management/move-out/page'))
+const LaserCutVendors = lazy(() => import('@/app/(admin)/laser-cut-management/vendors/page'))
 const PowderCoatingManagement = lazy(() => import('@/app/(admin)/powder-coating-management/page'))
 const PowderCoatingOrders = lazy(() => import('@/app/(admin)/powder-coating-management/orders/page'))
 const PowderCoatingOrderDetail = lazy(() => import('@/app/(admin)/powder-coating-management/orders/[orderId]/detail/page'))
 const PowderCoatingOrderDispatch = lazy(() => import('@/app/(admin)/powder-coating-management/orders/[orderId]/page'))
 const CreatePowderCoatingOrder = lazy(() => import('@/app/(admin)/powder-coating-management/challans/create/page'))
+const PowderCoatingMoveOut = lazy(() => import('@/app/(admin)/powder-coating-management/move-out/page'))
 const PowderCoatingVendors = lazy(() => import('@/app/(admin)/powder-coating-management/vendors/page'))
 const Chat = lazy(() => import('@/app/(admin)/apps/chat/page'))
 const Email = lazy(() => import('@/app/(admin)/apps/email/page'))
@@ -433,12 +437,16 @@ const appsRoutes: RoutesProps[] = [
   { name: 'Laser Cut Dashboard', path: '/laser-cut-management', element: <LaserCutDashboard /> },
   { name: 'Laser Cut Current Orders', path: '/laser-cut-management/orders', element: <LaserCutCurrentOrders /> },
   { name: 'Laser Cut Order Details', path: '/laser-cut-management/orders/:orderId', element: <LaserCutOrderDetail /> },
+  { name: 'Move Inventory In to Laser Cut', path: '/laser-cut-management/challans/create', element: <CreateLaserCutChallan />, moduleAccess: 'manage' },
+  { name: 'Move Laser Cut Products Out', path: '/laser-cut-management/move-out', element: <LaserCutMoveOut />, moduleAccess: 'manage' },
+  { name: 'Laser Cut Vendors', path: '/laser-cut-management/vendors', element: <LaserCutVendors /> },
   { name: 'Laser Cut Management unavailable', path: '/laser-cut-management/*', element: <Navigate to="/dashboard/analytics" replace /> },
   { name: 'Powder Coating', path: '/powder-coating-management', element: <PowderCoatingManagement /> },
   { name: 'Powder Coating Orders', path: '/powder-coating-management/orders', element: <PowderCoatingOrders /> },
   { name: 'Powder Coating Order', path: '/powder-coating-management/orders/:orderId', element: <PowderCoatingOrderDetail /> },
   { name: 'Send Powder Coating Order to Site', path: '/powder-coating-management/orders/:orderId/dispatch', element: <PowderCoatingOrderDispatch />, moduleAccess: 'manage' },
-  { name: 'Create Powder Coating Order', path: '/powder-coating-management/challans/create', element: <CreatePowderCoatingOrder />, moduleAccess: 'manage' },
+  { name: 'Move Inventory In to Powder Coating', path: '/powder-coating-management/challans/create', element: <CreatePowderCoatingOrder />, moduleAccess: 'manage' },
+  { name: 'Move Powder-Coated Products Out', path: '/powder-coating-management/move-out', element: <PowderCoatingMoveOut />, moduleAccess: 'manage' },
   { name: 'Powder Coating Vendors', path: '/powder-coating-management/vendors', element: <PowderCoatingVendors /> },
   {
     name: 'Products',

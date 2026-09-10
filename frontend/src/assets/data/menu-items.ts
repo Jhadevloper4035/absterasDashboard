@@ -200,6 +200,9 @@ export const MENU_ITEMS: MenuItemType[] = [
     children: [
       { key: 'laser-cut-dashboard', label: 'Dashboard', url: '/laser-cut-management', parentKey: 'laser-cut-management' },
       { key: 'laser-cut-current-orders', label: 'Current Orders', url: '/laser-cut-management/orders', parentKey: 'laser-cut-management' },
+      { key: 'laser-cut-move-in', label: 'Move In', url: '/laser-cut-management/challans/create', parentKey: 'laser-cut-management', requiresManage: true },
+      { key: 'laser-cut-move-out', label: 'Move Out', url: '/laser-cut-management/move-out', parentKey: 'laser-cut-management', requiresManage: true },
+      { key: 'laser-cut-vendors', label: 'Vendors', url: '/laser-cut-management/vendors', parentKey: 'laser-cut-management' },
     ],
   },
   {
@@ -209,13 +212,8 @@ export const MENU_ITEMS: MenuItemType[] = [
     children: [
       { key: 'powder-coating-dashboard', label: 'Dashboard', url: '/powder-coating-management', parentKey: 'powder-coating-management' },
       { key: 'powder-coating-orders', label: 'Current Orders', url: '/powder-coating-management/orders', parentKey: 'powder-coating-management' },
-      {
-        key: 'powder-coating-create-order',
-        label: 'Create Order',
-        url: '/powder-coating-management/challans/create',
-        parentKey: 'powder-coating-management',
-        requiresManage: true,
-      },
+      { key: 'powder-coating-move-in', label: 'Move In', url: '/powder-coating-management/challans/create', parentKey: 'powder-coating-management', requiresManage: true },
+      { key: 'powder-coating-move-out', label: 'Move Out', url: '/powder-coating-management/move-out', parentKey: 'powder-coating-management', requiresManage: true },
       { key: 'powder-coating-vendors', label: 'Vendors', url: '/powder-coating-management/vendors', parentKey: 'powder-coating-management' },
     ],
   },
