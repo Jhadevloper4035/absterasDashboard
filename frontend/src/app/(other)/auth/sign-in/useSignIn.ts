@@ -5,8 +5,9 @@ import * as yup from 'yup'
 
 import { useNotificationContext } from '@/context/useNotificationContext'
 import { useAuthStore } from '@/store/authStore'
+import type { UserType } from '@/types/auth'
 
-const dashboardPath = (role?: string) => (['sales', 'operations', 'accounts', 'designers'].includes(role || '') ? '/dashboard/sales' : '/dashboard/analytics')
+const dashboardPath = (user?: UserType) => user?.workProfile === 'employee' || (!user?.workProfile && user?.accessTypes?.includes('employee')) ? '/hr/my-overview' : ['sales', 'operations', 'accounts', 'designers'].includes(user?.role || '') ? '/dashboard/sales' : '/dashboard/analytics'
 
 const useSignIn = () => {
   const navigate = useNavigate()
@@ -32,16 +33,16 @@ const useSignIn = () => {
 
   type LoginFormFields = yup.InferType<typeof loginFormSchema>
 
-  const redirectUser = (role?: string) => {
+  const redirectUser = (user?: UserType) => {
     const redirectLink = searchParams.get('redirectTo')
     if (redirectLink?.startsWith('/') && !redirectLink.startsWith('//') && !redirectLink.startsWith('/auth/')) navigate(redirectLink)
-    else navigate(dashboardPath(role))
+    else navigate(dashboardPath(user))
   }
 
   const login = handleSubmit(async (values: LoginFormFields) => {
     try {
       const session = await loginUser(values.email, values.password)
-      redirectUser(session.user.role)
+      redirectUser(session.user)
       showNotification({ message: 'Successfully logged in.', variant: 'success' })
     } catch (e) {
       showNotification({ message: e instanceof Error ? e.message : 'Login failed', variant: 'danger' })

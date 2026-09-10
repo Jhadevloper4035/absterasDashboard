@@ -22,6 +22,8 @@ const invoiceSchema = new mongoose.Schema(
     client: { type: ObjectId, ref: 'Client', required: true },
     site: { type: ObjectId, ref: 'Client' },
     invoiceDate: { type: Date, required: true },
+    poNumber: { type: String, trim: true, maxlength: 100 },
+    poDate: { type: Date },
     grRrNumber: { type: String, trim: true },
     transport: { type: String, trim: true },
     placeOfSupply: { type: String, trim: true },

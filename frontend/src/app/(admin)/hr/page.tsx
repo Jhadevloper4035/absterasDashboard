@@ -14,7 +14,7 @@ type Summary = {
   payroll: null | { status: string; employees: number }
 }
 
-const HrDashboard = () => {
+const HrDashboard = ({ embedded = false }: { embedded?: boolean }) => {
   const [summary, setSummary] = useState<Summary>()
   const [error, setError] = useState('')
   const [canViewReports, setCanViewReports] = useState(false)
@@ -40,7 +40,7 @@ const HrDashboard = () => {
 
   return (
     <>
-      <PageMetaData title="HR Dashboard" />
+      {!embedded && <PageMetaData title="HR Dashboard" />}
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
         <div>
           <span className="text-primary text-uppercase fw-semibold small">HR workspace</span>

@@ -13,22 +13,27 @@ type Material = {
   unit: string
   hsnCode?: string
   materialType?: 'SHEET' | 'TUBE' | 'OTHER'
-  defaultDimensions?: { heightFt?: number; widthFt?: number }
+  defaultDimensions?: Dimensions
   supplier?: Supplier
 }
+type Dimensions = { heightFt?: number; widthFt?: number; lengthFt?: number }
 type Supplier = { _id: string; name: string; address?: string }
 type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; parentClient?: string | { _id: string }; shippingAddress?: string; billingAddress?: string }
 type Order = { _id: string; orderName: string; status: 'PENDING' | 'PARTIAL' | 'COMPLETE' }
-type Line = { inventoryItemRef: string; hsnCode: string; quantity: string }
-const blankLine = (): Line => ({ inventoryItemRef: '', hsnCode: '', quantity: '1' })
+type CutOutput = { quantity: string; dimensions: Dimensions }
+type Line = { inventoryItemRef: string; hsnCode: string; quantity: string; materialType: 'SHEET' | 'TUBE'; cutOutputs: CutOutput[] }
+const blankCutOutput = (): CutOutput => ({ quantity: '', dimensions: {} })
+const blankLine = (): Line => ({ inventoryItemRef: '', hsnCode: '', quantity: '1', materialType: 'SHEET', cutOutputs: [blankCutOutput()] })
 const number = (value: string) => Number(value || 0)
-const LASER_CUT_DROP_ADDRESS = 'PLOT NO -A-1140 SUSHANT LOK-1, GURUGRAM, HARYANA'
 const sheetSqFt = (material: Material | undefined, quantity: string) => {
   const height = Number(material?.defaultDimensions?.heightFt)
   const width = Number(material?.defaultDimensions?.widthFt)
   return material?.materialType === 'SHEET' && height > 0 && width > 0 ? height * width * number(quantity) : undefined
 }
 const sqFt = (value: number | undefined) => value === undefined ? '—' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} sq ft`
+const materialSize = (material: Material | undefined) => material?.materialType === 'SHEET'
+  ? `${material.defaultDimensions?.heightFt || '—'} × ${material.defaultDimensions?.widthFt || '—'}`
+  : material?.materialType === 'TUBE' ? `${material.defaultDimensions?.lengthFt || '—'}` : '—'
 
 export default function CreateLaserCutChallanPage() {
   const navigate = useNavigate()
@@ -39,6 +44,7 @@ export default function CreateLaserCutChallanPage() {
   const [vendorRef, setVendorRef] = useState('')
   const [orderRef, setOrderRef] = useState('new')
   const [expectedSheets, setExpectedSheets] = useState('0')
+  const [expectedTubes, setExpectedTubes] = useState('0')
   const [clientRef, setClientRef] = useState('')
   const [clientSiteRef, setClientSiteRef] = useState('')
   const [challanDate, setChallanDate] = useState(new Date().toISOString().slice(0, 10))
@@ -75,6 +81,10 @@ export default function CreateLaserCutChallanPage() {
     const material = materialFor(id)
     setLine(index, { inventoryItemRef: id, hsnCode: material?.hsnCode || '0000' })
   }
+  const selectMaterialType = (index: number, materialType: Line['materialType']) =>
+    setLine(index, { materialType, inventoryItemRef: '', hsnCode: '', cutOutputs: [] })
+  const setCutOutput = (lineIndex: number, outputIndex: number, next: Partial<CutOutput>) =>
+    setLine(lineIndex, { cutOutputs: lines[lineIndex].cutOutputs.map((output, index) => index === outputIndex ? { ...output, ...next } : output) })
   const requestedQuantity = (materialId: string, changedIndex?: number, changedQuantity?: string) =>
     lines.reduce((total, line, index) => total + (line.inventoryItemRef === materialId ? number(index === changedIndex ? changedQuantity || '' : line.quantity) : 0), 0)
   const totalSheetSqFt = lines.reduce((total, line) => total + (sheetSqFt(materialFor(line.inventoryItemRef), line.quantity) || 0), 0)
@@ -87,6 +97,11 @@ export default function CreateLaserCutChallanPage() {
   const parentClients = clients.filter((client) => !parentId(client))
   const clientSites = clients.filter((client) => parentId(client) === clientRef)
   const selectedSite = clientSites.find((client) => client._id === clientSiteRef)
+  const pickupLocations = [...new Set(lines.map((line) => {
+    const supplier = materialFor(line.inventoryItemRef)?.supplier
+    return supplier?.address ? `${supplier.name} · ${supplier.address}` : ''
+  }).filter(Boolean))]
+  const pickupLocation = pickupLocations.length === 1 ? pickupLocations[0] : pickupLocations.length > 1 ? `${pickupLocations.length} pickup locations selected` : ''
   const selectClient = (id: string) => {
     setClientRef(id)
     setClientSiteRef('')
@@ -98,6 +113,10 @@ export default function CreateLaserCutChallanPage() {
   }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (!vendorAddressSnapshot.trim()) {
+      toast.error('Select a Laser-cut vendor with an address for the drop location')
+      return
+    }
     const unavailable = materials.find((material) => requestedQuantity(material._id) > material.quantityInStock)
     if (unavailable) {
       toast.error(`${unavailable.name}: only ${unavailable.quantityInStock} ${unavailable.unit} available`)
@@ -110,7 +129,7 @@ export default function CreateLaserCutChallanPage() {
         orderRef === 'new'
           ? await apiFetch<{ data: { _id: string } }>('/laser-cut-management/orders', {
               method: 'POST',
-              body: JSON.stringify({ customerRef: clientRef, expected: { sheets: number(expectedSheets) } }),
+              body: JSON.stringify({ customerRef: clientRef, expected: { sheets: number(expectedSheets), tubes: number(expectedTubes) } }),
             })
           : { data: { _id: orderRef } }
       const created = await apiFetch<{ data: { _id: string } }>('/laser-cut-management/challans', {
@@ -125,7 +144,11 @@ export default function CreateLaserCutChallanPage() {
           vehicleNumber,
           eWayBillNumber,
           orderRef: selectedOrder.data._id,
-          items: lines.map((line) => ({ ...line, quantity: number(line.quantity) })),
+          items: lines.map(({ cutOutputs, ...line }) => ({
+            ...line,
+            quantity: number(line.quantity),
+            cutOutputs: cutOutputs.filter((output) => number(output.quantity) > 0).map((output) => ({ quantity: number(output.quantity), dimensions: output.dimensions })),
+          })),
         }),
       })
       await apiFetch(`/laser-cut-management/challans/${created.data._id}/dispatch`, { method: 'POST' })
@@ -186,7 +209,11 @@ export default function CreateLaserCutChallanPage() {
                 <Form.Label>Child client address</Form.Label>
                 <Form.Control readOnly value={selectedSite?.siteAddress || selectedSite?.shippingAddress || selectedSite?.billingAddress || ''} />
               </Col>
-              <Col md={6}>
+              <Col md={4}>
+                <Form.Label>Pickup location</Form.Label>
+                <Form.Control readOnly value={pickupLocation} placeholder="Select a product below" />
+              </Col>
+              <Col md={4}>
                 <Form.Label>Laser-cut vendor</Form.Label>
                 <Form.Select required value={vendorRef} onChange={(event) => selectVendor(event.target.value)}>
                   <option value="">Select vendor</option>
@@ -197,18 +224,12 @@ export default function CreateLaserCutChallanPage() {
                   ))}
                 </Form.Select>
               </Col>
-              <Col md={6}>
-                <Form.Label>Laser-cut vendor address</Form.Label>
+              <Col md={4}>
+                <Form.Label>Drop location</Form.Label>
                 <Form.Control
-                  as="textarea"
-                  rows={2}
                   readOnly
                   value={vendorAddressSnapshot}
                 />
-              </Col>
-              <Col md={12}>
-                <Form.Label>Laser-cut drop-off address</Form.Label>
-                <Form.Control readOnly as="textarea" rows={2} value={LASER_CUT_DROP_ADDRESS} />
               </Col>
               <Col md={4}>
                 <Form.Label>Transport type</Form.Label>
@@ -233,8 +254,8 @@ export default function CreateLaserCutChallanPage() {
                   ))}
                 </Form.Select>
               </Col>
-              {orderRef === 'new' && (
-                  <Col md={6}>
+              {orderRef === 'new' && <>
+                  <Col md={3}>
                     <Form.Label>Expected sheets</Form.Label>
                     <Form.Control
                       required
@@ -245,24 +266,35 @@ export default function CreateLaserCutChallanPage() {
                       onChange={(event) => setExpectedSheets(event.target.value)}
                     />
                   </Col>
-              )}
+                  <Col md={3}>
+                    <Form.Label>Expected tubes</Form.Label>
+                    <Form.Control
+                      required
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={expectedTubes}
+                      onChange={(event) => setExpectedTubes(event.target.value)}
+                    />
+                  </Col>
+              </>}
             </Row>
             <div className="d-flex justify-content-between align-items-center mt-4 mb-2">
-              <div><h5 className="mb-0">Inventory products</h5><small className="text-muted">Pickup supplier and address are taken from each selected product.</small></div>
+              <div><h5 className="mb-0">Product details</h5><small className="text-muted">Select products to set the pickup location above.</small></div>
               <Button type="button" size="sm" variant="outline-primary" onClick={() => setLines((current) => [...current, blankLine()])}>
                 Add product
               </Button>
             </div>
-            <Table responsive className="align-middle" style={{ minWidth: 1650 }}>
+            <Table responsive className="align-middle" style={{ minWidth: 1500 }}>
               <thead>
                 <tr>
+                  <th>Material type</th>
                   <th>Product</th>
-                  <th>Pickup vendor</th>
-                  <th>Pickup address</th>
                   <th>Available</th>
                   <th>HSN</th>
                   <th>Quantity</th>
-                  <th>Sheet size (ft)</th>
+                  <th>Source size (ft)</th>
+                  <th>Smaller cut outputs</th>
                   <th>Total sq ft</th>
                   <th>Unit</th>
                   <th />
@@ -274,17 +306,21 @@ export default function CreateLaserCutChallanPage() {
                   return (
                     <tr key={index}>
                       <td>
+                        <Form.Select value={line.materialType} onChange={(event) => selectMaterialType(index, event.target.value as Line['materialType'])}>
+                          <option value="SHEET">Sheet</option>
+                          <option value="TUBE">Tube</option>
+                        </Form.Select>
+                      </td>
+                      <td>
                         <Form.Select required value={line.inventoryItemRef} onChange={(event) => selectMaterial(index, event.target.value)}>
                           <option value="">Select product</option>
-                          {materials.map((item) => (
+                          {materials.filter((item) => item.materialType === line.materialType).map((item) => (
                             <option key={item._id} value={item._id}>
                               {item.name} ({item.sku})
                             </option>
                           ))}
                         </Form.Select>
                       </td>
-                      <td>{material?.supplier?.name || 'No supplier assigned'}</td>
-                      <td style={{ minWidth: 220 }}>{material?.supplier?.address || '—'}</td>
                       <td>{material ? `${material.quantityInStock}` : '—'}</td>
                       <td>
                         <Form.Control readOnly value={line.hsnCode} />
@@ -299,7 +335,53 @@ export default function CreateLaserCutChallanPage() {
                           onChange={(event) => updateQuantity(index, event.target.value)}
                         />
                       </td>
-                      <td>{material?.materialType === 'SHEET' ? `${material.defaultDimensions?.heightFt || '—'} × ${material.defaultDimensions?.widthFt || '—'}` : '—'}</td>
+                      <td>{materialSize(material)}</td>
+                      <td style={{ minWidth: 360 }}>
+                        {line.cutOutputs.map((output, outputIndex) => (
+                          <div className="d-flex gap-1 mb-1" key={outputIndex}>
+                            <Form.Control
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              aria-label="Smaller cut quantity"
+                              placeholder="Qty"
+                              value={output.quantity}
+                              onChange={(event) => setCutOutput(index, outputIndex, { quantity: event.target.value })}
+                            />
+                            {line.materialType === 'SHEET' ? <>
+                              <Form.Control
+                                required={number(output.quantity) > 0}
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                aria-label="Smaller sheet height in feet"
+                                placeholder="H"
+                                value={output.dimensions.heightFt || ''}
+                                onChange={(event) => setCutOutput(index, outputIndex, { dimensions: { ...output.dimensions, heightFt: number(event.target.value) || undefined } })}
+                              />
+                              <Form.Control
+                                required={number(output.quantity) > 0}
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                aria-label="Smaller sheet width in feet"
+                                placeholder="W"
+                                value={output.dimensions.widthFt || ''}
+                                onChange={(event) => setCutOutput(index, outputIndex, { dimensions: { ...output.dimensions, widthFt: number(event.target.value) || undefined } })}
+                              />
+                            </> : <Form.Control
+                              required={number(output.quantity) > 0}
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              aria-label="Smaller tube length in feet"
+                              placeholder="Length"
+                              value={output.dimensions.lengthFt || ''}
+                              onChange={(event) => setCutOutput(index, outputIndex, { dimensions: { lengthFt: number(event.target.value) || undefined } })}
+                            />}
+                          </div>
+                        ))}
+                      </td>
                       <td>{sqFt(sheetSqFt(material, line.quantity))}</td>
                       <td>{material?.unit || '—'}</td>
                       <td>

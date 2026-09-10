@@ -4,7 +4,7 @@ import { ExpenseClaim } from '../models/expense-claim.model.js';
 import { Holiday } from '../models/holiday.model.js';
 import { LeaveRequest } from '../models/leave-request.model.js';
 import { SalaryStructure } from '../models/salary-structure.model.js';
-import { isBirthdayLeave, leaveAttendanceDates, PAID_BIRTHDAY_LEAVE_DAYS, PAID_MEDICAL_LEAVE_DAYS } from './leave.service.js';
+import { leaveAttendanceDates } from './leave.service.js';
 
 const monthBounds = (month, year) => ({ from: new Date(Date.UTC(year, month - 1, 1)), to: new Date(Date.UTC(year, month, 1)) });
 const money = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -15,7 +15,7 @@ const inSession = (query, session) => session ? query.session(session) : query;
 export const unpaidLeaveDaysForPayroll = (requests, from, to, holidayDates = []) => requests.reduce((total, request) => {
   const dates = leaveAttendanceDates(request.fromDate, request.toDate, holidayDates);
   const periodDates = dates.filter((date) => date >= from && date < to);
-  const paidDays = Math.min(request.paidDays ?? (isBirthdayLeave(request.leaveType?.name) ? PAID_BIRTHDAY_LEAVE_DAYS : request.leaveType?.isPaid ? PAID_MEDICAL_LEAVE_DAYS : 0), dates.length);
+  const paidDays = Math.min(Math.max(Number(request.paidDays) || 0, 0), dates.length);
   const paidBeforePeriod = dates.filter((date) => date < from).length;
   const paidInPeriod = Math.min(Math.max(paidDays - paidBeforePeriod, 0), periodDates.length);
   return total + periodDates.length - paidInPeriod;

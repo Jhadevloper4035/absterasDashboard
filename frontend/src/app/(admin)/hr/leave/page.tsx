@@ -5,7 +5,7 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction'
 import FullCalendar from '@fullcalendar/react'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Alert, Badge, Button, Card, CardBody, Form, Modal, Table } from 'react-bootstrap'
+import { Alert, Badge, Button, Card, CardBody, Col, Form, Modal, Row, Table } from 'react-bootstrap'
 import Swal from 'sweetalert2'
 
 type LeaveType = { _id: string; name: string; maxBalance: number; isPaid: boolean }
@@ -49,6 +49,13 @@ const LeavePage = () => {
   const [error, setError] = useState('')
   const [canManage, setCanManage] = useState(false)
   const [canManageHolidays, setCanManageHolidays] = useState(false)
+  const selectedLeaveType = types.find((type) => type._id === leaveType)
+  const selectedBalance = balances.find((balance) => balance.leaveType._id === leaveType)
+  const requestCounts = useMemo(() => ({
+    pending: requests.filter((request) => request.status === 'pending').length,
+    approved: requests.filter((request) => request.status === 'approved').length,
+    rejected: requests.filter((request) => request.status === 'rejected').length,
+  }), [requests])
   const load = () =>
     Promise.all([
       apiFetch<{ data: LeaveType[] }>('/hr/leave/types'),
@@ -147,7 +154,7 @@ const LeavePage = () => {
         color: holiday.type === 'government' ? '#0d6efd' : holiday.type === 'private' ? '#6f42c1' : '#fd7e14',
       })),
       ...requests
-        .filter((request) => request.status === 'approved' && !/^personal leave$/i.test(request.leaveType?.name || ''))
+        .filter((request) => request.status === 'approved')
         .map((request) => ({
           id: request._id,
           title: `${request.employee?.user?.name || 'Employee'} — ${request.leaveType?.name || 'Leave'}`,
@@ -159,10 +166,10 @@ const LeavePage = () => {
     [holidays, requests],
   )
   const decide = async (request: Request, status: 'approved' | 'rejected') => {
-    const result = await Swal.fire({ icon: status === 'approved' ? 'question' : 'warning', title: `${status === 'approved' ? 'Approve' : 'Decline'} leave request?`, text: status === 'approved' ? 'Attendance will be updated for the approved leave dates.' : 'The employee will be notified that this request was declined.', input: status === 'approved' ? 'select' : undefined, inputLabel: status === 'approved' ? 'Payroll treatment' : undefined, inputOptions: status === 'approved' ? { policy: 'Use leave policy', paid: 'Mark full range paid', unpaid: 'Mark full range unpaid' } : undefined, inputValue: 'policy', showCancelButton: true, confirmButtonText: status === 'approved' ? 'Approve leave' : 'Decline leave', confirmButtonColor: status === 'approved' ? undefined : '#dc3545' })
+    const result = await Swal.fire({ icon: status === 'approved' ? 'question' : 'warning', title: `${status === 'approved' ? 'Approve' : 'Decline'} leave request?`, text: status === 'approved' ? 'Paid and unpaid days will be calculated automatically from this month’s leave policy.' : 'The employee will be notified that this request was declined.', showCancelButton: true, confirmButtonText: status === 'approved' ? 'Approve leave' : 'Decline leave', confirmButtonColor: status === 'approved' ? undefined : '#dc3545' })
     if (!result.isConfirmed) return
     try {
-      await apiFetch(`/hr/leave/requests/${request._id}`, { method: 'PATCH', body: JSON.stringify({ status, ...(result.value === 'paid' ? { paid: true } : result.value === 'unpaid' ? { paid: false } : {}) }) })
+      await apiFetch(`/hr/leave/requests/${request._id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
       load()
     } catch (value) {
       setError(value instanceof Error ? value.message : 'Unable to update request')
@@ -171,16 +178,17 @@ const LeavePage = () => {
   return (
     <>
       <PageMetaData title="Leave" />
-      <Card className="mb-3">
+      <Card className="mb-4 border-0 shadow-sm">
         <CardBody>
-          <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
             <div>
-              <h4 className="card-title mb-1">Leave</h4>
+              <div className="text-primary text-uppercase fw-semibold small mb-1">HR management</div>
+              <h4 className="card-title mb-1">Leave requests</h4>
               <p className="text-muted mb-0">
-                The first 1.5 Medical Leave days each month are paid. Later Medical Leave and every other leave type are unpaid and deducted from payroll.
+              {canManage ? 'Review employee requests and manage leave types. Payroll calculates paid and unpaid days automatically.' : 'Check your leave balance, request time off, and follow each decision.'}
               </p>
             </div>
-            {canManage && <Button onClick={() => setShowTypeModal(true)}>Create leave type</Button>}
+            {canManage && <Button onClick={() => setShowTypeModal(true)}>Add leave type</Button>}
           </div>
           {error && (
             <Alert className="mt-3 mb-0" variant="danger">
@@ -189,75 +197,90 @@ const LeavePage = () => {
           )}
         </CardBody>
       </Card>
-      {!canManage && (
-        <>
-          <Card className="mb-3">
-            <CardBody>
-              <h5 className="mb-3">My leave balance</h5>
-              <div className="d-flex gap-3 flex-wrap">
-                {balances.map((balance) => (
-                  <div key={balance._id} className="border rounded p-3">
-                    <div className="text-muted">{balance.leaveType.name}</div>
-                    <strong>
-                      {balance.balance} day{balance.balance === 1 ? '' : 's'} remaining
-                    </strong>
-                  </div>
-                ))}
-                {!balances.length && <span className="text-muted">1.5 Medical Leave days are paid each month.</span>}
+      <Row className="g-3 mb-4">
+        {[
+          ['Pending', requestCounts.pending, 'warning'],
+          ['Approved', requestCounts.approved, 'success'],
+          ['Declined', requestCounts.rejected, 'danger'],
+        ].map(([label, count, variant]) => (
+          <Col md={4} key={label as string}>
+            <Card className="h-100 border shadow-sm">
+              <CardBody className="d-flex align-items-center justify-content-between py-3">
+                <span className="text-muted">{label}</span>
+                <Badge pill bg={variant as string} className="fs-6 px-3 py-2">{count}</Badge>
+              </CardBody>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+      {!canManage && <>
+        <Card className="mb-4 border shadow-sm">
+          <CardBody>
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+              <div>
+                <h5 className="mb-1">My leave balance</h5>
+                <small className="text-muted">Available days by leave type.</small>
               </div>
-            </CardBody>
-          </Card>
-          <Card className="mb-3">
-            <CardBody>
-              <h5 className="mb-3">Apply for leave</h5>
-              <Form onSubmit={apply} className="row g-3">
-                <div className="col-md-3">
+            </div>
+            {balances.length ? <Row className="g-3">
+              {balances.map((balance) => <Col key={balance._id} sm={6} xl={4}>
+                <div className="border rounded-3 p-3 h-100">
+                  <div className="text-muted small mb-1">{balance.leaveType.name}</div>
+                  <div className="fw-semibold fs-5">{balance.balance} day{balance.balance === 1 ? '' : 's'}</div>
+                  <small className="text-muted">remaining</small>
+                </div>
+              </Col>)}
+            </Row> : <span className="text-muted">Your leave details are reviewed by HR when each request is approved.</span>}
+          </CardBody>
+        </Card>
+        <Card className="mb-4 border shadow-sm">
+          <CardBody>
+            <div className="mb-4">
+              <h5 className="mb-1">Request time off</h5>
+              <small className="text-muted">Choose the leave type and dates. Your request is sent to HR for approval.</small>
+            </div>
+            <Form onSubmit={apply}>
+              <Row className="g-3">
+                <Col lg={4} md={6}>
                   <Form.Label>Leave type</Form.Label>
                   <Form.Select required value={leaveType} onChange={(event) => setLeaveType(event.target.value)}>
                     <option value="">Choose leave type</option>
-                    {types.map((type) => (
-                      <option key={type._id} value={type._id}>
-                        {type.name}
-                        {type.isPaid ? ' — paid' : ' — unpaid'}
-                      </option>
-                    ))}
+                    {types.map((type) => <option key={type._id} value={type._id}>{type.name}</option>)}
                   </Form.Select>
-                </div>
-                <div className="col-md-3">
+                  {selectedBalance && <Form.Text>{selectedBalance.balance} day{selectedBalance.balance === 1 ? '' : 's'} available.</Form.Text>}
+                  {selectedLeaveType?.name === 'Long Leave' && <Form.Text className="d-block">Choose your full leave period and submit it to HR for approval.</Form.Text>}
+                </Col>
+                <Col lg={2} md={3}>
                   <Form.Label>From</Form.Label>
                   <Form.Control required type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
-                </div>
-                <div className="col-md-3">
+                </Col>
+                <Col lg={2} md={3}>
                   <Form.Label>To</Form.Label>
                   <Form.Control required type="date" value={toDate} min={fromDate} onChange={(event) => setToDate(event.target.value)} />
-                </div>
-                <div className="col-md-3">
-                  <Form.Label>Reason</Form.Label>
-                  <Form.Control placeholder="Optional reason" value={reason} onChange={(event) => setReason(event.target.value)} />
-                </div>
-                <div className="col-12">
-                  <Button type="submit" disabled={!types.length}>
-                    Submit leave request
-                  </Button>
-                </div>
-              </Form>
-            </CardBody>
-          </Card>
-        </>
-      )}
-      <Card>
+                </Col>
+                <Col lg={4}>
+                  <Form.Label>Reason <span className="text-muted">(optional)</span></Form.Label>
+                  <Form.Control as="textarea" rows={2} placeholder="Add a short note for HR" value={reason} onChange={(event) => setReason(event.target.value)} />
+                </Col>
+                <Col xs={12} className="d-flex justify-content-end">
+                  <Button type="submit" disabled={!types.length}>Submit leave request</Button>
+                </Col>
+              </Row>
+            </Form>
+          </CardBody>
+        </Card>
+      </>}
+      <Card className="border shadow-sm">
         <CardBody>
           <div className="d-flex justify-content-between flex-wrap gap-2 mb-3">
             <div>
-              <h5 className="mb-1">{canManage ? 'Leave requests' : 'My leave requests'}</h5>
-              <small className="text-muted">{canManage ? 'Approve or deny employee requests.' : 'Track your submitted requests.'}</small>
+              <h5 className="mb-1">{canManage ? 'Requests to review' : 'My leave requests'}</h5>
+              <small className="text-muted">{canManage ? 'Pending requests need an approval decision.' : 'Track the status of every request you submit.'}</small>
             </div>
             {canManage && (
               <div className="d-flex gap-2 flex-wrap align-items-center">
                 {types.map((type) => (
-                  <Badge key={type._id} bg={type.isPaid ? 'success' : 'secondary'} className="d-inline-flex align-items-center justify-content-center text-center">
-                    {type.name}: {type.isPaid ? 'Paid' : 'Unpaid'}
-                  </Badge>
+                  <Badge key={type._id} bg="light" text="dark" className="d-inline-flex align-items-center justify-content-center text-center">{type.name}</Badge>
                 ))}
               </div>
             )}
@@ -280,11 +303,7 @@ const LeavePage = () => {
                   {canManage && <td>{request.employee?.user?.name || '-'}</td>}
                   <td>
                     {request.leaveType?.name}{' '}
-                    {request.status === 'approved' && (
-                      <Badge bg={request.paidDays > 0 ? 'success' : 'secondary'} className="ms-1">
-                        {request.paidDays > 0 ? 'Paid' : 'Unpaid'}
-                      </Badge>
-                    )}
+                    {canManage && request.status === 'approved' && <Badge bg={request.paidDays > 0 ? 'success' : 'secondary'} className="ms-1">{request.paidDays > 0 ? `${request.paidDays} paid · ${Math.max(request.days - request.paidDays, 0)} unpaid` : 'Unpaid'}</Badge>}
                   </td>
                   <td>
                     {new Date(request.fromDate).toLocaleDateString()} – {new Date(request.toDate).toLocaleDateString()}
@@ -360,7 +379,7 @@ const LeavePage = () => {
                 onChange={(event) => setNewType(event.target.value)}
                 placeholder="Medical Leave or Personal Leave"
               />
-              <Form.Text>Medical Leave provides 1.5 paid days each month. Birthday Leave provides 2.5 paid days each calendar year; all other types are unpaid.</Form.Text>
+              <Form.Text>Medical leave uses the monthly paid-leave allowance. Other leave is unpaid, except Birthday Leave.</Form.Text>
             </Form.Group>
           </Modal.Body>
           <Modal.Footer>

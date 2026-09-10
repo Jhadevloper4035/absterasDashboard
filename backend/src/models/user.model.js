@@ -4,7 +4,7 @@ import { APP_ACCESS_LEVELS, APP_MODULES } from '../config/app-modules.js';
 // Legacy business-role values remain valid for existing records, but new users are role-neutral.
 export const USER_ROLES = ['superadmin', 'admin', 'user', 'sales', 'operations', 'accounts', 'designers'];
 export const USER_STATUSES = ['active', 'inactive', 'invited', 'suspended'];
-export const WORK_PROFILES = ['director', 'employee'];
+export const WORK_PROFILES = ['superadmin', 'admin', 'client', 'director', 'employee'];
 
 function isTimezone(value) {
   try {
@@ -34,6 +34,16 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
+    passwordResetPasswordHash: {
+      type: String,
+      select: false,
+    },
+    passwordResetRequestedAt: Date,
+    passwordResetHistory: [{
+      requestedAt: { type: Date, required: true },
+      approvedAt: Date,
+      status: { type: String, enum: ['pending', 'approved'], default: 'pending' },
+    }],
     phone: {
       type: String,
       required: true,
@@ -128,6 +138,7 @@ const userSchema = new mongoose.Schema(
     toJSON: {
       transform(doc, ret) {
         delete ret.passwordHash;
+        delete ret.passwordResetPasswordHash;
         return ret;
       },
     },

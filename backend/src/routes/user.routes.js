@@ -3,10 +3,14 @@ import {
   createUser,
   deleteUser,
   getUser,
+  approvePasswordResetRequest,
   listLoginHistory,
+  listMyPasswordResetHistory,
+  listPasswordResetRequests,
   listUsers,
   logoutAllUsers,
   logoutUser,
+  requestPasswordReset,
   updateUser,
 } from '../controllers/user.controller.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -19,7 +23,11 @@ import {
 export const userRouter = Router();
 
 userRouter.get('/', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listUsers));
-userRouter.get('/login-history', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listLoginHistory));
+userRouter.get('/login-history', asyncHandler(authenticate), asyncHandler(listLoginHistory));
+userRouter.post('/password-reset-requests', asyncHandler(authenticate), asyncHandler(requestPasswordReset));
+userRouter.get('/password-reset-requests/history', asyncHandler(authenticate), asyncHandler(listMyPasswordResetHistory));
+userRouter.get('/password-reset-requests', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(listPasswordResetRequests));
+userRouter.post('/password-reset-requests/:id/approve', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(approvePasswordResetRequest));
 userRouter.post('/', asyncHandler(allowFirstSuperadminOrUserManager), asyncHandler(createUser));
 userRouter.post('/logout-all', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(logoutAllUsers));
 userRouter.post('/:id/logout', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(logoutUser));

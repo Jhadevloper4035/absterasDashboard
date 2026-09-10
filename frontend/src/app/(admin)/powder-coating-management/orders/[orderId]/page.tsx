@@ -5,9 +5,10 @@ import { Alert, Button, Card, CardBody, Form, Spinner, Table } from 'react-boots
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
-type Item = { inventoryItemRef: string; itemName: string; unit?: string; quantity: number; shadeName?: string; shadeCode?: string }
+type Item = { inventoryItemRef: string; laserCutStockRef?: string; itemName: string; unit?: string; quantity: number; shadeName?: string; shadeCode?: string; dimensions?: { heightFt?: number; widthFt?: number; lengthFt?: number } }
 type Order = { _id: string; orderNo: string; clientName: string; clientSiteName?: string; clientSiteAddressSnapshot?: string; status: 'OUT' | 'RETURNED'; deliveryStatus: 'AT_VENDOR' | 'PARTIAL' | 'DELIVERED'; remainingItems: Item[] }
-type Line = { inventoryItemRef: string; quantity: string }
+type Line = { inventoryItemRef: string; laserCutStockRef?: string; quantity: string }
+const materialSize = (dimensions?: Item['dimensions']) => dimensions?.heightFt && dimensions.widthFt ? `${dimensions.heightFt} × ${dimensions.widthFt} ft` : dimensions?.lengthFt ? `${dimensions.lengthFt} ft` : '—'
 
 export default function PowderCoatingSiteDispatchPage() {
   const { orderId } = useParams()
@@ -26,15 +27,15 @@ export default function PowderCoatingSiteDispatchPage() {
     try {
       const response = await apiFetch<{ data: Order }>(`/powder-coating-management/orders/${orderId}`)
       setOrder(response.data)
-      setLines(response.data.remainingItems.filter((item) => item.quantity > 0).map((item) => ({ inventoryItemRef: item.inventoryItemRef, quantity: String(item.quantity) })))
+      setLines(response.data.remainingItems.filter((item) => item.quantity > 0).map((item) => ({ inventoryItemRef: item.inventoryItemRef, laserCutStockRef: item.laserCutStockRef, quantity: String(item.quantity) })))
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load powder-coating order') }
   }
   useEffect(() => { void load() }, [orderId])
-  const remainingFor = (id: string) => order?.remainingItems.find((item) => item.inventoryItemRef === id)
+  const remainingFor = (line: Line) => order?.remainingItems.find((item) => item.inventoryItemRef === line.inventoryItemRef && item.laserCutStockRef === line.laserCutStockRef)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!orderId) return
-    const overRemaining = lines.find((line) => Number(line.quantity) > Number(remainingFor(line.inventoryItemRef)?.quantity || 0))
+    const overRemaining = lines.find((line) => Number(line.quantity) > Number(remainingFor(line)?.quantity || 0))
     if (overRemaining) return setError('Quantity cannot exceed the balance at powder coating')
     setSaving(true); setError('')
     try {
@@ -50,7 +51,7 @@ export default function PowderCoatingSiteDispatchPage() {
     {error && <Alert variant="danger">{error}</Alert>}
     {!order ? <div className="text-center py-5"><Spinner /></div> : <Card><CardBody><Form onSubmit={submit}>
       <div className="row g-3 mb-4"><div className="col-md-4"><Form.Label>Order</Form.Label><Form.Control readOnly value={order.orderNo} /></div><div className="col-md-4"><Form.Label>Client</Form.Label><Form.Control readOnly value={order.clientName} /></div><div className="col-md-4"><Form.Label>Client site address</Form.Label><Form.Control readOnly value={order.clientSiteAddressSnapshot || order.clientSiteName || 'Client address'} /></div><div className="col-md-3"><Form.Label>Challan date</Form.Label><Form.Control required type="date" value={challanDate} onChange={(event) => setChallanDate(event.target.value)} /></div><div className="col-md-3"><Form.Label>Transport type</Form.Label><Form.Control value={transportType} onChange={(event) => setTransportType(event.target.value)} /></div><div className="col-md-3"><Form.Label>Vehicle number</Form.Label><Form.Control value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)} /></div><div className="col-md-3"><Form.Label>E-way bill number</Form.Label><Form.Control value={eWayBillNumber} onChange={(event) => setEWayBillNumber(event.target.value)} /></div></div>
-      <Table responsive className="align-middle"><thead><tr><th>Product</th><th>Shade</th><th>Shade code</th><th>Available at powder coating</th><th>Send quantity</th><th>Unit</th></tr></thead><tbody>{lines.map((line, index) => { const item = remainingFor(line.inventoryItemRef); return <tr key={line.inventoryItemRef}><td>{item?.itemName}</td><td>{item?.shadeName || '—'}</td><td>{item?.shadeCode || '—'}</td><td>{item?.quantity}</td><td><Form.Control required type="number" min="0.01" max={item?.quantity} step="0.01" value={line.quantity} onChange={(event) => setLines((current) => current.map((entry, lineIndex) => lineIndex === index ? { ...entry, quantity: event.target.value } : entry))} /></td><td>{item?.unit || '—'}</td></tr> })}</tbody></Table>
+      <Table responsive className="align-middle"><thead><tr><th>Product</th><th>Material size</th><th>Shade</th><th>Shade code</th><th>Available at powder coating</th><th>Send quantity</th><th>Unit</th></tr></thead><tbody>{lines.map((line, index) => { const item = remainingFor(line); return <tr key={line.laserCutStockRef || line.inventoryItemRef}><td>{item?.itemName}</td><td>{materialSize(item?.dimensions)}</td><td>{item?.shadeName || '—'}</td><td>{item?.shadeCode || '—'}</td><td>{item?.quantity}</td><td><Form.Control required type="number" min="0.01" max={item?.quantity} step="0.01" value={line.quantity} onChange={(event) => setLines((current) => current.map((entry, lineIndex) => lineIndex === index ? { ...entry, quantity: event.target.value } : entry))} /></td><td>{item?.unit || '—'}</td></tr> })}</tbody></Table>
       <Button type="submit" disabled={saving || !lines.length || order.status !== 'OUT'}>{saving ? 'Creating…' : 'Create site delivery challan'}</Button>
     </Form></CardBody></Card>}
   </>

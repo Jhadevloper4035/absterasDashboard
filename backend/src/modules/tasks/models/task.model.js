@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 
 export const TASK_PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
-export const TASK_STATUSES = ['Backlog', 'To Do', 'In Progress', 'Review', 'Testing', 'Blocked', 'Done'];
+export const TASK_STATUSES = ['To Do', 'In Progress', 'Review', 'Done'];
 
 const attachmentSchema = new mongoose.Schema(
   {

@@ -8,7 +8,8 @@ import avatar1 from '@/assets/images/users/avatar-1.jpg'
 
 const ProfileDropdown = () => {
   const { removeSession, user } = useAuthContext()
-  const profileLink = user?.workProfile === 'employee' ? '/hr/my-profile' : '/pages/profile'
+  const isEmployee = user?.workProfile === 'employee' || (!user?.workProfile && user?.accessTypes?.includes('employee'))
+  const profileLink = isEmployee ? '/hr/my-profile' : '/pages/profile'
 
   return (
     <Dropdown className="topbar-item" align={'end'}>
@@ -30,14 +31,10 @@ const ProfileDropdown = () => {
           <IconifyIcon icon="bx:user-circle" className="text-muted fs-18 align-middle me-1" />
           <span className="align-middle">Profile</span>
         </DropdownItem>
-        <DropdownItem as={Link} to="/apps/chat">
-          <IconifyIcon icon="bx:message-dots" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Messages</span>
-        </DropdownItem>
-        <DropdownItem as={Link} to="/pages/pricing">
+        {isEmployee && <DropdownItem as={Link} to="/hr/advances">
           <IconifyIcon icon="bx:wallet" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Pricing</span>
-        </DropdownItem>
+          <span className="align-middle">Salary Advances</span>
+        </DropdownItem>}
         <DropdownItem as={Link} to="/pages/faqs">
           <IconifyIcon icon="bx:help-circle" className="text-muted fs-18 align-middle me-1" />
           <span className="align-middle">Help</span>
@@ -47,7 +44,7 @@ const ProfileDropdown = () => {
           <span className="align-middle">Lock screen</span>
         </DropdownItem>
         <DropdownDivider className="dropdown-divider my-1" />
-        <DropdownItem as="button" className="text-danger" onClick={removeSession}>
+        <DropdownItem as="button" type="button" className="text-danger" onClick={() => void removeSession()}>
           <IconifyIcon icon="bx:log-out" className="fs-18 align-middle me-1" />
           <span className="align-middle">Logout</span>
         </DropdownItem>

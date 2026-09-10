@@ -18,6 +18,7 @@
     "hr:seed-late-attendance": "node scripts/seed-late-attendance.mjs",
     "hr:seed-pending-leave": "node scripts/seed-pending-leave.mjs",
     "hr:seed-manager": "node scripts/seed-hr-manager.mjs",
+    "users:sync-development-to-production": "node scripts/sync-development-users-to-production.mjs",
     "hr:accrue-leave": "node scripts/accrue-leave-balances.mjs",
     "hr:notify-expiring-documents": "node scripts/notify-expiring-documents.mjs",
     "smoke": "node ../scripts/smoke-crm.mjs",

@@ -106,3 +106,25 @@ test('salary slip email uses the payroll template', () => {
   assert.equal(email.template, 'hr.payroll.payslip');
   assert.match(email.text, /salary slip is ready/i);
 });
+
+test('approval notification emails include the review link', () => {
+  const email = renderNotificationEmail({
+    title: 'Leave request awaiting approval',
+    body: 'Employee requested 2 day(s) of Medical Leave.',
+    metadata: { type: 'hr.request.pending', actionUrl: 'http://localhost:5173/hr/leave' },
+  });
+
+  assert.match(email.text, /http:\/\/localhost:5173\/hr\/leave/);
+  assert.match(email.html, /href="http:\/\/localhost:5173\/hr\/leave"/);
+});
+
+test('employee decision emails include the employee request link', () => {
+  const email = renderNotificationEmail({
+    title: 'Advance rejected',
+    body: 'Your advance of 3000 was rejected.',
+    metadata: { type: 'hr.advance.rejected', actionUrl: 'http://localhost:5173/hr/advances' },
+  });
+
+  assert.match(email.html, /Advance rejected/);
+  assert.match(email.html, /href="http:\/\/localhost:5173\/hr\/advances"/);
+});

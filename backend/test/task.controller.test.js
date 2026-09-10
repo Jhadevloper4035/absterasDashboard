@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
 import { addTaskNote, createTask, createTaskWorkType, deleteTask, deleteTaskWorkType, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from '../src/modules/tasks/controllers/task.controller.js';
-import { Task } from '../src/modules/tasks/models/task.model.js';
+import { Task, TASK_STATUSES } from '../src/modules/tasks/models/task.model.js';
 import { TaskWorkType } from '../src/modules/tasks/models/task-work-type.model.js';
 import { User } from '../src/models/user.model.js';
+import { Employee } from '../src/modules/hr/models/employee.model.js';
 import { createAttachmentToken } from '../src/services/upload.service.js';
 
 const originalTaskFind = Task.find;
@@ -16,6 +17,12 @@ const originalTaskWorkTypeFind = TaskWorkType.find;
 const originalTaskWorkTypeFindOneAndUpdate = TaskWorkType.findOneAndUpdate;
 const originalUserFind = User.find;
 const originalUserFindOne = User.findOne;
+const originalEmployeeFind = Employee.find;
+
+test('task statuses exclude removed workflow states', () => {
+  assert.deepEqual(TASK_STATUSES, ['To Do', 'In Progress', 'Review', 'Done']);
+});
+const taskManager = (_id = 'sales-1') => ({ _id, role: 'sales', modulePermissions: [{ module: 'tasks', access: 'manage' }] });
 
 function res() {
   return {
@@ -42,9 +49,10 @@ afterEach(() => {
   TaskWorkType.findOneAndUpdate = originalTaskWorkTypeFindOneAndUpdate;
   User.find = originalUserFind;
   User.findOne = originalUserFindOne;
+  Employee.find = originalEmployeeFind;
 });
 
-test('admin can add role work types and everyone can list configured work types', async () => {
+test('admin can add shared work types and everyone can list them', async () => {
   const adminId = new mongoose.Types.ObjectId();
   let upsertQuery;
   let upsertPatch;
@@ -58,19 +66,19 @@ test('admin can add role work types and everyone can list configured work types'
   await createTaskWorkType(
     {
       user: { _id: adminId, role: 'admin' },
-      body: { role: 'sales', name: '  Site Visit   Follow Up  ' },
+      body: { name: '  Site Visit   Follow Up  ' },
     },
     createResponse,
   );
 
   assert.equal(createResponse.statusCode, 201);
-  assert.deepEqual(upsertQuery, { role: 'sales', normalizedName: 'site visit follow up' });
+  assert.deepEqual(upsertQuery, { role: 'general', normalizedName: 'site visit follow up' });
   assert.equal(upsertPatch.$set.name, 'Site Visit Follow Up');
   assert.equal(upsertPatch.$setOnInsert.createdBy, adminId);
 
   TaskWorkType.find = () => ({
     sort() {
-      return Promise.resolve([{ role: 'sales', name: 'Site Visit Follow Up' }]);
+      return Promise.resolve([{ role: 'general', name: 'Site Visit Follow Up' }]);
     },
   });
 
@@ -78,11 +86,11 @@ test('admin can add role work types and everyone can list configured work types'
   await listTaskWorkTypes({ user: { _id: 'sales-1', role: 'sales' } }, listResponse);
 
   assert.equal(listResponse.statusCode, 200);
-  assert.ok(listResponse.body.data.sales.includes('Follow Up'));
-  assert.ok(listResponse.body.data.sales.includes('Site Visit Follow Up'));
+  assert.ok(listResponse.body.data.general.includes('Follow Up'));
+  assert.ok(listResponse.body.data.general.includes('Site Visit Follow Up'));
 });
 
-test('admin can delete default role work types', async () => {
+test('admin can delete default shared work types', async () => {
   const adminId = new mongoose.Types.ObjectId();
   let upsertQuery;
   let upsertPatch;
@@ -96,19 +104,19 @@ test('admin can delete default role work types', async () => {
   await deleteTaskWorkType(
     {
       user: { _id: adminId, role: 'admin' },
-      params: { role: 'operations', name: 'Laser Cut' },
+      params: { role: 'general', name: 'Laser Cut' },
     },
     deleteResponse,
   );
 
   assert.equal(deleteResponse.statusCode, 200);
-  assert.deepEqual(upsertQuery, { role: 'operations', normalizedName: 'laser cut' });
+  assert.deepEqual(upsertQuery, { role: 'general', normalizedName: 'laser cut' });
   assert.equal(upsertPatch.$set.deleted, true);
   assert.equal(upsertPatch.$set.deletedBy, adminId);
 
   TaskWorkType.find = () => ({
     sort() {
-      return Promise.resolve([{ role: 'operations', name: 'Laser Cut', normalizedName: 'laser cut', deleted: true }]);
+      return Promise.resolve([{ role: 'general', name: 'Laser Cut', normalizedName: 'laser cut', deleted: true }]);
     },
   });
 
@@ -116,8 +124,8 @@ test('admin can delete default role work types', async () => {
   await listTaskWorkTypes({ user: { _id: 'admin-1', role: 'admin' } }, listResponse);
 
   assert.equal(listResponse.statusCode, 200);
-  assert.ok(!listResponse.body.data.operations.includes('Laser Cut'));
-  assert.ok(listResponse.body.data.operations.includes('Coating'));
+  assert.ok(!listResponse.body.data.general.includes('Laser Cut'));
+  assert.ok(listResponse.body.data.general.includes('Coating'));
 });
 
 test('assigned users cannot create role work types', async () => {
@@ -161,7 +169,7 @@ test('new tasks get random 6-digit ticket numbers', async () => {
   assert.deepEqual(existsQuery, { ticketNumber: task.ticketNumber });
 });
 
-test('team users can create rich tasks for active accounts users', async () => {
+test('task managers can create rich tasks for active non-admin Task Management users', async () => {
   const adminId = new mongoose.Types.ObjectId();
   const assigneeId = new mongoose.Types.ObjectId();
   let userQuery;
@@ -188,7 +196,7 @@ test('team users can create rich tasks for active accounts users', async () => {
     const response = res();
     await createTask(
       {
-        user: { _id: adminId, role: 'sales' },
+        user: taskManager(adminId),
         body: {
           title: 'Implement JWT refresh-token rotation',
           description: 'Replace each refresh token after use',
@@ -204,7 +212,17 @@ test('team users can create rich tasks for active accounts users', async () => {
     );
 
     assert.equal(response.statusCode, 201);
-    assert.deepEqual(userQuery, { _id: assigneeId, status: 'active', $or: [{ role: { $in: ['sales', 'operations', 'accounts', 'designers'] } }, { additionalRoles: { $in: ['sales', 'operations', 'accounts', 'designers'] } }] });
+    assert.deepEqual(userQuery, {
+      _id: assigneeId,
+      status: 'active',
+      modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } },
+      $nor: [
+        { role: { $in: ['admin', 'superadmin'] } },
+        { additionalRoles: { $in: ['admin', 'superadmin'] } },
+        { accessTypes: { $in: ['admin', 'superadmin'] } },
+        { workProfile: { $in: ['admin', 'superadmin'] } },
+      ],
+    });
     assert.equal(saved.title, 'Implement JWT refresh-token rotation');
     assert.deepEqual(saved.labels, ['backend', 'authentication', 'security']);
     assert.equal(saved.attachments[0].originalName, 'spec.pdf');
@@ -216,6 +234,15 @@ test('team users can create rich tasks for active accounts users', async () => {
     Task.prototype.save = originalSave;
     Task.prototype.populate = originalPopulate;
   }
+});
+
+test('task creators cannot assign a task to themselves', async () => {
+  const response = res();
+
+  await createTask({ user: taskManager(), body: { title: 'Self assigned task', assignee: 'sales-1' } }, response);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Assign the task to another active user with Task Management access');
 });
 
 test('task attachments require backend-issued upload token', async () => {
@@ -234,7 +261,7 @@ test('task attachments require backend-issued upload token', async () => {
     const response = res();
     await createTask(
       {
-        user: { _id: adminId, role: 'sales' },
+        user: taskManager(adminId),
         body: {
           title: 'Fake attachment',
           assignee: assigneeId,
@@ -260,7 +287,7 @@ test('admins can view tasks but cannot create or assign them', async () => {
   assert.equal(response.statusCode, 403);
 });
 
-test('only the task creator can delete it', async () => {
+test('task managers can delete tasks they created', async () => {
   let filter;
   Task.findOneAndDelete = async (value) => {
     filter = value;
@@ -268,13 +295,13 @@ test('only the task creator can delete it', async () => {
   };
 
   const response = res();
-  await deleteTask({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' } }, response);
+  await deleteTask({ user: taskManager(), params: { id: 'task-1' } }, response);
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(filter, { _id: 'task-1', createdBy: 'sales-1' });
 });
 
-test('task assignees are active sales operations accounts and designers users', async () => {
+test('task assignees include active non-admin Task Management users', async () => {
   let query;
   User.find = (filter) => {
     query = filter;
@@ -290,10 +317,65 @@ test('task assignees are active sales operations accounts and designers users', 
       },
     };
   };
+  Employee.find = () => ({
+    populate() {
+      return this;
+    },
+    select() {
+      return Promise.resolve([]);
+    },
+  });
 
-  await listTaskAssignees({ user: { _id: 'sales-1', role: 'sales' } }, res());
+  await listTaskAssignees({ user: taskManager() }, res());
 
-  assert.deepEqual(query, { status: 'active', $or: [{ role: { $in: ['sales', 'operations', 'accounts', 'designers'] } }, { additionalRoles: { $in: ['sales', 'operations', 'accounts', 'designers'] } }] });
+  assert.deepEqual(query, {
+    status: 'active',
+    _id: { $ne: 'sales-1' },
+    modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } },
+    $nor: [
+      { role: { $in: ['admin', 'superadmin'] } },
+      { additionalRoles: { $in: ['admin', 'superadmin'] } },
+      { accessTypes: { $in: ['admin', 'superadmin'] } },
+      { workProfile: { $in: ['admin', 'superadmin'] } },
+    ],
+  });
+});
+
+test('task assignees include each employee department', async () => {
+  let selectedFields;
+  User.find = () => ({
+    select(fields) {
+      selectedFields = fields;
+      return this;
+    },
+    sort() {
+      return this;
+    },
+    limit() {
+      return Promise.resolve([{ _id: 'employee-1', name: 'Abhay', email: 'abhay@example.com', status: 'active', workProfile: 'director' }]);
+    },
+  });
+  Employee.find = () => ({
+    populate() {
+      return this;
+    },
+    select() {
+      return Promise.resolve([{ user: 'employee-1', department: { _id: 'department-1', name: 'Design' } }]);
+    },
+  });
+
+  const response = res();
+  await listTaskAssignees({ user: taskManager() }, response);
+
+  assert.equal(selectedFields, 'name email status workProfile');
+  assert.deepEqual(response.body.data, [{
+    _id: 'employee-1',
+    name: 'Abhay',
+    email: 'abhay@example.com',
+    status: 'active',
+    workProfile: 'director',
+    department: { _id: 'department-1', name: 'Design' },
+  }]);
 });
 
 test('team users can only list and update tasks they created or are assigned', async () => {
@@ -323,13 +405,13 @@ test('team users can only list and update tasks they created or are assigned', a
   assert.deepEqual(query, { $and: [{}, { $or: [{ createdBy: 'sales-1' }, { assignee: 'sales-1' }] }] });
   assert.equal(limit, 5);
 
-  const task = { _id: 'task-1', status: 'To Do', save: async () => {}, populate: async () => {} };
+  const task = { _id: 'task-1', status: 'To Do', createdBy: 'sales-2', assignee: 'sales-1', save: async () => {}, populate: async () => {} };
   Task.findOne = async (filter) => {
     query = filter;
     return task;
   };
 
-  await updateTask({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { status: 'Done' } }, res());
+  await updateTask({ user: taskManager(), params: { id: 'task-1' }, body: { status: 'Done' } }, res());
 
   assert.deepEqual(query, { $and: [{ _id: 'task-1' }, { $or: [{ createdBy: 'sales-1' }, { assignee: 'sales-1' }] }] });
   assert.equal(task.status, 'Done');
@@ -342,10 +424,45 @@ test('only the task creator can reassign it', async () => {
   Task.findOne = async () => task;
 
   const response = res();
-  await updateTask({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { assignee: 'sales-3' } }, response);
+  await updateTask({ user: taskManager(), params: { id: 'task-1' }, body: { assignee: 'sales-3' } }, response);
 
   assert.equal(response.statusCode, 403);
   assert.equal(response.body.error.message, 'Only the task creator can reassign it');
+});
+
+test('task assignees cannot change priority', async () => {
+  const task = { _id: 'task-1', status: 'To Do', createdBy: 'sales-2', assignee: 'sales-1', priority: 'Medium' };
+  Task.findOne = async () => task;
+
+  const response = res();
+  await updateTask({ user: taskManager(), params: { id: 'task-1' }, body: { priority: 'High' } }, response);
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only the task creator can change priority');
+  assert.equal(task.priority, 'Medium');
+});
+
+test('task assignees can only mark a task done', async () => {
+  const attachment = {
+    key: 'uploads/document/submission.pdf',
+    checksum: 'submission123',
+    originalName: 'submission.pdf',
+  };
+  attachment.attachmentToken = createAttachmentToken(attachment);
+  const task = { _id: 'task-1', status: 'To Do', createdBy: 'sales-2', assignee: 'sales-1', title: 'Original', notes: [], save: async () => {}, populate: async () => {} };
+  Task.findOne = async () => task;
+
+  const editResponse = res();
+  await updateTask({ user: taskManager(), params: { id: 'task-1' }, body: { title: 'Changed' } }, editResponse);
+  assert.equal(editResponse.statusCode, 403);
+
+  const closeResponse = res();
+  await updateTask({ user: taskManager(), params: { id: 'task-1' }, body: { status: 'Done', submissionDescription: 'All requested work is complete.', submissionAttachments: [attachment] } }, closeResponse);
+  assert.equal(closeResponse.statusCode, 200);
+  assert.equal(task.status, 'Done');
+  assert.equal(task.notes[0].title, 'Task submitted');
+  assert.equal(task.notes[0].description, 'All requested work is complete.');
+  assert.equal(task.notes[0].attachments[0].originalName, 'submission.pdf');
 });
 
 test('task assignment pages always filter by the signed-in user', async () => {
@@ -379,12 +496,12 @@ test('closed tasks cannot be updated or receive notes', async () => {
   Task.findOne = async () => task;
 
   const updateResponse = res();
-  await updateTask({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { title: 'Changed' } }, updateResponse);
+  await updateTask({ user: taskManager(), params: { id: 'task-1' }, body: { title: 'Changed' } }, updateResponse);
   assert.equal(updateResponse.statusCode, 409);
   assert.equal(updateResponse.body.error.message, 'Closed tasks cannot be edited');
 
   const noteResponse = res();
-  await addTaskNote({ user: { _id: 'sales-1', role: 'sales' }, params: { id: 'task-1' }, body: { title: 'Note', description: 'Should fail' } }, noteResponse);
+  await addTaskNote({ user: taskManager(), params: { id: 'task-1' }, body: { title: 'Note', description: 'Should fail' } }, noteResponse);
   assert.equal(noteResponse.statusCode, 409);
   assert.equal(noteResponse.body.error.message, 'Closed tasks cannot be edited');
 });
@@ -429,7 +546,7 @@ test('team users update trusted task attachments', async () => {
     _id: 'task-1',
     title: 'Task with attachment',
     assignee: 'sales-1',
-    createdBy: 'admin-1',
+    createdBy: 'sales-1',
     attachments: [],
     notes: [],
     save: async () => {},
@@ -444,7 +561,7 @@ test('team users update trusted task attachments', async () => {
   const response = res();
   await updateTask(
     {
-      user: { _id: 'sales-1', role: 'sales' },
+      user: taskManager(),
       params: { id: 'task-1' },
       body: { attachments: [attachment] },
     },
@@ -467,6 +584,8 @@ test('assigned user can add timestamped task note', async () => {
   attachment.attachmentToken = createAttachmentToken(attachment);
   const task = {
     _id: 'task-1',
+    createdBy: 'sales-2',
+    assignee: 'sales-1',
     notes: [],
     save: async () => {},
     populate: async () => {},
@@ -480,7 +599,7 @@ test('assigned user can add timestamped task note', async () => {
   const response = res();
   await addTaskNote(
     {
-      user: { _id: 'sales-1', role: 'sales' },
+      user: { _id: 'sales-1', role: 'employee' },
       params: { id: 'task-1' },
       body: {
         title: 'Progress update',

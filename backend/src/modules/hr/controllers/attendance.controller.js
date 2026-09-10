@@ -5,6 +5,7 @@ import { LeaveRequest } from '../models/leave-request.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { calculateAttendance } from '../services/attendance.service.js';
 import { createAttendanceReportPdf } from '../services/attendance-report-pdf.service.js';
+import { notifyEmployeeRequestDecision, notifyHrApprovers } from '../services/approval-notification.service.js';
 
 const dateAtMidnight = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
@@ -53,6 +54,7 @@ export async function markAttendance(req, res) {
   const date = dateAtMidnight(req.body?.date);
   const records = req.body?.records;
   if (!date || !Array.isArray(records) || !records.length || records.length > 500) return res.status(400).json({ error: { message: 'Date and 1–500 attendance records are required' } });
+  if (date > dateAtMidnight(new Date().toISOString().slice(0, 10))) return res.status(400).json({ error: { message: 'Attendance cannot be marked for a future date' } });
   if (date.getUTCDay() === 0) return res.status(400).json({ error: { message: 'Attendance cannot be marked on Sunday' } });
   if (await Holiday.exists({ date })) return res.status(400).json({ error: { message: 'Attendance cannot be marked on a holiday' } });
   if (records.some((record) => !ATTENDANCE_STATUSES.includes(record?.status))) return res.status(400).json({ error: { message: 'Invalid attendance status' } });
@@ -97,6 +99,7 @@ export async function requestAttendanceCorrection(req, res) {
     if (!attendance) {
       attendance = await Attendance.create({ employee: employee._id, date, status: 'absent', correctionRequest });
       await auditEvent(req, { action: 'hr.attendance.correction.request', entity: 'attendance', entityId: attendance._id, after: { requestedStatus } });
+      await notifyHrApprovers(req.user, { title: 'Attendance correction awaiting approval', body: `${req.user.name || 'An employee'} requested a ${requestedStatus} correction for ${req.body.date}.`, link: '/hr/attendance' });
       return res.status(201).json({ data: attendance });
     }
   }
@@ -104,6 +107,7 @@ export async function requestAttendanceCorrection(req, res) {
   attendance.correctionRequest = correctionRequest;
   await attendance.save();
   await auditEvent(req, { action: 'hr.attendance.correction.request', entity: 'attendance', entityId: attendance._id, after: { requestedStatus } });
+  await notifyHrApprovers(req.user, { title: 'Attendance correction awaiting approval', body: `${req.user.name || 'An employee'} requested a ${requestedStatus} correction.`, link: '/hr/attendance' });
   return res.status(201).json({ data: attendance });
 }
 
@@ -113,8 +117,9 @@ export async function decideAttendanceCorrection(req, res) {
   const attendance = await Attendance.findById(req.params.id);
   if (!attendance) return res.status(404).json({ error: { message: 'Attendance record not found' } });
   if (attendance.correctionRequest?.status !== 'pending') return res.status(409).json({ error: { message: 'This correction request is no longer pending' } });
+  let employee;
   if (decision === 'approved') {
-    const employee = await Employee.findById(attendance.employee).select('employeeType');
+    employee = await Employee.findById(attendance.employee).select('employeeType user');
     if (!employee) return res.status(404).json({ error: { message: 'Employee not found' } });
     const corrected = calculateAttendance({ employeeType: employee.employeeType, status: attendance.correctionRequest.requestedStatus, checkIn: attendance.correctionRequest.requestedCheckIn, checkOut: attendance.correctionRequest.requestedCheckOut });
     Object.assign(attendance, { ...corrected, checkIn: attendance.correctionRequest.requestedCheckIn || undefined, checkOut: attendance.correctionRequest.requestedCheckOut || undefined, isRegularized: true, regularizationReason: attendance.correctionRequest.reason, markedBy: req.user._id });
@@ -124,6 +129,8 @@ export async function decideAttendanceCorrection(req, res) {
   attendance.correctionRequest.decidedBy = req.user._id;
   await attendance.save();
   await auditEvent(req, { action: `hr.attendance.correction.${decision}`, entity: 'attendance', entityId: attendance._id, after: { status: attendance.status } });
+  employee ||= await Employee.findById(attendance.employee).select('user');
+  await notifyEmployeeRequestDecision(req.user, employee?.user, { title: `Attendance correction ${decision}`, body: `Your attendance correction request was ${decision}.`, type: `hr.attendance.correction.${decision}`, link: '/hr/my-attendance' });
   return res.json({ data: attendance });
 }
 

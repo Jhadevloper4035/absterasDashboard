@@ -19,6 +19,8 @@ const CreateInvoicePage = () => {
   const [financialYear, setFinancialYear] = useState(currentFinancialYear)
   const [invoiceNumber, setInvoiceNumber] = useState(() => generatedInvoiceNumber(currentFinancialYear()))
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
+  const [poNumber, setPoNumber] = useState('')
+  const [poDate, setPoDate] = useState('')
   const [placeOfSupply, setPlaceOfSupply] = useState('')
   const [placeOfSupplyCode, setPlaceOfSupplyCode] = useState('')
   const [dispatchFromAddress, setDispatchFromAddress] = useState('')
@@ -26,7 +28,7 @@ const CreateInvoicePage = () => {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
-    apiFetch<{ data: Client[] }>('/clients?limit=100')
+    apiFetch<{ data: Client[] }>('/invoices/client-options')
       .then(({ data }) => setClients(data))
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load clients'))
   }, [])
@@ -72,6 +74,8 @@ const CreateInvoicePage = () => {
           client,
           site: site === 'client-address' ? null : site || null,
           invoiceDate,
+          poNumber,
+          poDate: poDate || null,
           placeOfSupply,
           placeOfSupplyCode,
           dispatchFromAddress,
@@ -88,7 +92,7 @@ const CreateInvoicePage = () => {
           grandTotal: taxableAmount + igstAmount + cgstAmount + sgstAmount,
         }),
       })
-      navigate(`/clients/${client}`)
+      navigate('/invoices')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create invoice')
     } finally {
@@ -105,7 +109,7 @@ const CreateInvoicePage = () => {
               <h4 className="card-title mb-1">Create tax invoice</h4>
               <p className="text-muted mb-0">A unique invoice number is generated automatically when you save.</p>
             </div>
-            <Link to={client ? `/clients/${client}` : '/clients'}>
+            <Link to="/invoices">
               <Button variant="outline-secondary">Cancel</Button>
             </Link>
           </div>
@@ -129,6 +133,14 @@ const CreateInvoicePage = () => {
               <div className="col-md-4">
                 <Form.Label>Invoice date</Form.Label>
                 <Form.Control required type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+              </div>
+              <div className="col-md-6">
+                <Form.Label>PO number</Form.Label>
+                <Form.Control maxLength={100} value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="Purchase order number" />
+              </div>
+              <div className="col-md-6">
+                <Form.Label>PO date</Form.Label>
+                <Form.Control type="date" value={poDate} onChange={(event) => setPoDate(event.target.value)} />
               </div>
               <div className="col-md-6">
                 <Form.Label>Parent client</Form.Label>

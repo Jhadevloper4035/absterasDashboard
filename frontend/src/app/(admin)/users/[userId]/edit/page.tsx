@@ -1,8 +1,7 @@
 import PageMetaData from '@/components/PageTitle'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
-import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
-import { BASIC_APP_MODULES, defaultModulePermissions, moduleLabel, type ModulePermission } from '@/helpers/moduleAccess'
+import { defaultModulePermissions, moduleLabel, type ModulePermission } from '@/helpers/moduleAccess'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import type { EmployeeType, OrganizationItem } from '@/types/hr'
@@ -11,15 +10,10 @@ import { Alert, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
 import { useNavigate, useParams } from 'react-router-dom'
 
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
-const inventoryModules = ['categories', 'items', 'transactions', 'reports']
-type InventoryPermission = { module: string; access: 'none' | 'view' | 'manage' }
-const defaultInventoryPermissions = () => inventoryModules.map((module) => ({ module, access: 'none' as const }))
-
 type EditForm = Pick<UserType, 'name' | 'email' | 'phone' | 'workProfile' | 'status' | 'timezone'> & { password: string }
 type Employment = { employeeType: 'office' | 'site'; department: string; designation: string; joiningDate: string; dateOfBirth: string }
 
 const EditUserPage = () => {
-  const { user } = useAuthContext()
   const { userId = '' } = useParams()
   const navigate = useNavigate()
   const updateUser = useUserManagementStore((state) => state.updateUser)
@@ -32,10 +26,7 @@ const EditUserPage = () => {
   const [salaryStructureId, setSalaryStructureId] = useState('')
   const [monthlySalary, setMonthlySalary] = useState('')
   const [employment, setEmployment] = useState<Employment>({ employeeType: 'office', department: '', designation: '', joiningDate: '', dateOfBirth: '' })
-  const [inventoryPermissions, setInventoryPermissions] = useState<InventoryPermission[]>(defaultInventoryPermissions)
   const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>(defaultModulePermissions)
-  const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
-  const isSuperadmin = currentAccessTypes.includes('superadmin')
 
   useEffect(() => {
     apiFetch<{ data: UserType }>(`/users/${userId}`)
@@ -53,11 +44,6 @@ const EditUserPage = () => {
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load user'))
   }, [userId])
-
-  useEffect(() => {
-    if (!isSuperadmin) return
-    apiFetch<{ data: InventoryPermission[] }>(`/inventory/permissions/${userId}`).then((response) => setInventoryPermissions(response.data)).catch(() => {})
-  }, [isSuperadmin, userId])
 
   useEffect(() => {
     Promise.all([
@@ -113,7 +99,6 @@ const EditUserPage = () => {
         modulePermissions,
         ...(form.password ? { password: form.password } : {}),
       })
-      if (isSuperadmin) await apiFetch(`/inventory/permissions/${userId}`, { method: 'PUT', body: JSON.stringify({ permissions: inventoryPermissions }) })
       if (form.workProfile === 'employee') {
         const response = employeeId
           ? await apiFetch<{ data: EmployeeType }>(`/hr/employees/${employeeId}`, { method: 'PATCH', body: JSON.stringify(employment) })
@@ -213,8 +198,10 @@ const EditUserPage = () => {
                     <Form.Select value={form.workProfile} onChange={(event) => {
                       const workProfile = event.target.value as NonNullable<UserType['workProfile']>
                       setForm({ ...form, workProfile })
-                      if (workProfile === 'director') setModulePermissions((current) => current.map((permission) => permission.module === 'hr' ? { ...permission, access: 'none' } : permission))
                     }}>
+                      <option value="superadmin">Superadmin</option>
+                      <option value="admin">Admin</option>
+                      <option value="client">Client</option>
                       <option value="employee">Employee</option>
                       <option value="director">Director</option>
                     </Form.Select>
@@ -224,18 +211,17 @@ const EditUserPage = () => {
                 <Col xs={12}>
                   <details open>
                     <summary className="fw-medium">Sidebar access</summary>
-                    <Form.Text>Todo and Notifications are enabled for every user. Grant access to the remaining sidebar labels.</Form.Text>
-                    {modulePermissions.filter((permission) => !BASIC_APP_MODULES.includes(permission.module as (typeof BASIC_APP_MODULES)[number])).map((permission) => (
+                    <Form.Text>Grant access to each sidebar module.</Form.Text>
+                    {modulePermissions.map((permission) => (
                       <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}>
                         <span className="flex-grow-1">{moduleLabel(permission.module)}</span>
-                        <Form.Select disabled={form.workProfile === 'director' && permission.module === 'hr'} style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setModulePermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as ModulePermission['access'] } : item))}>
+                        <Form.Select style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setModulePermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as ModulePermission['access'] } : item))}>
                           <option value="none">None</option><option value="view">View</option><option value="manage">Manage</option>
                         </Form.Select>
                       </div>
                     ))}
                   </details>
                 </Col>
-                {isSuperadmin && <Col xs={12}><details><summary className="fw-medium">Inventory access</summary><Form.Text>Separate from roles and HR access.</Form.Text>{inventoryPermissions.map((permission) => <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}><span className="flex-grow-1 text-capitalize">{permission.module}</span><Form.Select style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setInventoryPermissions((current) => current.map((item) => item.module === permission.module ? { ...item, access: event.target.value as InventoryPermission['access'] } : item))}><option value="none">None</option><option value="view">View</option><option value="manage">Manage</option></Form.Select></div>)}</details></Col>}
                 {form.workProfile === 'employee' && (
                   <>
                     <Col xs={12}>
@@ -317,7 +303,7 @@ const EditUserPage = () => {
                     </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col xl={4}>
+                {form.workProfile === 'employee' && <Col xl={4}>
                   <Form.Group>
                     <Form.Label>Monthly Salary</Form.Label>
                     <Form.Control
@@ -330,7 +316,7 @@ const EditUserPage = () => {
                     />
                     <Form.Text>Enter the full amount, for example 50,000.</Form.Text>
                   </Form.Group>
-                </Col>
+                </Col>}
                 <Col xl={4}>
                   <Form.Group>
                     <Form.Label>Timezone</Form.Label>

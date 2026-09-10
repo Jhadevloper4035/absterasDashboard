@@ -4,19 +4,27 @@ import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
 import { cachedJson, invalidateCache } from '../../../services/redis-cache.service.js';
-import { appAccessLevel, userRoles } from '../../auth/middleware/auth.middleware.js';
-
-const ADMIN_ROLES = ['superadmin', 'admin'];
+import { appAccessLevel } from '../../auth/middleware/auth.middleware.js';
 const LEAD_UPDATE_FIELDS = ['name', 'source', 'sourceType', 'campaign', 'productInterest', 'email', 'phone', 'company', 'siteAddress', 'googleMapUrl', 'territory', 'leadCost'];
 const LEAD_DOCUMENT_TYPES = ['site_images', 'psf', 'boq', 'estimation'];
 const CLOSED_LEAD_STATUSES = ['WON', 'LOST', 'ON_HOLD'];
 
-function canViewAllLeads(user) {
-  return userRoles(user).some((role) => ADMIN_ROLES.includes(role));
-}
-
 function canAssignLeads(user) {
   return appAccessLevel(user, 'leads') === 2;
+}
+
+function leadAssigneeQuery(id) {
+  return {
+    ...(id ? { _id: id } : {}),
+    status: 'active',
+    modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } },
+    $nor: [
+      { role: { $in: ['admin', 'superadmin'] } },
+      { additionalRoles: { $in: ['admin', 'superadmin'] } },
+      { accessTypes: { $in: ['admin', 'superadmin'] } },
+      { workProfile: { $in: ['admin', 'superadmin'] } },
+    ],
+  };
 }
 
 function forbidden(res) {
@@ -24,11 +32,11 @@ function forbidden(res) {
 }
 
 function leadQueryFor(user, extra = {}) {
-  return canViewAllLeads(user) ? extra : { ...extra, owner: user._id };
+  return { ...extra, $or: [{ owner: user._id }, { createdBy: user._id }] };
 }
 
 function canDeleteLeads(user) {
-  return userRoles(user).some((role) => ADMIN_ROLES.includes(role));
+  return appAccessLevel(user, 'leads') === 2;
 }
 
 function escapeRegex(value) {
@@ -128,19 +136,21 @@ export async function createLead(req, res) {
   if (payload.leadCost !== undefined) payload.leadCost = Number(payload.leadCost);
   if (payload.documents !== undefined) payload.documents = cleanDocuments(payload.documents);
 
-  let owner;
+  let owner = req.user;
   if (requestedOwner) {
-    owner = await User.findOne({ _id: requestedOwner, status: 'active', modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } } });
+    if (String(requestedOwner) === String(req.user._id)) return res.status(400).json({ error: { message: 'Assign the lead to another active user with Lead Management access' } });
+    owner = await User.findOne(leadAssigneeQuery(requestedOwner));
     if (!owner) return res.status(400).json({ error: { message: 'Assign leads to an active user with Lead Management access' } });
   }
 
   const lead = await Lead.create({
     ...payload,
     createdBy: req.user._id,
-    owner: owner?._id,
-    status: owner ? 'ASSIGNED' : 'NEW',
-    assignmentException: !owner,
-    ...(owner ? { assignmentHistory: [{ newOwner: owner._id, reason: 'Assigned on creation', rule: 'manual', actor: req.user._id }], statusHistory: [{ to: 'ASSIGNED', reason: 'Assigned on creation', actor: req.user._id }] } : {}),
+    owner: owner._id,
+    status: 'ASSIGNED',
+    assignmentException: false,
+    assignmentHistory: [{ newOwner: owner._id, reason: 'Assigned on creation', rule: 'manual', actor: req.user._id }],
+    statusHistory: [{ to: 'ASSIGNED', reason: 'Assigned on creation', actor: req.user._id }],
   });
   if (owner && String(owner._id) !== String(req.user._id)) {
     await notifyUsers([owner._id], {
@@ -163,14 +173,10 @@ export async function listLeads(req, res) {
   if (req.query.assignmentException === 'true') query.assignmentException = true;
   if (req.query.hasMeeting === 'true') query['meetingHistory.startsAt'] = { $exists: true };
   if (req.query.upcomingMeeting === 'true') query['meetingHistory.startsAt'] = { $gte: new Date() };
+  if (req.query.scheduledByMe === 'true') query.meetingHistory = { $elemMatch: { scheduledBy: req.user._id, status: 'SCHEDULED' } };
   if (req.query.name) query.name = { $regex: escapeRegex(req.query.name), $options: 'i' };
   if (req.query.phone) query.phone = { $regex: escapeRegex(req.query.phone), $options: 'i' };
   if (req.query.email) query.email = { $regex: escapeRegex(req.query.email), $options: 'i' };
-  if (req.query.mine === 'true') query.owner = req.user._id;
-  if (canViewAllLeads(req.user) && req.query.owner && req.query.mine !== 'true') {
-    if (req.query.owner === 'unassigned') query.owner = null;
-    else query.owner = req.query.owner;
-  }
   if (req.query.createdFrom || req.query.createdTo) {
     query.createdAt = {};
     if (req.query.createdFrom) query.createdAt.$gte = new Date(`${req.query.createdFrom}T00:00:00.000Z`);
@@ -184,7 +190,7 @@ export async function listLeads(req, res) {
         .populate('owner', 'name email role status')
         .populate('createdBy', 'name email role status')
         .populate('meetingHistory.scheduledBy', 'name email role status')
-        .sort({ createdAt: -1 })
+        .sort(req.query.upcomingMeeting === 'true' ? { 'meetingHistory.startsAt': 1 } : { createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
       Lead.countDocuments(query),
@@ -196,7 +202,7 @@ export async function listLeads(req, res) {
 }
 
 export async function listLeadAssignees(req, res) {
-  const users = await User.find({ status: 'active', modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } } }).select('name email status').sort({ name: 1 }).limit(1000);
+  const users = await User.find({ ...leadAssigneeQuery(), _id: { $ne: req.user._id } }).select('name email status').sort({ name: 1 }).limit(1000);
   return res.json({ data: users });
 }
 
@@ -244,8 +250,8 @@ export async function updateLead(req, res) {
     if (isClosed && !wasClosed && String(lead.owner || '') !== String(req.user._id)) {
       return res.status(403).json({ error: { message: 'Only the assigned salesperson can close this lead' } });
     }
-    if (wasClosed && !isClosed && !ADMIN_ROLES.includes(req.user.role)) {
-      return res.status(403).json({ error: { message: 'Only an administrator can reopen a closed lead' } });
+    if (wasClosed && !isClosed && !canAssignLeads(req.user)) {
+      return res.status(403).json({ error: { message: 'Lead Management access is required to reopen a closed lead' } });
     }
     if (status !== lead.status) {
       lead.statusHistory.push({ from: lead.status, to: status, reason: statusReason, actor: req.user._id });
@@ -265,8 +271,9 @@ export async function updateLead(req, res) {
     if (!canAssignLeads(req.user)) {
       return forbidden(res);
     }
+    if (String(owner) === String(req.user._id)) return res.status(400).json({ error: { message: 'Assign the lead to another active user with Lead Management access' } });
 
-    const newOwner = await User.findOne({ _id: owner, status: 'active', modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } } });
+    const newOwner = await User.findOne(leadAssigneeQuery(owner));
 
     if (!newOwner) {
       return res.status(400).json({ error: { message: 'Assign leads to an active user with Lead Management access' } });
@@ -419,7 +426,7 @@ export async function deleteLead(req, res) {
     return forbidden(res);
   }
 
-  const lead = await Lead.findOneAndDelete({ _id: req.params.id });
+  const lead = await Lead.findOneAndDelete(leadQueryFor(req.user, { _id: req.params.id }));
   if (!lead) {
     return res.status(404).json({ error: { message: 'Lead not found' } });
   }

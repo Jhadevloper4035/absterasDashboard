@@ -2,6 +2,7 @@ import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Table } from 'react-bootstrap'
+import Swal from 'sweetalert2'
 
 type Request = {
   _id: string
@@ -37,6 +38,16 @@ const ApprovalsPage = () => {
   }, [])
 
   const decide = async (id: string, status: 'approved' | 'rejected') => {
+    const approving = status === 'approved'
+    const result = await Swal.fire({
+      icon: approving ? 'question' : 'warning',
+      title: `${approving ? 'Approve' : 'Reject'} leave request?`,
+      text: approving ? 'The employee will be notified that this leave request was approved.' : 'The employee will be notified that this leave request was rejected.',
+      showCancelButton: true,
+      confirmButtonText: approving ? 'Approve leave' : 'Reject leave',
+      confirmButtonColor: approving ? undefined : '#dc3545',
+    })
+    if (!result.isConfirmed) return
     setSaving(id)
     try {
       await apiFetch(`/hr/leave/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })

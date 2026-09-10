@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createUser, deleteUser, getUser, listLoginHistory, listUsers, logoutAllUsers, logoutUser, updateUser } from '../src/controllers/user.controller.js';
+import { approvePasswordResetRequest, createUser, deleteUser, getUser, listLoginHistory, listUsers, logoutAllUsers, logoutUser, requestPasswordReset, updateUser } from '../src/controllers/user.controller.js';
 import { AuthSession } from '../src/modules/auth/models/auth-session.model.js';
 import { BlockedToken } from '../src/modules/auth/models/blocked-token.model.js';
 import { LoginHistory } from '../src/modules/auth/models/login-history.model.js';
 import { User } from '../src/models/user.model.js';
+import { RateLimit } from '../src/models/rate-limit.model.js';
 
 const originalAuthSessionFind = AuthSession.find;
 const originalAuthSessionUpdateMany = AuthSession.updateMany;
@@ -19,6 +20,7 @@ const originalDeleteOne = User.deleteOne;
 const originalLoginHistoryFind = LoginHistory.find;
 const originalLoginHistoryCountDocuments = LoginHistory.countDocuments;
 const originalLoginHistoryUpdateMany = LoginHistory.updateMany;
+const originalRateLimitDeleteOne = RateLimit.deleteOne;
 
 function res() {
   return {
@@ -49,6 +51,7 @@ afterEach(() => {
   LoginHistory.find = originalLoginHistoryFind;
   LoginHistory.countDocuments = originalLoginHistoryCountDocuments;
   LoginHistory.updateMany = originalLoginHistoryUpdateMany;
+  RateLimit.deleteOne = originalRateLimitDeleteOne;
 });
 
 function emptyActiveSessions() {
@@ -68,8 +71,8 @@ function emptyActiveSessions() {
   });
 }
 
-test('cannot create a second superadmin user', async () => {
-  User.exists = async () => ({ _id: 'superadmin-1' });
+test('initial setup can create the Superadmin account', async () => {
+  User.create = async (user) => ({ _id: 'superadmin-1', ...user });
 
   const response = res();
   await createUser(
@@ -85,8 +88,8 @@ test('cannot create a second superadmin user', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 400);
-  assert.equal(response.body.error.message, 'Only one superadmin is allowed');
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.body.data.role, 'superadmin');
 });
 
 test('user creation requires mobile number', async () => {
@@ -120,7 +123,7 @@ test('employment details require Employee access type', async () => {
   );
 
   assert.equal(response.statusCode, 400);
-  assert.equal(response.body.error.message, 'Select the Employee access type before adding employment details');
+  assert.equal(response.body.error.message, 'Select the Employee work profile before adding employment details');
 });
 
 test('user creation rejects weak passwords', async () => {
@@ -142,9 +145,9 @@ test('user creation rejects weak passwords', async () => {
   assert.match(response.body.error.message, /letters and numbers/);
 });
 
-test('cannot promote a user into a second superadmin', async () => {
+test('direct role changes are ignored when updating a user', async () => {
   User.findById = async () => ({ _id: 'sales-1', role: 'sales' });
-  User.exists = async () => ({ _id: 'superadmin-1' });
+  User.findByIdAndUpdate = async (id, update) => ({ _id: id, role: 'sales', ...update });
 
   const response = res();
   await updateUser(
@@ -155,8 +158,8 @@ test('cannot promote a user into a second superadmin', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Only Superadmin can manage the Superadmin account');
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.data.role, 'sales');
 });
 
 test('cannot demote the only superadmin', async () => {
@@ -176,12 +179,12 @@ test('cannot demote the only superadmin', async () => {
   assert.equal(response.body.error.message, 'Only Superadmin can manage the Superadmin account');
 });
 
-test('updating a privileged user can keep the same role', async () => {
+test('updating a user ignores the legacy role field', async () => {
   User.findById = async () => ({ _id: 'admin-1', role: 'admin' });
   User.exists = async () => ({ _id: 'admin-2' });
   User.findByIdAndUpdate = async (id, update) => {
     assert.equal(id, 'admin-1');
-    assert.deepEqual(update, { name: 'Admin Updated', role: 'admin' });
+    assert.deepEqual(update, { name: 'Admin Updated' });
     return { _id: id, ...update };
   };
 
@@ -224,12 +227,52 @@ test('admin lists all user profiles', async () => {
   assert.deepEqual(response.body.data, []);
 });
 
-test('superadmin can assign the single admin access', async () => {
-  User.findById = async () => ({ _id: 'sales-1', role: 'sales', additionalRoles: [] });
-  User.exists = async () => null;
+test('password reset requests store a hash instead of the requested password', async () => {
+  let update;
+  User.findByIdAndUpdate = async (id, value) => {
+    assert.equal(id, 'sales-1');
+    update = value;
+  };
+
+  const response = res();
+  await requestPasswordReset({ user: { _id: 'sales-1', role: 'sales' }, body: { password: 'NewPassword1' } }, response);
+
+  assert.equal(response.statusCode, 201);
+  assert.match(update.$set.passwordResetPasswordHash, /^scrypt:/);
+  assert.notEqual(update.$set.passwordResetPasswordHash, 'NewPassword1');
+  assert.ok(update.$set.passwordResetRequestedAt instanceof Date);
+  assert.equal(update.$push.passwordResetHistory.status, 'pending');
+});
+
+test('admin approval applies a requested password and clears the request', async () => {
+  let update;
+  User.findById = () => ({
+    select() {
+      return Promise.resolve({ _id: 'sales-1', role: 'sales', passwordResetPasswordHash: 'scrypt:reset:hash' });
+    },
+  });
+  User.findByIdAndUpdate = async (id, value) => {
+    assert.equal(id, 'sales-1');
+    update = value;
+  };
+  RateLimit.deleteOne = async () => {};
+  AuthSession.find = () => ({ select() { return this; }, lean: async () => [] });
+  AuthSession.updateMany = async () => {};
+
+  const response = res();
+  await approvePasswordResetRequest({ user: { role: 'admin' }, params: { id: 'sales-1' } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(update.$set.passwordHash, 'scrypt:reset:hash');
+  assert.equal(update.$set['passwordResetHistory.$[request].status'], 'approved');
+  assert.deepEqual(update.$unset, { passwordResetPasswordHash: 1, passwordResetRequestedAt: 1 });
+});
+
+test('user updates ignore legacy access types', async () => {
+  User.findById = async () => ({ _id: 'sales-1', role: 'user', additionalRoles: [] });
   User.findByIdAndUpdate = async (id, update) => {
     assert.equal(id, 'sales-1');
-    assert.deepEqual(update, { role: 'accounts', additionalRoles: ['sales', 'admin'], accessTypes: ['hr'] });
+    assert.deepEqual(update, {});
     return { _id: id, ...update, status: 'active' };
   };
   AuthSession.find = () => ({ select() { return this; }, lean: async () => [] });
@@ -241,29 +284,65 @@ test('superadmin can assign the single admin access', async () => {
   assert.equal(response.statusCode, 200);
 });
 
-test('admin cannot assign admin access', async () => {
-  User.findById = async () => ({ _id: 'sales-1', role: 'sales', additionalRoles: [] });
+test('employee HR access can be saved as none', async () => {
+  const permissions = [
+    { module: 'todo', access: 'manage' }, { module: 'notifications', access: 'manage' }, { module: 'leads', access: 'none' }, { module: 'tasks', access: 'none' },
+    { module: 'hr', access: 'none' }, { module: 'clients', access: 'none' }, { module: 'inventory', access: 'none' }, { module: 'returns', access: 'none' },
+  ];
+  User.findById = async () => ({ _id: 'employee-1', role: 'sales', workProfile: 'employee', modulePermissions: permissions.map((permission) => permission.module === 'hr' ? { ...permission, access: 'view' } : permission) });
+  User.findByIdAndUpdate = async (id, update) => {
+    assert.equal(id, 'employee-1');
+    assert.equal(update.modulePermissions.find((permission) => permission.module === 'hr')?.access, 'none');
+    return { _id: id, ...update };
+  };
+  AuthSession.find = () => ({ select() { return this; }, lean: async () => [] });
+  AuthSession.updateMany = async () => {};
 
   const response = res();
-  await updateUser({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'sales-1' }, body: { accessTypes: ['sales', 'admin'] } }, response);
+  await updateUser({ user: { role: 'superadmin' }, params: { id: 'employee-1' }, body: { modulePermissions: permissions } }, response);
 
-  assert.equal(response.statusCode, 403);
-  assert.equal(response.body.error.message, 'Only Superadmin can assign or manage Admin access');
+  assert.equal(response.statusCode, 200);
 });
 
-test('only superadmin can create the single admin access user', async () => {
+test('access types are ignored when creating a standard user', async () => {
   const body = { name: 'Admin User', email: 'admin@example.com', phone: '9876543210', password: 'Secret123', role: 'sales', accessTypes: ['sales', 'admin'] };
+  User.create = async (user) => ({ _id: 'user-1', ...user });
 
-  const adminResponse = res();
-  await createUser({ user: { role: 'admin' }, body }, adminResponse);
-  assert.equal(adminResponse.statusCode, 403);
-  assert.equal(adminResponse.body.error.message, 'Only Superadmin can assign Admin access');
+  const response = res();
+  await createUser({ user: { role: 'admin' }, body }, response);
 
-  User.exists = async (filter) => filter.$or ? { _id: 'admin-1' } : null;
-  const superadminResponse = res();
-  await createUser({ user: { role: 'superadmin' }, body }, superadminResponse);
-  assert.equal(superadminResponse.statusCode, 400);
-  assert.equal(superadminResponse.body.error.message, 'Only one admin is allowed');
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.body.data.role, undefined);
+  assert.equal(response.body.data.accessTypes, undefined);
+});
+
+test('only one admin work profile can be created', async () => {
+  let filter;
+  User.exists = async (value) => {
+    filter = value;
+    return { _id: 'admin-1' };
+  };
+
+  const response = res();
+  await createUser({
+    user: { role: 'superadmin' },
+    body: { name: 'Second Admin', email: 'admin2@example.com', phone: '9876543210', password: 'Secret123', workProfile: 'admin' },
+  }, response);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Only one admin is allowed');
+  assert.ok(filter.$or.some((condition) => condition.workProfile === 'admin'));
+});
+
+test('a user cannot be promoted to a second admin work profile', async () => {
+  User.findById = async () => ({ _id: 'user-2', role: 'user', workProfile: 'employee' });
+  User.exists = async () => ({ _id: 'admin-1' });
+
+  const response = res();
+  await updateUser({ user: { role: 'superadmin' }, params: { id: 'user-2' }, body: { workProfile: 'admin' } }, response);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Only one admin is allowed');
 });
 
 test('admin login history can include every user role', async () => {
@@ -352,6 +431,36 @@ test('admin can filter privileged user login history', async () => {
   assert.equal(response.statusCode, 200);
   assert.deepEqual(filter, { user: '507f1f77bcf86cd799439011' });
   assert.equal(String(sessionFilter.user), '507f1f77bcf86cd799439011');
+});
+
+test('users can only view their own login history', async () => {
+  let filter;
+  let sessionFilter;
+  LoginHistory.find = (value) => {
+    filter = value;
+    return {
+      sort() { return this; },
+      skip() { return this; },
+      limit() { return this; },
+      populate() { return this; },
+      lean() { return Promise.resolve([]); },
+    };
+  };
+  LoginHistory.countDocuments = async () => 0;
+  AuthSession.find = (value) => {
+    sessionFilter = value;
+    return {
+      sort() { return this; },
+      limit() { return this; },
+      populate() { return this; },
+      lean() { return Promise.resolve([]); },
+    };
+  };
+
+  await listLoginHistory({ user: { _id: 'sales-1', role: 'sales' }, query: { userId: 'admin-1' } }, res());
+
+  assert.deepEqual(filter, { user: 'sales-1' });
+  assert.equal(String(sessionFilter.user), 'sales-1');
 });
 
 test('login history closes duplicate current rows for the same user', async () => {
@@ -494,7 +603,7 @@ test('admin can logout all active users', async () => {
   assert.equal(historyUpdate.update.$set.logoutReason, 'logout');
 });
 
-test('admin can create operations users', async () => {
+test('admin can create standard users', async () => {
   User.exists = async () => null;
   User.create = async (user) => ({ _id: 'operations-1', role: user.role, email: user.email });
 
@@ -514,7 +623,7 @@ test('admin can create operations users', async () => {
   );
 
   assert.equal(response.statusCode, 201);
-  assert.equal(response.body.data.role, 'operations');
+  assert.equal(response.body.data.role, undefined);
 });
 
 test('admin cannot create the Superadmin account', async () => {
@@ -558,6 +667,26 @@ test('admin cannot assign Superadmin as an access type', async () => {
   assert.equal(response.body.error.message, 'Only initial setup can create the Superadmin account');
 });
 
+test('only Superadmin can assign the Superadmin work profile', async () => {
+  const response = res();
+  await createUser(
+    {
+      user: { role: 'admin' },
+      body: {
+        name: 'New Superadmin',
+        email: 'superadmin-profile@example.com',
+        phone: '9876543210',
+        password: 'Secret123',
+        workProfile: 'superadmin',
+      },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.error.message, 'Only Superadmin can assign the Superadmin profile');
+});
+
 test('admin can read another admin profile', async () => {
   User.findById = async () => ({ _id: 'admin-2', role: 'admin' });
 
@@ -567,8 +696,9 @@ test('admin can read another admin profile', async () => {
   assert.equal(response.statusCode, 200);
 });
 
-test('admin access must be assigned through access types', async () => {
+test('legacy role changes are ignored for admins', async () => {
   User.findById = async () => ({ _id: 'sales-1', role: 'sales' });
+  User.findByIdAndUpdate = async (id, update) => ({ _id: id, role: 'sales', ...update });
 
   const response = res();
   await updateUser(
@@ -580,8 +710,8 @@ test('admin access must be assigned through access types', async () => {
     response,
   );
 
-  assert.equal(response.statusCode, 400);
-  assert.equal(response.body.error.message, 'Assign Admin through access types');
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.data.role, 'sales');
 });
 
 test('updates user display name without changing assignment identity', async () => {

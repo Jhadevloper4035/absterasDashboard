@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createArchitect, deleteArchitect } from '../src/modules/leads/controllers/architect.controller.js';
+import { createArchitect, deleteArchitect, listArchitects } from '../src/modules/leads/controllers/architect.controller.js';
 import { Architect } from '../src/modules/leads/models/architect.model.js';
 
 const originalCreate = Architect.create;
+const originalFind = Architect.find;
+const originalCountDocuments = Architect.countDocuments;
 const originalFindOneAndDelete = Architect.findOneAndDelete;
 
 function res() {
@@ -23,6 +25,8 @@ function res() {
 
 afterEach(() => {
   Architect.create = originalCreate;
+  Architect.find = originalFind;
+  Architect.countDocuments = originalCountDocuments;
   Architect.findOneAndDelete = originalFindOneAndDelete;
 });
 
@@ -46,12 +50,14 @@ test('creates architect leads with only allowed fields', async () => {
         notes: 'Met at expo',
         status: 'inactive',
       },
+      user: { _id: 'user-1' },
     },
     response,
   );
 
   assert.equal(response.statusCode, 201);
   assert.equal(saved.name, 'Asha Mehta');
+  assert.equal(saved.owner, 'user-1');
   assert.equal(saved.status, undefined);
 });
 
@@ -79,8 +85,26 @@ test('deletes architect leads by id', async () => {
   };
 
   const response = res();
-  await deleteArchitect({ params: { id: 'architect-1' } }, response);
+  await deleteArchitect({ params: { id: 'architect-1' }, user: { _id: 'user-1' } }, response);
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(query, { _id: 'architect-1' });
+  assert.deepEqual(query, { _id: 'architect-1', owner: 'user-1' });
+});
+
+test('lists only the signed-in user\'s architect leads', async () => {
+  let findQuery;
+  let countQuery;
+  Architect.find = (query) => {
+    findQuery = query;
+    return { sort: () => ({ skip: () => ({ limit: async () => [] }) }) };
+  };
+  Architect.countDocuments = async (query) => {
+    countQuery = query;
+    return 0;
+  };
+
+  await listArchitects({ query: {}, user: { _id: 'user-1' } }, res());
+
+  assert.deepEqual(findQuery, { owner: 'user-1' });
+  assert.deepEqual(countQuery, { owner: 'user-1' });
 });

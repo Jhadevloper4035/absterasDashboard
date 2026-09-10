@@ -13,7 +13,7 @@ type Todo = {
   _id: string
   ticketNumber?: string
   title: string
-  status: 'Backlog' | 'To Do' | 'In Progress' | 'Review' | 'Testing' | 'Blocked' | 'Done'
+  status: 'To Do' | 'In Progress' | 'Review' | 'Done'
   priority: 'Low' | 'Medium' | 'High' | 'Critical'
   assignee?: string | TodoUser
   projectEpic?: string
@@ -22,7 +22,7 @@ type Todo = {
 }
 
 const personName = (person?: string | TodoUser) => (typeof person === 'object' ? person.name : '')
-const statusVariant = (status: Todo['status']) => (status === 'Done' ? 'success' : status === 'Blocked' ? 'danger' : ['In Progress', 'Review', 'Testing'].includes(status) ? 'warning' : 'primary')
+const statusVariant = (status: Todo['status']) => (status === 'Done' ? 'success' : ['In Progress', 'Review'].includes(status) ? 'warning' : 'primary')
 
 const TodoCompletedList = () => {
   const token = useAuthStore((state) => state.token)
@@ -54,8 +54,8 @@ const TodoCompletedList = () => {
     return () => window.removeEventListener('todos:changed', loadTodos)
   }, [token])
 
-  const pendingCount = todos.filter((todo) => ['Backlog', 'To Do'].includes(todo.status)).length
-  const inProgressCount = todos.filter((todo) => ['In Progress', 'Review', 'Testing', 'Blocked'].includes(todo.status)).length
+  const pendingCount = todos.filter((todo) => todo.status === 'To Do').length
+  const inProgressCount = todos.filter((todo) => ['In Progress', 'Review'].includes(todo.status)).length
   const completedCount = todos.filter((todo) => todo.status === 'Done').length
 
   return (

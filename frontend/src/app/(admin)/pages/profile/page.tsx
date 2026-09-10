@@ -7,6 +7,7 @@ import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import TodoCompletedList from '@/components/TodoCompletedList'
 import { apiFetch } from '@/helpers/api'
+import { canAccessModule } from '@/helpers/moduleAccess'
 import { useAuthStore } from '@/store/authStore'
 import type { LeadOwner, LeadType } from '@/types/lead'
 
@@ -88,10 +89,10 @@ const Profile = () => {
     setLoading(true)
     setError('')
     Promise.all([
-      apiFetch<{ data: LeadType[] }>('/leads?limit=50&fresh=true', { token }),
-      apiFetch<{ data: LeadType[] }>('/leads?limit=50&upcomingMeeting=true&fresh=true', { token }),
-      apiFetch<{ data: DashboardTask[] }>('/tasks?limit=50&fresh=true', { token }),
-      apiFetch<{ data: DashboardUpdate[] }>('/notifications/unread?fresh=true', { token }),
+      canAccessModule(user, 'leads') ? apiFetch<{ data: LeadType[] }>('/leads?limit=50&fresh=true', { token }) : Promise.resolve({ data: [] }),
+      canAccessModule(user, 'leads') ? apiFetch<{ data: LeadType[] }>('/leads?limit=50&upcomingMeeting=true&fresh=true', { token }) : Promise.resolve({ data: [] }),
+      canAccessModule(user, 'tasks') ? apiFetch<{ data: DashboardTask[] }>('/tasks?limit=50&fresh=true', { token }) : Promise.resolve({ data: [] }),
+      canAccessModule(user, 'notifications') ? apiFetch<{ data: DashboardUpdate[] }>('/notifications/unread?fresh=true', { token }) : Promise.resolve({ data: [] }),
     ])
       .then(([leadRes, meetingRes, taskRes, updateRes]) => {
         setLeads(leadRes.data)
@@ -101,7 +102,7 @@ const Profile = () => {
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Unable to load dashboard data'))
       .finally(() => setLoading(false))
-  }, [token])
+  }, [token, user])
 
   const todayMeetings = useMemo(
     () =>

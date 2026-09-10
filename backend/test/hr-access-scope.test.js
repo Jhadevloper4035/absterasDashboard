@@ -33,7 +33,7 @@ test('view-only employee listing ignores search and department filters', async (
 test('managed employee listing includes only users with Employee access', async () => {
   let filter;
   User.find = (query) => {
-    assert.deepEqual(query, { accessTypes: 'employee' });
+    assert.deepEqual(query, { $or: [{ workProfile: 'employee' }, { workProfile: { $exists: false }, accessTypes: 'employee' }] });
     return { select: async () => [{ _id: 'employee-user' }] };
   };
   Employee.find = (query) => { filter = query; return listQuery(); };

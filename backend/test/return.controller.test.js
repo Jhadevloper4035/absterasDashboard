@@ -60,7 +60,7 @@ test('creates a cross-client return transfer challan before deducting return sto
   assert.equal(challanPayload.eWayBillNumber, '123');
   assert.equal(challanPayload.transferType, 'return_transfer');
   assert.deepEqual(challanPayload.returnProducts, [{ product: productId, quantity: 2 }]);
-  assert.deepEqual(challanPayload.lineItems, [{ description: 'Wall panel', quantity: 2, unit: 'pcs', rate: 0, amount: 0 }, { description: 'Manual trim', quantity: 3, unit: 'pcs', rate: 0, amount: 0 }]);
+  assert.deepEqual(challanPayload.lineItems, [{ description: 'Wall panel', quantity: 2, unit: 'pcs' }, { description: 'Manual trim', quantity: 3, unit: 'pcs' }]);
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0].update, { $inc: { quantity: -2 } });
 });

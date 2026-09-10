@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizedItems, remainingItemsFor } from '../src/modules/powdercoating/powdercoating.controller.js';
+import { normalizedItems, readyItemsFor, remainingItemsFor, remainingLaserCutTransferItems, remainingProducedLaserCutTransferItems, transactionUnsupported } from '../src/modules/powdercoating/powdercoating.controller.js';
 import { InventoryItem } from '../src/modules/inventory/models/item.model.js';
 import { Supplier } from '../src/modules/inventory/models/supplier.model.js';
 import { LaserCutStock, LaserCutVendor } from '../src/modules/lasercut/models.js';
+
+test('powder-coating falls back only when MongoDB explicitly rejects transactions', () => {
+  assert.equal(transactionUnsupported(new Error('Only servers in a sharded cluster can start a new transaction')), true);
+  assert.equal(transactionUnsupported(new Error('Insufficient laser-cut stock')), false);
+});
 
 test('powder-coating challan snapshots the selected product shade and supplier', async () => {
   const originalItemFind = InventoryItem.find;
@@ -70,10 +75,43 @@ test('powder-coating challan can take a partial laser-cut batch with its updated
   }
 });
 
-test('powder-coating site dispatch leaves the undelivered product quantity at the vendor', () => {
-  const [remaining] = remainingItemsFor(
-    { items: [{ inventoryItemRef: '507f1f77bcf86cd799439018', itemName: 'Panel', quantity: 10, unit: 'pcs' }] },
-    [{ type: 'SITE_OUT', items: [{ inventoryItemRef: '507f1f77bcf86cd799439018', quantity: 4 }] }],
+test('laser-cut transfers keep the selected order balance after partial powder-coating moves', () => {
+  const [remaining] = remainingLaserCutTransferItems(
+    [{ type: 'OUT', status: 'DISPATCHED', vendorRef: '507f1f77bcf86cd799439019', vendorName: 'Laser Works', items: [{ inventoryItemRef: '507f1f77bcf86cd799439020', itemName: 'Panel', quantity: 36 }] }],
+    [{ items: [{ source: 'LASER_CUT', pickupSupplierRef: '507f1f77bcf86cd799439019', inventoryItemRef: '507f1f77bcf86cd799439020', quantity: 12 }] }],
   );
-  assert.equal(remaining.quantity, 6);
+  assert.equal(remaining.quantity, 24);
+});
+
+test('laser-cut output sizes transfer separately to powder coating', () => {
+  const remaining = remainingProducedLaserCutTransferItems(
+    [
+      { _id: '507f1f77bcf86cd799439040', inventoryItemRef: '507f1f77bcf86cd799439041', vendorRef: '507f1f77bcf86cd799439042', vendorName: 'Laser Works', itemName: 'Aluminium Sheet', dimensions: { heightFt: 4, widthFt: 4 } },
+      { _id: '507f1f77bcf86cd799439043', inventoryItemRef: '507f1f77bcf86cd799439041', vendorRef: '507f1f77bcf86cd799439042', vendorName: 'Laser Works', itemName: 'Aluminium Sheet', dimensions: { heightFt: 2, widthFt: 4 } },
+    ],
+    [{ outputs: [{ outputStockRef: '507f1f77bcf86cd799439040', quantity: 16 }, { outputStockRef: '507f1f77bcf86cd799439043', quantity: 8 }] }],
+    [{ items: [{ source: 'LASER_CUT', laserCutStockRef: '507f1f77bcf86cd799439040', quantity: 8 }] }],
+  );
+  assert.deepEqual(remaining.map((item) => [item.quantity, item.dimensions]), [[8, { heightFt: 4, widthFt: 4 }], [8, { heightFt: 2, widthFt: 4 }]]);
+});
+
+test('powder-coating site dispatch keeps different cut sizes separate', () => {
+  const remaining = remainingItemsFor(
+    { items: [
+      { inventoryItemRef: '507f1f77bcf86cd799439018', laserCutStockRef: '507f1f77bcf86cd799439019', itemName: 'Panel', quantity: 10, unit: 'pcs', dimensions: { heightFt: 4, widthFt: 4 } },
+      { inventoryItemRef: '507f1f77bcf86cd799439018', laserCutStockRef: '507f1f77bcf86cd799439020', itemName: 'Panel', quantity: 8, unit: 'pcs', dimensions: { heightFt: 2, widthFt: 4 } },
+    ], coatingBatches: [{ items: [
+      { inventoryItemRef: '507f1f77bcf86cd799439018', laserCutStockRef: '507f1f77bcf86cd799439019', quantity: 10 },
+      { inventoryItemRef: '507f1f77bcf86cd799439018', laserCutStockRef: '507f1f77bcf86cd799439020', quantity: 8 },
+    ] }] },
+    [{ type: 'SITE_OUT', items: [{ inventoryItemRef: '507f1f77bcf86cd799439018', laserCutStockRef: '507f1f77bcf86cd799439019', quantity: 4 }] }],
+  );
+  assert.deepEqual(remaining.map((item) => [item.quantity, item.dimensions]), [[6, { heightFt: 4, widthFt: 4 }], [8, { heightFt: 2, widthFt: 4 }]]);
+});
+
+test('only recorded coating batches are ready for client delivery', () => {
+  const order = { items: [{ inventoryItemRef: '507f1f77bcf86cd799439018', itemName: 'Panel', quantity: 4, unit: 'pcs' }], coatingBatches: [{ items: [{ inventoryItemRef: '507f1f77bcf86cd799439018', quantity: 2 }] }] };
+  assert.equal(readyItemsFor(order)[0].quantity, 2);
+  assert.equal(remainingItemsFor(order, [])[0].quantity, 2);
+  assert.equal(remainingItemsFor(order, [{ type: 'SITE_OUT', items: [{ inventoryItemRef: '507f1f77bcf86cd799439018', quantity: 1 }] }])[0].quantity, 1);
 });

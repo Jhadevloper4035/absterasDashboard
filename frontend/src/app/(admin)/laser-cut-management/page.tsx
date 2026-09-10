@@ -62,6 +62,7 @@ export default function LaserCutManagementPage() {
     quantityConsumed: '',
     panelsProduced: '',
     dimensions: {} as Dimensions,
+    outputDimensions: {} as Dimensions,
   })
 
   const load = async () => {
@@ -130,7 +131,7 @@ export default function LaserCutManagementPage() {
         method: 'POST',
         body: JSON.stringify({ ...usage, quantityConsumed: number(usage.quantityConsumed), panelsProduced: number(usage.panelsProduced) }),
       })
-      setUsage({ vendorRef: '', orderRef: '', materialType: 'SHEET', quantityConsumed: '', panelsProduced: '', dimensions: {} })
+      setUsage({ vendorRef: '', orderRef: '', materialType: 'SHEET', quantityConsumed: '', panelsProduced: '', dimensions: {}, outputDimensions: {} })
     })
   }
   const apply = (challan: Challan) =>
@@ -368,13 +369,13 @@ export default function LaserCutManagementPage() {
                     <Form.Label>Material</Form.Label>
                     <Form.Select
                       value={usage.materialType}
-                      onChange={(event) => setUsage({ ...usage, materialType: event.target.value as MaterialType, dimensions: {} })}>
+                      onChange={(event) => setUsage({ ...usage, materialType: event.target.value as MaterialType, dimensions: {}, outputDimensions: {} })}>
                       <option value="SHEET">Sheet</option>
                       <option value="TUBE">Tube</option>
                     </Form.Select>
                   </Col>
                   <Col md={4}>
-                    <Form.Label>Consumed</Form.Label>
+                    <Form.Label>Large {usage.materialType === 'SHEET' ? 'sheets' : 'tubes'} consumed</Form.Label>
                     <Form.Control
                       required
                       type="number"
@@ -385,7 +386,7 @@ export default function LaserCutManagementPage() {
                     />
                   </Col>
                   <Col md={4}>
-                    <Form.Label>Panels made</Form.Label>
+                    <Form.Label>Smaller {usage.materialType === 'SHEET' ? 'sheets' : 'tubes'} produced</Form.Label>
                     <Form.Control
                       type="number"
                       min="0"
@@ -397,7 +398,7 @@ export default function LaserCutManagementPage() {
                   {usage.materialType === 'SHEET' ? (
                     <>
                       <Col md={6}>
-                        <Form.Label>Height (ft)</Form.Label>
+                        <Form.Label>Large sheet height (ft)</Form.Label>
                         <Form.Control
                           required
                           type="number"
@@ -408,7 +409,7 @@ export default function LaserCutManagementPage() {
                         />
                       </Col>
                       <Col md={6}>
-                        <Form.Label>Width (ft)</Form.Label>
+                        <Form.Label>Large sheet width (ft)</Form.Label>
                         <Form.Control
                           required
                           type="number"
@@ -418,10 +419,33 @@ export default function LaserCutManagementPage() {
                           onChange={(event) => setUsage({ ...usage, dimensions: { ...usage.dimensions, widthFt: number(event.target.value) } })}
                         />
                       </Col>
+                      <Col md={6}>
+                        <Form.Label>Smaller sheet height (ft)</Form.Label>
+                        <Form.Control
+                          required={Number(usage.panelsProduced) > 0}
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={usage.outputDimensions.heightFt || ''}
+                          onChange={(event) => setUsage({ ...usage, outputDimensions: { ...usage.outputDimensions, heightFt: number(event.target.value) } })}
+                        />
+                      </Col>
+                      <Col md={6}>
+                        <Form.Label>Smaller sheet width (ft)</Form.Label>
+                        <Form.Control
+                          required={Number(usage.panelsProduced) > 0}
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={usage.outputDimensions.widthFt || ''}
+                          onChange={(event) => setUsage({ ...usage, outputDimensions: { ...usage.outputDimensions, widthFt: number(event.target.value) } })}
+                        />
+                      </Col>
                     </>
                   ) : (
+                    <>
                     <Col md={6}>
-                      <Form.Label>Length (ft)</Form.Label>
+                      <Form.Label>Large tube length (ft)</Form.Label>
                       <Form.Control
                         required
                         type="number"
@@ -431,6 +455,18 @@ export default function LaserCutManagementPage() {
                         onChange={(event) => setUsage({ ...usage, dimensions: { ...usage.dimensions, lengthFt: number(event.target.value) } })}
                       />
                     </Col>
+                    <Col md={6}>
+                      <Form.Label>Smaller tube length (ft)</Form.Label>
+                      <Form.Control
+                        required={Number(usage.panelsProduced) > 0}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={usage.outputDimensions.lengthFt || ''}
+                        onChange={(event) => setUsage({ ...usage, outputDimensions: { ...usage.outputDimensions, lengthFt: number(event.target.value) } })}
+                      />
+                    </Col>
+                    </>
                   )}
                 </Row>
                 <Button className="mt-3" type="submit" disabled={saving}>

@@ -3,6 +3,7 @@ import DeleteConfirmModal from '@/components/DeleteConfirmModal'
 import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { UploadFileType } from '@/types/component-props'
@@ -67,9 +68,8 @@ const LeadDetailPage = () => {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
-  const canAssign = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
-  const canDelete = roles.includes('superadmin') || roles.includes('admin')
+  const canAssign = canManageModule(user, 'leads')
+  const canDelete = canManageModule(user, 'leads')
   const canClose = typeof lead?.owner === 'string' ? lead.owner === user?._id : lead?.owner?._id === user?._id
   const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
 

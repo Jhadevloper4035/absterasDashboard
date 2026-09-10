@@ -6,5 +6,5 @@ import { authenticate, authorizeRoles } from '../modules/auth/middleware/auth.mi
 export const healthRouter = Router();
 
 healthRouter.get('/', asyncHandler(getHealth));
-healthRouter.get('/status', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(getHealthStatus));
-healthRouter.post('/email-test', asyncHandler(authenticate), authorizeRoles('superadmin'), asyncHandler(sendHealthTestEmail));
+healthRouter.get('/status', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(getHealthStatus));
+healthRouter.post('/email-test', asyncHandler(authenticate), authorizeRoles('superadmin', 'admin'), asyncHandler(sendHealthTestEmail));

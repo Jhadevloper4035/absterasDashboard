@@ -1,23 +1,28 @@
 import { MENU_ITEMS } from '@/assets/data/menu-items'
-import { BASIC_APP_MODULES, type AppModule, type ModulePermission } from '@/helpers/moduleAccess'
+import { type AppModule, type ModulePermission } from '@/helpers/moduleAccess'
 import type { MenuItemType } from '@/types/menu'
 
 const HR_MENU_MODULES: Record<string, string> = {
   'hr-employees': 'employees', 'hr-departments': 'employees', 'hr-designations': 'employees',
   'hr-attendance': 'attendance', 'hr-attendance-reports': 'attendance', 'hr-holidays': 'attendance',
   'hr-leave': 'leave', 'hr-leave-requests': 'leave', 'hr-leave-approvals': 'leave', 'hr-leave-calendar': 'leave', 'hr-leave-types': 'leave',
-  'hr-payroll': 'payroll', 'employee-overview': 'employees', 'employee-profile': 'employees', 'employee-attendance': 'attendance', 'employee-id-card': 'employees', 'employee-payslips': 'payroll', 'employee-leave': 'leave', 'employee-reimbursements': 'expenses', 'employee-advance': 'payroll', 'hr-expense-approvals': 'expenses', 'hr-reports': 'reports',
+  'hr-payroll': 'payroll', 'employee-overview': 'employees', 'employee-profile': 'employees', 'employee-attendance': 'attendance', 'employee-id-card': 'employees', 'employee-payslips': 'payroll', 'employee-requests': 'leave', 'employee-leave': 'leave', 'employee-reimbursements': 'expenses', 'employee-advance': 'payroll', 'hr-expense-approvals': 'expenses', 'hr-reports': 'reports',
 }
-const INVENTORY_MENU_MODULES: Record<string, string> = { 'inventory-management': 'items', 'inventory-items': 'items', 'inventory-add-item': 'items', 'inventory-suppliers': 'items', 'inventory-purchases': 'transactions', 'laser-cut-management': 'items', 'laser-cut-dashboard': 'items', 'laser-cut-current-orders': 'items', 'laser-cut-create-challan': 'items', 'laser-cut-move-out': 'items', 'laser-cut-vendors': 'items', 'powder-coating-management': 'items', 'powder-coating-dashboard': 'items', 'powder-coating-orders': 'items', 'powder-coating-create-order': 'items', 'powder-coating-vendors': 'items' }
-const APP_MENU_MODULES: Record<string, AppModule> = { 'apps-todo': 'todo', notifications: 'notifications', leads: 'leads', tasks: 'tasks', 'hr-management': 'hr', 'employee-panel': 'hr', 'client-management': 'clients', 'invoice-management': 'clients', 'delivery-challans': 'clients', 'inventory-management': 'inventory', 'laser-cut-management': 'inventory', 'powder-coating-management': 'inventory', 'return-management': 'returns' }
-const hasInventoryAccess = (roles: string[], modules: string[], permissions: ModulePermission[], module?: string) => roles.some((role) => ['superadmin', 'admin'].includes(role)) || permissions.some((permission) => permission.module === 'inventory' && permission.access !== 'none') || Boolean(module && modules.includes(module))
-const hasAppAccess = (roles: string[], permissions: ModulePermission[], workProfile: 'director' | 'employee' | undefined, module?: AppModule) => !module || BASIC_APP_MODULES.includes(module as (typeof BASIC_APP_MODULES)[number]) || (module !== 'hr' && roles.some((role) => ['superadmin', 'admin'].includes(role))) || (workProfile !== 'director' && permissions.some((permission) => permission.module === module && permission.access !== 'none'))
-const isVisible = (item: MenuItemType, roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'director' | 'employee', parentModule?: AppModule) => {
+const INVENTORY_MENU_MODULES: Record<string, string> = { 'inventory-management': 'items', 'inventory-items': 'items', 'inventory-add-item': 'items', 'inventory-suppliers': 'items', 'inventory-purchases': 'transactions', 'laser-cut-management': 'laser-cut', 'laser-cut-dashboard': 'laser-cut', 'laser-cut-current-orders': 'laser-cut', 'laser-cut-create-challan': 'laser-cut', 'laser-cut-move-out': 'laser-cut', 'laser-cut-vendors': 'laser-cut', 'powder-coating-management': 'powder-coating', 'powder-coating-dashboard': 'powder-coating', 'powder-coating-orders': 'powder-coating', 'powder-coating-create-order': 'powder-coating', 'powder-coating-vendors': 'powder-coating' }
+const APP_MENU_MODULES: Record<string, AppModule> = { 'apps-todo': 'todo', notifications: 'notifications', leads: 'leads', tasks: 'tasks', 'hr-management': 'hr', 'client-management': 'clients', 'invoice-management': 'invoices', 'delivery-challans': 'challans', 'inventory-management': 'inventory', 'laser-cut-management': 'laser-cut', 'powder-coating-management': 'powder-coating', 'return-management': 'returns' }
+const hasHrAccess = (modules: string[], permissions: ModulePermission[], module?: string) => Boolean(module && (permissions.some((permission) => permission.module === 'hr' && permission.access === 'manage') || modules.includes(module)))
+const hasInventoryAccess = (modules: string[], permissions: ModulePermission[], module?: string) => Boolean(module && (permissions.some((permission) => permission.module === 'inventory' && permission.access === 'manage') || modules.includes(module)))
+const hasAppAccess = (permissions: ModulePermission[], module?: AppModule, requiresManage = false) => !module || permissions.some((permission) => permission.module === module && (requiresManage ? permission.access === 'manage' : permission.access !== 'none'))
+const hasFullAppAccess = (roles: string[], workProfile?: string) => roles.includes('superadmin') || roles.includes('admin') || workProfile === 'superadmin' || workProfile === 'admin'
+const isSuperadminOnly = (item: MenuItemType) => item.roles?.length === 1 && item.roles[0] === 'superadmin'
+const isVisible = (item: MenuItemType, roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'superadmin' | 'admin' | 'client' | 'director' | 'employee', parentModule?: AppModule) => {
+  if ((item.key === 'employee-panel' || item.parentKey === 'employee-panel') && workProfile !== 'employee') return false
   const module = APP_MENU_MODULES[item.key] || parentModule
-  return (module ? hasAppAccess(roles, modulePermissions, workProfile, module) : !item.roles || roles.some((role) => item.roles?.includes(role))) && (!HR_MENU_MODULES[item.key] || hrModules.includes(HR_MENU_MODULES[item.key])) && (!INVENTORY_MENU_MODULES[item.key] || hasInventoryAccess(roles, inventoryModules, modulePermissions, INVENTORY_MENU_MODULES[item.key]))
+  const fullAccess = hasFullAppAccess(roles, workProfile)
+  return (module ? fullAccess || hasAppAccess(modulePermissions, module, item.requiresManage) : isSuperadminOnly(item) ? roles.includes('superadmin') : fullAccess || !item.roles || roles.some((role) => item.roles?.includes(role))) && (fullAccess || !HR_MENU_MODULES[item.key] || hasHrAccess(hrModules, modulePermissions, HR_MENU_MODULES[item.key])) && (fullAccess || !INVENTORY_MENU_MODULES[item.key] || hasInventoryAccess(inventoryModules, modulePermissions, INVENTORY_MENU_MODULES[item.key]))
 }
 
-const filterMenuItem = (item: MenuItemType, roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'director' | 'employee', parentModule?: AppModule): MenuItemType | null => {
+const filterMenuItem = (item: MenuItemType, roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'superadmin' | 'admin' | 'client' | 'director' | 'employee', parentModule?: AppModule): MenuItemType | null => {
   const module = APP_MENU_MODULES[item.key] || parentModule
   if (!isVisible(item, roles, hrModules, inventoryModules, modulePermissions, workProfile, parentModule)) return null
 
@@ -27,7 +32,7 @@ const filterMenuItem = (item: MenuItemType, roles: string[] = [], hrModules: str
   return { ...item, children }
 }
 
-export const getMenuItems = (roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'director' | 'employee'): MenuItemType[] => {
+export const getMenuItems = (roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'superadmin' | 'admin' | 'client' | 'director' | 'employee'): MenuItemType[] => {
   return MENU_ITEMS.map((item) => filterMenuItem(item, roles, hrModules, inventoryModules, modulePermissions, workProfile)).filter((item): item is MenuItemType => Boolean(item))
 }
 

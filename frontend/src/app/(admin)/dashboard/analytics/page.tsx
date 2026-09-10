@@ -5,9 +5,13 @@ import { Link } from 'react-router-dom'
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb'
 import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
+import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
 import { buildApiUrl } from '@/helpers/apiUrl'
+import { hasFullAppAccess } from '@/helpers/moduleAccess'
 import { useAuthStore } from '@/store/authStore'
+import MyDashboard from '@/app/(admin)/hr/my-dashboard/page'
+import AdminDashboardPage from '@/app/(admin)/dashboard/admin/page'
 import type { UserType } from '@/types/auth'
 import type { LeadOwner, LeadType } from '@/types/lead'
 
@@ -44,8 +48,9 @@ const taskStatusColor = (status: string) => (status === 'Done' ? 'success' : sta
 const leadStatusColor = (lead: LeadType) => (lead.status === 'WON' ? 'success' : lead.assignmentException ? 'warning' : closedLeadStatuses.includes(lead.status) ? 'secondary' : 'primary')
 const closedLeadStatuses = ['WON', 'LOST', 'ON_HOLD']
 
-const AdminDashboard = () => {
+export const AdminDashboard = () => {
   const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
   const [summary, setSummary] = useState<DashboardSummary>({
     access: { leads: 0, tasks: 0 },
     stats: { activeLeads: 0, unassignedLeads: 0, todayMeetings: 0, overdueTasks: 0, dueTodayTasks: 0, teamUsers: 0 },
@@ -72,14 +77,20 @@ const AdminDashboard = () => {
   const canReadTasks = summary.access.tasks > 0
   const canManageLeads = summary.access.leads === 2
   const canManageTasks = summary.access.tasks === 2
+  const firstName = user?.name?.split(' ')[0] || 'Admin'
   const stats = [
-    { label: 'Active leads', value: summary.stats.activeLeads, note: 'Follow-up required', bg: 'primary' },
-    { label: 'Unassigned leads', value: summary.stats.unassignedLeads, note: 'Assign today', bg: summary.stats.unassignedLeads ? 'warning' : 'success' },
-    { label: "Today's meetings", value: summary.stats.todayMeetings, note: 'Scheduled', bg: 'info' },
-    { label: 'Overdue tasks', value: summary.stats.overdueTasks, note: 'Action required', bg: summary.stats.overdueTasks ? 'danger' : 'success' },
-    { label: 'Tasks due today', value: summary.stats.dueTodayTasks, note: 'Due today', bg: 'warning' },
-    { label: 'Team users', value: summary.stats.teamUsers, note: 'Active team', bg: 'secondary' },
-  ].filter((item) => (['Active leads', 'Unassigned leads', "Today's meetings"].includes(item.label) ? canReadLeads : ['Overdue tasks', 'Tasks due today'].includes(item.label) ? canReadTasks : canReadLeads || canReadTasks))
+    { label: 'Active leads', value: summary.stats.activeLeads, note: 'Need follow-up', bg: 'primary', icon: 'iconamoon:send-duotone' },
+    { label: 'Needs assignment', value: summary.stats.unassignedLeads, note: summary.stats.unassignedLeads ? 'Review today' : 'All assigned', bg: summary.stats.unassignedLeads ? 'warning' : 'success', icon: 'iconamoon:profile-circle-duotone' },
+    { label: "Today's meetings", value: summary.stats.todayMeetings, note: 'Calls and visits', bg: 'info', icon: 'iconamoon:calendar-1-duotone' },
+    { label: 'Overdue tasks', value: summary.stats.overdueTasks, note: summary.stats.overdueTasks ? 'Action required' : 'All on track', bg: summary.stats.overdueTasks ? 'danger' : 'success', icon: 'iconamoon:clock-duotone' },
+    { label: 'Due today', value: summary.stats.dueTodayTasks, note: 'Tasks to finish', bg: 'warning', icon: 'iconamoon:check-circle-1-duotone' },
+    { label: 'Active team', value: summary.stats.teamUsers, note: 'Current users', bg: 'secondary', icon: 'iconamoon:group-duotone' },
+  ].filter((item) => (['Active leads', 'Needs assignment', "Today's meetings"].includes(item.label) ? canReadLeads : ['Overdue tasks', 'Due today'].includes(item.label) ? canReadTasks : canReadLeads || canReadTasks))
+  const actionItems = [
+    { label: 'Leads needing assignment', value: summary.stats.unassignedLeads, note: 'Make sure every new enquiry has an owner.', visible: canReadLeads, variant: summary.stats.unassignedLeads ? 'warning' : 'success' },
+    { label: 'Overdue tasks', value: summary.stats.overdueTasks, note: 'Review blockers and deadlines with the team.', visible: canReadTasks, variant: summary.stats.overdueTasks ? 'danger' : 'success' },
+    { label: 'Meetings today', value: summary.stats.todayMeetings, note: 'Confirm owners are prepared for each meeting.', visible: canReadLeads, variant: 'info' },
+  ].filter((item) => item.visible)
 
   const downloadReport = async () => {
     if (!token) return
@@ -107,19 +118,30 @@ const AdminDashboard = () => {
 
   return (
     <>
-      <PageBreadcrumb title="Absteras Dashboard" subName="Facade CRM" />
-      <PageMetaData title="Absteras Dashboard" />
+      <PageBreadcrumb title="Admin Dashboard" subName="Control Center" />
+      <PageMetaData title="Admin Dashboard" />
 
-      <div className="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-4">
-        <div className="text-muted">Your dashboard shows only the modules assigned to your account.</div>
-        <div className="d-flex gap-2 flex-wrap ms-auto">
-          {canManageLeads && <Link to="/leads/create" className="btn btn-primary text-nowrap">Create Lead</Link>}
-          {canManageTasks && <Link to="/tasks/create" className="btn btn-outline-primary text-nowrap">Create Task</Link>}
-          {(canReadLeads || canReadTasks) && <button type="button" className="btn btn-outline-secondary text-nowrap" onClick={downloadReport} disabled={exporting}>
-            {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>}
-        </div>
-      </div>
+      <Card className="border-0 bg-body-tertiary mb-4">
+        <CardBody className="p-4 p-lg-5">
+          <Row className="align-items-center g-4">
+            <Col lg={8}>
+              <div className="text-primary text-uppercase fw-semibold fs-13 mb-2">Admin control center</div>
+              <h2 className="mb-2">Good day, {firstName}.</h2>
+              <p className="text-muted mb-0">A focused view of leads, meetings, tasks, and team workload that need your attention today.</p>
+            </Col>
+            <Col lg={4}>
+              <div className="d-flex gap-2 flex-wrap justify-content-lg-end">
+                {canManageLeads && <Link to="/leads/create" className="btn btn-primary">Create lead</Link>}
+                {canManageTasks && <Link to="/tasks/create" className="btn btn-outline-primary">Create task</Link>}
+                {(canReadLeads || canReadTasks) && <button type="button" className="btn btn-outline-secondary" onClick={downloadReport} disabled={exporting}>
+                  <IconifyIcon icon="iconamoon:download-duotone" className="me-1" />
+                  {exporting ? 'Exporting...' : 'Export CSV'}
+                </button>}
+              </div>
+            </Col>
+          </Row>
+        </CardBody>
+      </Card>
 
       {error && <Alert variant="danger">{error}</Alert>}
       {loading && !summary.recentLeads.length && !summary.priorityTasks.length ? (
@@ -131,23 +153,48 @@ const AdminDashboard = () => {
 
       <Row className="g-3 mb-4">
         {stats.map((item) => (
-          <Col md={6} xl={4} xxl={2} key={item.label}>
-            <Card className="h-100">
-              <CardBody className="p-3">
-                <div className="d-flex justify-content-between align-items-start gap-3">
+          <Col sm={6} xl={4} xxl={2} key={item.label}>
+            <Card className="h-100 border-start border-3" style={{ borderLeftColor: `var(--bs-${item.bg})` }}>
+              <CardBody className="p-3 p-lg-4">
+                <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
                   <div>
-                    <div className="text-muted fs-13 mb-2">{item.label}</div>
-                    <h2 className="mb-0">{item.value}</h2>
+                    <div className="text-muted fs-13">{item.label}</div>
+                    <h2 className="mb-0 mt-1">{item.value}</h2>
                   </div>
-                  <Badge className="text-nowrap mt-1" bg={item.bg} text={item.bg === 'warning' || item.bg === 'info' ? 'dark' : undefined}>{item.note}</Badge>
+                  <IconifyIcon icon={item.icon} className={`fs-3 text-${item.bg}`} aria-hidden="true" />
                 </div>
+                <div className="text-muted fs-13">{item.note}</div>
               </CardBody>
             </Card>
           </Col>
         ))}
       </Row>
 
-      {!canReadLeads && !canReadTasks && <Alert variant="info">No business modules are assigned yet. Todo and Notifications remain available.</Alert>}
+      {!canReadLeads && !canReadTasks && <Alert variant="info">No business modules are assigned yet. Assign access in User Management.</Alert>}
+
+      {actionItems.length > 0 && <Card className="mb-4">
+        <CardBody className="p-4">
+          <div className="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-4">
+            <div>
+              <div className="text-primary text-uppercase fw-semibold fs-13 mb-1">Action queue</div>
+              <h4 className="card-title mb-1">What needs a decision today</h4>
+              <div className="text-muted">Resolve the exceptions below before they hold up the team.</div>
+            </div>
+            <Badge bg="light" text="dark" className="px-3 py-2">Live summary</Badge>
+          </div>
+          <Row className="g-3">
+            {actionItems.map((item) => <Col md={4} key={item.label}>
+              <div className="border rounded p-3 h-100">
+                <div className="d-flex align-items-center justify-content-between gap-3 mb-2">
+                  <span className="text-muted fs-13">{item.label}</span>
+                  <Badge bg={item.variant} text={item.variant === 'warning' || item.variant === 'info' ? 'dark' : undefined}>{item.value}</Badge>
+                </div>
+                <div className="fs-13">{item.note}</div>
+              </div>
+            </Col>)}
+          </Row>
+        </CardBody>
+      </Card>}
 
       {(canReadLeads || canReadTasks) && <Row className="g-3 mb-4">
         {canReadLeads && <Col xl={canReadTasks ? 7 : 12}>
@@ -155,8 +202,8 @@ const AdminDashboard = () => {
             <CardBody>
               <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
                 <div>
-                  <h4 className="card-title mb-1">Today&apos;s Meetings</h4>
-                  <div className="text-muted">Scheduled calls and visits for today.</div>
+                  <h4 className="card-title mb-1">Today&apos;s meeting schedule</h4>
+                  <div className="text-muted">Calls and visits your team needs to be ready for.</div>
                 </div>
                 <Link to="/leads/scheduled" className="btn btn-sm btn-outline-secondary text-nowrap">View All</Link>
               </div>
@@ -198,10 +245,9 @@ const AdminDashboard = () => {
             <CardBody>
               <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
                 <div>
-                  <h4 className="card-title mb-1">Priority Tasks</h4>
-                  <div className="text-muted">Blocked, high-priority, and soonest-due work.</div>
+                  <h4 className="card-title mb-1">Priority work</h4>
+                  <div className="text-muted">Blocked, urgent, and soonest-due tasks.</div>
                 </div>
-                <Link to="/tasks/all" className="btn btn-sm btn-outline-secondary text-nowrap">View All</Link>
               </div>
               {!summary.priorityTasks.length ? <Alert variant="info" className="mb-0">No open tasks.</Alert> : (
                 summary.priorityTasks.map((task) => (
@@ -226,8 +272,8 @@ const AdminDashboard = () => {
         <CardBody>
           <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
             <div>
-              <h4 className="card-title mb-1">Recent Leads</h4>
-              <div className="text-muted">Recently captured leads awaiting qualification or follow-up.</div>
+              <h4 className="card-title mb-1">New lead activity</h4>
+              <div className="text-muted">Recently captured enquiries that may need qualification or follow-up.</div>
             </div>
             <Link to="/leads" className="btn btn-sm btn-outline-secondary text-nowrap">View All</Link>
           </div>
@@ -268,4 +314,11 @@ const AdminDashboard = () => {
   )
 }
 
-export default AdminDashboard
+const Analytics = () => {
+  const user = useAuthStore((state) => state.user)
+  const isAdmin = hasFullAppAccess(user)
+
+  return isAdmin ? <AdminDashboardPage /> : <MyDashboard />
+}
+
+export default Analytics

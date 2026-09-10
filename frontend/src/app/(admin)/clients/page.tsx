@@ -1,5 +1,6 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { useAuthStore } from '@/store/authStore'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -8,7 +9,7 @@ import { Client, ClientFields, ClientInput, clientPayload, emptyClientInput, inp
 
 const ClientManagementPage = () => {
   const user = useAuthStore((state) => state.user)
-  const canCreate = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].some((role) => role === 'superadmin' || role === 'admin' || role === 'operations')
+  const canCreate = canManageModule(user, 'clients')
   const [clients, setClients] = useState<Client[]>([])
   const [editing, setEditing] = useState<Client | null>(null)
   const [form, setForm] = useState<ClientInput>(emptyClientInput)

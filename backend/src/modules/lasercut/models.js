@@ -10,16 +10,19 @@ vendorSchema.index({ name: 1, status: 1 });
 const orderSchema = new mongoose.Schema({
   orderName: { type: String, required: true, trim: true }, customerRef: { type: String, trim: true },
   expected: { type: quantities, default: () => ({}) }, sent: { type: quantities, default: () => ({}) },
+  planned: { type: quantities, default: () => ({}) }, ready: { type: quantities, default: () => ({}) },
   panelSpec: { count: { type: Number, min: 0 }, panelAreaSqFt: { type: Number, min: 0 } },
   status: { type: String, enum: ['PENDING', 'PARTIAL', 'COMPLETE'], default: 'PENDING' },
 }, { timestamps: true });
 orderSchema.index({ status: 1, createdAt: -1 });
 
+const cutOutput = new mongoose.Schema({ quantity: { type: Number, min: 0.01 }, dimensions }, { _id: false });
 const lineSchema = new mongoose.Schema({
   inventoryItemRef: { type: ObjectId, required: true }, itemName: { type: String, required: true },
   hsnCode: { type: String, trim: true }, unit: { type: String, trim: true },
   pickupSupplierRef: { type: ObjectId }, pickupSupplierName: { type: String, trim: true }, pickupAddressSnapshot: { type: String, trim: true },
   materialType: { type: String, enum: ['SHEET', 'TUBE', 'OTHER'], required: true }, quantity: { type: Number, required: true, min: 0.01 }, dimensions: dimensions,
+  cutOutput, cutOutputs: { type: [cutOutput], default: undefined },
 }, { _id: false });
 const challanSchema = new mongoose.Schema({
   challanNo: { type: String, required: true, unique: true }, type: { type: String, enum: ['OUT', 'IN'], required: true },
@@ -40,6 +43,8 @@ stockSchema.index({ vendorRef: 1, materialKey: 1 }, { unique: true });
 const usageSchema = new mongoose.Schema({
   vendorRef: { type: ObjectId, required: true }, orderRef: { type: ObjectId, required: true }, materialType: { type: String, enum: ['SHEET', 'TUBE'], required: true },
   dimensions: { type: dimensions, required: true }, quantityConsumed: { type: Number, required: true, min: 0.01 }, panelsProduced: { type: Number, min: 0, default: 0 },
+  challanRef: ObjectId, sourceLineIndex: Number, batchNo: { type: String, trim: true },
+  outputDimensions: dimensions, outputStockRef: ObjectId, outputs: { type: [new mongoose.Schema({ quantity: { type: Number, min: 0.01 }, dimensions, outputStockRef: ObjectId, plannedOutputIndex: Number }, { _id: false })], default: undefined },
   wastageAreaSqFt: Number, wastagePercent: Number, reportedAt: { type: Date, default: Date.now }, createdBy: { type: ObjectId, required: true },
 }, { timestamps: true });
 usageSchema.index({ orderRef: 1, reportedAt: -1 });

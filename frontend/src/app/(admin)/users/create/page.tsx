@@ -2,12 +2,14 @@ import PageMetaData from '@/components/PageTitle'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
-import { BASIC_APP_MODULES, defaultModulePermissions, moduleLabel, type ModulePermission } from '@/helpers/moduleAccess'
+import { defaultModulePermissions, hasFullAppAccess, moduleLabel, type ModulePermission } from '@/helpers/moduleAccess'
 import { type CreateUserPayload, useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import type { OrganizationItem } from '@/types/hr'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
+import { toast } from 'react-toastify'
+import { useNavigate } from 'react-router-dom'
 
 const statuses = ['active', 'inactive', 'invited', 'suspended'] as const
 const defaultTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -25,6 +27,7 @@ const emptyForm: CreateUserPayload = {
 
 const CreateUserPage = () => {
   const { user } = useAuthContext()
+  const navigate = useNavigate()
   const loading = useUserManagementStore((state) => state.loading)
   const storeError = useUserManagementStore((state) => state.error)
   const createUserInStore = useUserManagementStore((state) => state.createUser)
@@ -33,8 +36,7 @@ const CreateUserPage = () => {
   const [error, setError] = useState('')
   const [departments, setDepartments] = useState<OrganizationItem[]>([])
   const [designations, setDesignations] = useState<OrganizationItem[]>([])
-  const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
-  const canManageUsers = currentAccessTypes.includes('superadmin') || currentAccessTypes.includes('admin')
+  const canManageUsers = hasFullAppAccess(user)
 
   useEffect(() => {
     if (!canManageUsers) return
@@ -65,12 +67,12 @@ const CreateUserPage = () => {
         setError('Department, designation, joining date, and monthly salary are required')
         return
       }
-      await createUserInStore({
+      const createdUser = await createUserInStore({
         ...form,
         employment,
       })
-      setForm(emptyForm)
-      setMessage('User created')
+      toast.success('User created successfully')
+      navigate(`/users/${createdUser._id}/edit`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to create user')
     }
@@ -156,8 +158,11 @@ const CreateUserPage = () => {
                   <Form.Label>Work profile</Form.Label>
                   <Form.Select value={form.workProfile} onChange={(event) => {
                     const workProfile = event.target.value as NonNullable<UserType['workProfile']>
-                    setForm({ ...form, workProfile, employment: workProfile === 'employee' ? form.employment : undefined, modulePermissions: workProfile === 'director' ? form.modulePermissions?.map((permission) => permission.module === 'hr' ? { ...permission, access: 'none' } : permission) : form.modulePermissions })
+                    setForm({ ...form, workProfile, employment: workProfile === 'employee' ? form.employment : undefined })
                   }}>
+                    <option value="superadmin">Superadmin</option>
+                    <option value="admin">Admin</option>
+                    <option value="client">Client</option>
                     <option value="employee">Employee</option>
                     <option value="director">Director</option>
                   </Form.Select>
@@ -167,11 +172,11 @@ const CreateUserPage = () => {
               <Col xs={12}>
                 <details open>
                   <summary className="fw-medium">Sidebar access</summary>
-                  <Form.Text>Todo and Notifications are enabled for every user. Grant access to the remaining sidebar labels.</Form.Text>
-                  {(form.modulePermissions || []).filter((permission) => !BASIC_APP_MODULES.includes(permission.module as (typeof BASIC_APP_MODULES)[number])).map((permission) => (
+                  <Form.Text>Grant access to each sidebar module.</Form.Text>
+                  {(form.modulePermissions || []).map((permission) => (
                     <div className="d-flex align-items-center gap-2 mt-2" key={permission.module}>
                       <span className="flex-grow-1">{moduleLabel(permission.module)}</span>
-                      <Form.Select disabled={form.workProfile === 'director' && permission.module === 'hr'} style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setForm({ ...form, modulePermissions: form.modulePermissions?.map((item) => item.module === permission.module ? { ...item, access: event.target.value as ModulePermission['access'] } : item) })}>
+                      <Form.Select style={{ maxWidth: 140 }} value={permission.access} onChange={(event) => setForm({ ...form, modulePermissions: form.modulePermissions?.map((item) => item.module === permission.module ? { ...item, access: event.target.value as ModulePermission['access'] } : item) })}>
                         <option value="none">None</option><option value="view">View</option><option value="manage">Manage</option>
                       </Form.Select>
                     </div>

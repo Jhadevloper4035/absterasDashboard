@@ -25,10 +25,16 @@ test('the first 1.5 approved medical leave days remain paid', () => {
   ], from, to), 1.5);
 });
 
-test('Birthday and Birthday Leave default to 2.5 paid days', () => {
+test('Birthday leave uses the 2.5 paid days assigned during approval', () => {
   const from = new Date('2026-08-01T00:00:00.000Z');
   const to = new Date('2026-09-01T00:00:00.000Z');
-  assert.equal(unpaidLeaveDaysForPayroll([{ fromDate: '2026-08-04', toDate: '2026-08-06', leaveType: { name: 'Birthday', isPaid: true } }], from, to), 0.5);
+  assert.equal(unpaidLeaveDaysForPayroll([{ paidDays: 2.5, fromDate: '2026-08-04', toDate: '2026-08-06', leaveType: { name: 'Birthday', isPaid: true } }], from, to), 0.5);
+});
+
+test('leave without paid days is deducted even when its type is marked paid', () => {
+  const from = new Date('2026-08-01T00:00:00.000Z');
+  const to = new Date('2026-09-01T00:00:00.000Z');
+  assert.equal(unpaidLeaveDaysForPayroll([{ fromDate: '2026-08-04', toDate: '2026-08-05', leaveType: { isPaid: true } }], from, to), 2);
 });
 
 test('HR-paid leave is excluded while HR-unpaid leave is deducted', () => {

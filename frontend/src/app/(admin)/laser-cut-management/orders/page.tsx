@@ -10,9 +10,10 @@ type Order = {
   orderName: string
   clientName?: string
   createdAt: string
-  expected: { sheets: number }
-  sent: { sheets: number }
+  planned: { sheets: number; tubes: number }
+  ready: { sheets: number; tubes: number }
   remainingSheets: number
+  remainingTubes: number
   status: 'PENDING' | 'PARTIAL' | 'COMPLETE'
 }
 
@@ -27,7 +28,7 @@ export default function LaserCutCurrentOrdersPage() {
     setLoading(true)
     try {
       const response = await apiFetch<{ data: Order[] }>('/laser-cut-management/orders')
-      setOrders(response.data.filter((order) => order.status !== 'COMPLETE'))
+      setOrders(response.data)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load current laser-cut orders')
     } finally {
@@ -38,6 +39,7 @@ export default function LaserCutCurrentOrdersPage() {
     load()
   }, [])
   const remainingClass = (value: number) => (value > 0 ? 'text-danger fw-semibold' : 'text-success fw-semibold')
+  const progress = (planned: number, ready: number, pending: number) => `${planned} planned · ${ready} ready · ${pending} pending`
   const clientNames = [...new Set(orders.map((order) => order.clientName || '—'))].sort()
   const visibleOrders = orders.filter((order) => (!orderFilter || order._id === orderFilter) && (!clientFilter || (order.clientName || '—') === clientFilter))
   const daysInLaserCut = (createdAt: string) => Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000))
@@ -66,7 +68,7 @@ export default function LaserCutCurrentOrdersPage() {
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <h4 className="mb-1">Current Laser Cut Orders</h4>
-          <p className="text-muted mb-0">Orders that still need sheets dispatched to the vendor.</p>
+          <p className="text-muted mb-0">Track Laser Cut orders, including completed orders ready for Powder Coating.</p>
         </div>
         <div className="d-flex gap-2">
           <Button variant="outline-secondary" onClick={load} disabled={loading}>
@@ -109,9 +111,8 @@ export default function LaserCutCurrentOrdersPage() {
                   <th>Client</th>
                   <th>Created date</th>
                   <th>Days in laser cutting</th>
-                  <th>Expected sheets</th>
-                  <th>Sent sheets</th>
-                  <th>Remaining sheets</th>
+                  <th>Sheet progress</th>
+                  <th>Tube progress</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -123,9 +124,8 @@ export default function LaserCutCurrentOrdersPage() {
                     <td>{order.clientName || '—'}</td>
                     <td>{new Date(order.createdAt).toLocaleDateString()}</td>
                     <td>{daysInLaserCut(order.createdAt)}</td>
-                    <td>{order.expected.sheets}</td>
-                    <td>{order.sent.sheets}</td>
-                    <td className={remainingClass(order.remainingSheets)}>{order.remainingSheets}</td>
+                    <td className={remainingClass(order.remainingSheets)}>{progress(order.planned.sheets, order.ready.sheets, order.remainingSheets)}</td>
+                    <td className={remainingClass(order.remainingTubes)}>{progress(order.planned.tubes, order.ready.tubes, order.remainingTubes)}</td>
                     <td>
                       <Badge bg={order.status === 'PARTIAL' ? 'danger' : 'secondary'}>{order.status}</Badge>
                     </td>
@@ -143,8 +143,8 @@ export default function LaserCutCurrentOrdersPage() {
                 ))}
                 {!loading && !visibleOrders.length && (
                   <tr>
-                    <td colSpan={9} className="text-center text-muted py-4">
-                      No current laser-cut orders match these filters.
+                    <td colSpan={8} className="text-center text-muted py-4">
+                      No laser-cut orders match these filters.
                     </td>
                   </tr>
                 )}

@@ -6,6 +6,8 @@ import { createChallanPdf } from '../services/challan-pdf.service.js';
 import { DEFAULT_HSN_CODE, InventoryItem } from '../../inventory/models/item.model.js';
 import { StockTransaction } from '../../inventory/models/transaction.model.js';
 import { ReturnProduct } from '../../returns/models/return-product.model.js';
+import { LaserCutChallan } from '../../lasercut/models.js';
+import { PowderCoatChallan } from '../../powdercoating/models.js';
 
 const FIELDS = ['client', 'site', 'supplier', 'challanDate', 'pickupAddress', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'linkedInvoice', 'pdfFileUrl'];
 const payload = (body) => FIELDS.reduce((result, field) => (body?.[field] !== undefined ? { ...result, [field]: body[field] } : result), {});
@@ -13,19 +15,59 @@ const required = (body) => ['client', 'challanDate'].every((field) => body?.[fie
 const challanNumber = () => `DC-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
 const requestedChallanNumber = (value) => /^DC-[A-F0-9]{10}$/.test(String(value || '')) ? value : undefined;
 
+const clientSnapshot = (clientRef, clientName) => clientRef ? { _id: String(clientRef), name: clientName || 'Client' } : undefined;
+const centralChallan = (challan) => ({
+  _id: String(challan._id), challanNumber: challan.challanNumber, challanDate: challan.challanDate,
+  createdAt: challan.createdAt,
+  transferType: challan.transferType, process: challan.transferType === 'return_transfer' ? 'Return Management' : 'Inventory Delivery',
+  client: challan.client ? { _id: String(challan.client._id), name: challan.client.name } : undefined,
+  siteName: challan.site?.siteName || challan.site?.name, counterpartyName: challan.supplier?.name,
+  itemCount: challan.lineItems?.length || challan.returnProducts?.length || 0, workflowLink: `/challans/${challan._id}`, pdfPath: `/challans/${challan._id}/pdf`, isCentralChallan: true,
+});
+const laserCutChallan = (challan) => ({
+  _id: String(challan._id), challanNumber: challan.challanNo, challanDate: challan.challanDate,
+  createdAt: challan.createdAt,
+  transferType: challan.type === 'OUT' ? 'inventory_to_laser_cut' : 'laser_cut_return', process: 'Laser Cut',
+  client: clientSnapshot(challan.clientRef, challan.clientName), siteName: challan.clientSiteName, counterpartyName: challan.vendorName,
+  itemCount: challan.items?.length || 0, workflowLink: challan.orderRef ? `/laser-cut-management/orders/${challan.orderRef}` : '/laser-cut-management/orders', pdfPath: `/challans/laser-cut/${challan._id}/pdf`, isCentralChallan: false,
+});
+const powderCoatingChallan = (challan) => ({
+  _id: String(challan._id), challanNumber: challan.challanNo, challanDate: challan.challanDate,
+  createdAt: challan.createdAt,
+  transferType: challan.type === 'SITE_OUT' ? 'powder_coating_to_client' : challan.type === 'OUT' && challan.items?.some((item) => item.source === 'LASER_CUT') ? 'laser_cut_to_powder_coating' : challan.type === 'OUT' ? 'inventory_to_powder_coating' : 'powder_coating_return', process: 'Powder Coating',
+  client: clientSnapshot(challan.clientRef, challan.clientName), siteName: challan.clientSiteName, counterpartyName: challan.vendorName,
+  itemCount: challan.items?.length || 0, workflowLink: challan.orderRef ? `/powder-coating-management/orders/${challan.orderRef}` : '/powder-coating-management/orders', pdfPath: `/challans/powder-coating/${challan._id}/pdf`, isCentralChallan: false,
+});
+
+export function processChallanForPdf(challan) {
+  return {
+    challanNumber: challan.challanNo,
+    challanDate: challan.challanDate,
+    client: { name: challan.clientName || 'Client', shippingAddress: challan.clientSiteAddressSnapshot },
+    site: { siteAddress: challan.clientSiteAddressSnapshot },
+    supplier: { name: challan.vendorName, address: challan.vendorAddressSnapshot },
+    pickupAddress: challan.type === 'SITE_OUT' ? challan.vendorAddressSnapshot : challan.items?.[0]?.pickupAddressSnapshot || challan.vendorAddressSnapshot,
+    transportType: challan.transportType,
+    vehicleNumber: challan.vehicleNumber,
+    eWayBillNumber: challan.eWayBillNumber,
+    lineItems: (challan.items || []).map((item) => ({ description: item.itemName, hsnCode: item.hsnCode, quantity: item.quantity, unit: item.unit })),
+  };
+}
+
 export function inventoryLineFor(material, line) {
   const quantity = Number(line?.quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) throw Object.assign(new Error('Item quantity must be greater than zero'), { statusCode: 400 });
   return { inventoryItem: material._id, description: material.name, hsnCode: material.hsnCode || DEFAULT_HSN_CODE, quantity, unit: material.unit };
 }
 
-async function inventoryLines(lines) {
+async function inventoryLines(lines, hardwareOnly = false) {
   if (!Array.isArray(lines) || !lines.length || lines.some((line) => !line?.inventoryItem)) throw Object.assign(new Error('Select at least one inventory material'), { statusCode: 400 });
   const items = await InventoryItem.find({ _id: { $in: lines.map((line) => line.inventoryItem) }, status: 'active' }).lean();
   const byId = new Map(items.map((item) => [String(item._id), item]));
   return lines.map((line) => {
     const material = byId.get(String(line.inventoryItem));
     if (!material) throw Object.assign(new Error('Inventory material not found or inactive'), { statusCode: 400 });
+    if (hardwareOnly && material.category !== 'hardware') throw Object.assign(new Error(`${material.name} is not a hardware item`), { statusCode: 400 });
     return inventoryLineFor(material, line);
   });
 }
@@ -33,7 +75,7 @@ async function inventoryLines(lines) {
 export async function createChallan(req, res) {
   if (!required(req.body)) return res.status(400).json({ error: { message: 'Client and date are required' } });
   let challan; const values = payload(req.body); const requestedNumber = requestedChallanNumber(req.body?.challanNumber);
-  values.lineItems = await inventoryLines(values.lineItems);
+  values.lineItems = await inventoryLines(values.lineItems, req.body?.hardwareOnly === true);
   if (values.site && !await Client.exists({ _id: values.site, parentClient: values.client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try { challan = await Challan.create({ ...values, challanNumber: attempt === 0 && requestedNumber ? requestedNumber : challanNumber() }); break; }
@@ -64,16 +106,27 @@ export async function listChallans(req, res) {
   const page = Math.max(Number(req.query.page || 1), 1);
   const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
   const search = String(req.query.q || '').trim();
-  const query = {};
-  if (req.query.client) query.client = req.query.client;
-  if (req.query.site) query.site = req.query.site;
-  if (req.query.type) {
-    if (!['delivery', 'return_transfer'].includes(req.query.type)) return res.status(400).json({ error: { message: 'Invalid challan type' } });
-    query.transferType = req.query.type;
-  }
-  if (search) query.challanNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-  const [challans, total] = await Promise.all([Challan.find(query).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').sort({ challanDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit), Challan.countDocuments(query)]);
-  return res.json({ data: challans, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
+  const type = String(req.query.type || '').trim();
+  const types = ['delivery', 'return_transfer', 'inventory_to_laser_cut', 'laser_cut_return', 'inventory_to_powder_coating', 'laser_cut_to_powder_coating', 'powder_coating_to_client', 'powder_coating_return'];
+  if (type && !types.includes(type)) return res.status(400).json({ error: { message: 'Invalid challan type' } });
+  const standardQuery = {};
+  const laserQuery = {};
+  const powderQuery = {};
+  if (req.query.client) { standardQuery.client = req.query.client; laserQuery.clientRef = req.query.client; powderQuery.clientRef = req.query.client; }
+  if (req.query.site) { standardQuery.site = req.query.site; laserQuery.clientSiteRef = req.query.site; powderQuery.clientSiteRef = req.query.site; }
+  if (type === 'delivery' || type === 'return_transfer') standardQuery.transferType = type;
+  const [standard, laserCut, powderCoating] = await Promise.all([
+    Challan.find(standardQuery).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').populate('supplier', 'name').lean(),
+    LaserCutChallan.find(laserQuery).lean(),
+    PowderCoatChallan.find(powderQuery).lean(),
+  ]);
+  const matchesSearch = (challan) => !search || challan.challanNumber.toLowerCase().includes(search.toLowerCase());
+  const newestFirst = (challan) => new Date(challan.createdAt || challan.challanDate).getTime();
+  const challengers = [...standard.map(centralChallan), ...laserCut.map(laserCutChallan), ...powderCoating.map(powderCoatingChallan)]
+    .filter((challan) => (!type || challan.transferType === type) && matchesSearch(challan))
+    .sort((first, second) => newestFirst(second) - newestFirst(first));
+  const total = challengers.length;
+  return res.json({ data: challengers.slice((page - 1) * limit, page * limit), meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function getChallan(req, res) {
@@ -87,6 +140,17 @@ export async function downloadChallanPdf(req, res) {
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   const pdf = await createChallanPdf(challan);
   const filename = `challan-${challan.challanNumber.replace(/[^\w-]/g, '_')}.pdf`;
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"` });
+  return res.send(pdf);
+}
+
+export async function downloadProcessChallanPdf(req, res) {
+  const model = req.params.process === 'laser-cut' ? LaserCutChallan : req.params.process === 'powder-coating' ? PowderCoatChallan : null;
+  if (!model) return res.status(400).json({ error: { message: 'Invalid challan process' } });
+  const challan = await model.findById(req.params.id).lean();
+  if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
+  const pdf = await createChallanPdf(processChallanForPdf(challan));
+  const filename = `challan-${String(challan.challanNo).replace(/[^\w-]/g, '_')}.pdf`;
   res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"` });
   return res.send(pdf);
 }

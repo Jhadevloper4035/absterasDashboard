@@ -3,7 +3,7 @@ import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
-import { BASIC_APP_MODULES, moduleLabel } from '@/helpers/moduleAccess'
+import { hasFullAppAccess, moduleLabel } from '@/helpers/moduleAccess'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
 import { FormEvent, useEffect, useState } from 'react'
@@ -19,6 +19,7 @@ const singleUserRoles = ['superadmin', 'admin'] as const
 const hrModules = ['employees', 'attendance', 'leave', 'payroll', 'expenses', 'reports']
 type HrAccess = 'none' | 'view' | 'manage'
 type HrPermission = { module: string; access: HrAccess }
+type PasswordResetRequest = Pick<UserType, '_id' | 'name' | 'email' | 'role'> & { passwordResetRequestedAt: string }
 const defaultHrPermissions = () => hrModules.map((module) => ({ module, access: 'none' as HrAccess }))
 const hrLabel = (module: string) => module.replace(/\b\w/g, (letter) => letter.toUpperCase())
 const joinedDate = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)) : '—'
@@ -30,11 +31,8 @@ const statusBadge = (status: UserType['status']) => {
   return 'secondary'
 }
 
-const workProfileLabel = (user: UserType) => user.workProfile === 'employee' || (!user.workProfile && user.accessTypes?.includes('employee')) ? 'Employee' : 'Director'
-const sidebarPermissions = (user: UserType) => [
-  ...BASIC_APP_MODULES.map((module) => ({ module, access: 'manage' as const })),
-  ...(user.modulePermissions || []).filter((permission) => !BASIC_APP_MODULES.includes(permission.module as (typeof BASIC_APP_MODULES)[number]) && permission.access !== 'none'),
-]
+const workProfileLabel = (user: UserType) => user.workProfile ? user.workProfile[0].toUpperCase() + user.workProfile.slice(1) : user.accessTypes?.includes('employee') ? 'Employee' : 'Director'
+const sidebarPermissions = (user: UserType) => (user.modulePermissions || []).filter((permission) => permission.access !== 'none')
 
 const emptyEditForm = {
   name: '',
@@ -68,9 +66,11 @@ const UsersPage = () => {
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({ q: '', status: '' })
-  const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
+  const [passwordResetRequests, setPasswordResetRequests] = useState<PasswordResetRequest[]>([])
+  const [approvingRequestId, setApprovingRequestId] = useState('')
+  const currentAccessTypes = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || []), user?.workProfile]
   const isSuperadmin = currentAccessTypes.includes('superadmin')
-  const canManageUsers = isSuperadmin || currentAccessTypes.includes('admin')
+  const canManageUsers = hasFullAppAccess(user)
   const canManageProfile = (profile: UserType) => isSuperadmin || ![profile.role, ...(profile.additionalRoles || []), ...(profile.accessTypes || [])].includes('superadmin') && ![profile.role, ...(profile.additionalRoles || []), ...(profile.accessTypes || [])].includes('admin')
   useEffect(() => {
     const query = new URLSearchParams({ page: String(page), limit: '25' })
@@ -84,6 +84,13 @@ const UsersPage = () => {
   useEffect(() => {
     setPage(1)
   }, [filters.q, filters.status])
+
+  useEffect(() => {
+    if (!canManageUsers) return
+    apiFetch<{ data: PasswordResetRequest[] }>('/users/password-reset-requests')
+      .then((response) => setPasswordResetRequests(response.data))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load password reset requests'))
+  }, [canManageUsers])
 
   useEffect(() => {
     if (!editingUser || singleUserRoles.includes(editingUser.role as (typeof singleUserRoles)[number])) return
@@ -134,6 +141,30 @@ const UsersPage = () => {
 
   const openEdit = (item: UserType) => {
     navigate(`/users/${item._id}/edit`)
+  }
+
+  const approvePasswordReset = async (request: PasswordResetRequest) => {
+    const confirmation = await Swal.fire({
+      icon: 'warning',
+      title: `Approve ${request.name}'s password?`,
+      text: 'Their requested password will become active and all current sessions will be signed out.',
+      showCancelButton: true,
+      confirmButtonText: 'Approve password',
+      confirmButtonColor: '#0d6efd',
+    })
+    if (!confirmation.isConfirmed) return
+
+    setApprovingRequestId(request._id)
+    setError('')
+    try {
+      await apiFetch(`/users/password-reset-requests/${request._id}/approve`, { method: 'POST' })
+      setPasswordResetRequests((requests) => requests.filter((item) => item._id !== request._id))
+      setMessage(`${request.name}'s password was updated`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to approve password reset')
+    } finally {
+      setApprovingRequestId('')
+    }
   }
 
   const closeEdit = () => {
@@ -200,10 +231,29 @@ const UsersPage = () => {
   }
 
   if (!canManageUsers) {
+    const access = user ? sidebarPermissions(user) : []
     return (
       <>
-        <PageMetaData title="Users" />
-        <Alert variant="warning">Only administrators can manage users.</Alert>
+        <PageMetaData title="My Profile & Access" />
+        <Card>
+          <CardBody>
+            <h4 className="card-title mb-1">My Profile & Access</h4>
+            <p className="text-muted mb-4">Your account details and sidebar permissions.</p>
+            <Row className="g-3">
+              <Col md={6}><div className="text-muted fs-13">Name</div><div className="fw-medium">{user?.name || '—'}</div></Col>
+              <Col md={6}><div className="text-muted fs-13">Email</div><div className="fw-medium">{user?.email || '—'}</div></Col>
+              <Col md={6}><div className="text-muted fs-13">Work profile</div><div className="fw-medium">{user ? workProfileLabel(user) : '—'}</div></Col>
+              <Col md={6}><div className="text-muted fs-13">Account status</div><Badge bg={statusBadge(user?.status || 'inactive')}>{user?.status || 'inactive'}</Badge></Col>
+              <Col xs={12}>
+                <div className="text-muted fs-13 mb-2">Sidebar access</div>
+                <div className="d-flex flex-wrap gap-2">
+                  {access.map((permission) => <Badge key={permission.module} bg="light" text="dark" className="border">{moduleLabel(permission.module as Parameters<typeof moduleLabel>[0])} · {permission.access}</Badge>)}
+                  {!access.length && <span className="text-muted">No sidebar access assigned.</span>}
+                </div>
+              </Col>
+            </Row>
+          </CardBody>
+        </Card>
       </>
     )
   }
@@ -218,6 +268,23 @@ const UsersPage = () => {
           <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3"><div><h4 className="card-title mb-1">User Profiles & Access</h4><p className="text-muted mb-0">System role, work profile, and sidebar access in one place.</p></div><Badge bg="light" text="dark">{meta.total} users</Badge></div>
           {(error || storeError) && <Alert variant="danger">{error || storeError}</Alert>}
           {message && <Alert variant="success">{message}</Alert>}
+          {passwordResetRequests.length > 0 && <div className="border rounded p-3 mb-4">
+            <div className="d-flex justify-content-between align-items-center gap-2 mb-3">
+              <div><h5 className="mb-1">Password Reset Requests</h5><p className="text-muted mb-0">Approval applies the requested password and signs the user out.</p></div>
+              <Badge bg="warning" text="dark">{passwordResetRequests.length} pending</Badge>
+            </div>
+            <div className="table-responsive">
+              <Table size="sm" className="align-middle mb-0" style={{ minWidth: 620 }}>
+                <thead><tr><th>User</th><th>Role</th><th>Requested</th><th className="text-end">Action</th></tr></thead>
+                <tbody>{passwordResetRequests.map((request) => <tr key={request._id}>
+                  <td><div className="fw-medium">{request.name}</div><div className="text-muted fs-13">{request.email}</div></td>
+                  <td><Badge bg="secondary">{request.role}</Badge></td>
+                  <td>{joinedDate(request.passwordResetRequestedAt)}</td>
+                  <td className="text-end"><Button size="sm" type="button" disabled={approvingRequestId === request._id} onClick={() => approvePasswordReset(request)}>{approvingRequestId === request._id ? 'Approving...' : 'Approve'}</Button></td>
+                </tr>)}</tbody>
+              </Table>
+            </div>
+          </div>}
           <div className="d-flex gap-2 flex-wrap mb-3">
             <Form.Control style={{ flex: '1 1 260px' }} placeholder="Search name, email, mobile" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} />
             <Form.Select style={{ flex: '0 1 180px' }} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
@@ -259,13 +326,7 @@ const UsersPage = () => {
                     </td>
                     <td><Badge bg={workProfileLabel(item) === 'Employee' ? 'success' : 'secondary'}>{workProfileLabel(item)}</Badge></td>
                     <td>
-                      {[item.role, ...(item.additionalRoles || [])].some((role) => role === 'superadmin' || role === 'admin') ? (
-                        <Badge bg="primary">{workProfileLabel(item) === 'Director' ? 'All except HR Management' : 'All sidebar tabs'}</Badge>
-                      ) : (
-                        <div className="d-flex flex-wrap gap-1">
-                          {sidebarPermissions(item).map((permission) => <Badge bg={permission.access === 'manage' ? 'primary' : 'light'} text={permission.access === 'manage' ? undefined : 'dark'} key={permission.module}>{moduleLabel(permission.module)} · {permission.access}</Badge>)}
-                        </div>
-                      )}
+                      {sidebarPermissions(item).length ? <div className="d-flex flex-wrap gap-1">{sidebarPermissions(item).map((permission) => <Badge bg={permission.access === 'manage' ? 'primary' : 'light'} text={permission.access === 'manage' ? undefined : 'dark'} key={permission.module}>{moduleLabel(permission.module)} · {permission.access}</Badge>)}</div> : <span className="text-muted">—</span>}
                     </td>
                     <td>
                       <Badge bg={statusBadge(item.status)}>{item.status}</Badge>

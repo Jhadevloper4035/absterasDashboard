@@ -1,52 +1,30 @@
 import PageMetaData from '@/components/PageTitle'
-import PdfActionButton from '@/components/PdfActionButton'
 import { apiFetch } from '@/helpers/api'
-import { downloadPdf, printPdf } from '@/helpers/pdf'
-import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Alert, Badge, Button, Card, CardBody, Spinner, Table } from 'react-bootstrap'
+import { Alert, Badge, Button, Card, CardBody, Table } from 'react-bootstrap'
 import type { Client } from '../client-form'
 
 type Site = Pick<Client, '_id' | 'name' | 'siteName' | 'siteAddress' | 'status'>
-type Invoice = { _id: string; invoiceNumber: string; invoiceDate: string; grandTotal: number; status: 'unpaid' | 'partially paid' | 'paid'; site?: Site }
-type Challan = { _id: string; challanNumber: string; challanDate: string; site?: Site }
 const amount = (value?: number) => value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'
 
 const ClientOverviewPage = () => {
   const { clientId } = useParams()
   const [client, setClient] = useState<Client>()
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [challans, setChallans] = useState<Challan[]>([])
   const [sites, setSites] = useState<Site[]>([])
   const [error, setError] = useState('')
-  const [downloading, setDownloading] = useState('')
-  const token = useAuthStore((state) => state.token)
   useEffect(() => {
     if (!clientId) return
     apiFetch<{ data: Client }>(`/clients/${clientId}`)
       .then(async (clientResponse) => {
         const parentClientId = typeof clientResponse.data.parentClient === 'string' ? clientResponse.data.parentClient : clientResponse.data.parentClient?._id
-        const documentClientId = parentClientId || clientResponse.data._id
-        const siteQuery = parentClientId ? `&site=${clientResponse.data._id}` : ''
-        const [invoiceResponse, challanResponse, siteResponse] = await Promise.all([
-          apiFetch<{ data: Invoice[] }>(`/invoices?client=${documentClientId}${siteQuery}&limit=100`),
-          apiFetch<{ data: Challan[] }>(`/challans?client=${documentClientId}${siteQuery}&limit=100`),
-          parentClientId ? Promise.resolve({ data: [] as Site[] }) : apiFetch<{ data: Site[] }>(`/clients?parentClient=${clientResponse.data._id}&limit=100`),
-        ])
+        const siteResponse = parentClientId ? { data: [] as Site[] } : await apiFetch<{ data: Site[] }>(`/clients?parentClient=${clientResponse.data._id}&limit=100`)
         setClient(clientResponse.data)
-        setInvoices(invoiceResponse.data)
-        setChallans(challanResponse.data)
         setSites(siteResponse.data)
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load client'))
   }, [clientId])
-  const totalInvoiced = invoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0)
-  const download = (path: string, filename: string) => downloadPdf(path, filename, token)
   const parentClientId = client && (typeof client.parentClient === 'string' ? client.parentClient : client.parentClient?._id)
-  const documentClientId = parentClientId || client?._id
-  const documentQuery = client?.parentClient ? `?client=${documentClientId}&site=${client._id}` : `?client=${documentClientId}`
-  const deliveryAddress = (site?: Site) => site?.siteAddress || client?.shippingAddress || client?.billingAddress || '-'
   return (
     <>
       <PageMetaData title={client?.name || 'Client'} />
@@ -63,12 +41,6 @@ const ClientOverviewPage = () => {
                 <div className="d-flex gap-2">
                   <Link to="/clients">
                     <Button variant="outline-secondary">All clients</Button>
-                  </Link>
-                  <Link to={`/invoices/create${documentQuery}`}>
-                    <Button variant="outline-primary">Create invoice</Button>
-                  </Link>
-                  <Link to={`/challans/create${documentQuery}`}>
-                    <Button>Create challan</Button>
                   </Link>
                 </div>
               </div>
@@ -137,7 +109,6 @@ const ClientOverviewPage = () => {
                     <tr>
                       <th>Project</th>
                       <th>Address</th>
-                      <th>Documents</th>
                       <th>Status</th>
                       <th />
                     </tr>
@@ -147,138 +118,16 @@ const ClientOverviewPage = () => {
                       <tr key={site._id}>
                         <td>{site.siteName || site.name}</td>
                         <td>{site.siteAddress || '-'}</td>
-                        <td>{invoices.filter((invoice) => invoice.site?._id === site._id).length} invoices · {challans.filter((challan) => challan.site?._id === site._id).length} challans</td>
                         <td><Badge bg={site.status === 'active' ? 'success' : site.status === 'completed' ? 'secondary' : 'warning'}>{site.status}</Badge></td>
                         <td className="text-end"><Link to={`/clients/${site._id}`}><Button size="sm" variant="outline-primary">View</Button></Link></td>
                       </tr>
                     ))}
-                    {!sites.length && <tr><td colSpan={5} className="text-center text-muted py-4">No sites yet.</td></tr>}
+                    {!sites.length && <tr><td colSpan={4} className="text-center text-muted py-4">No sites yet.</td></tr>}
                   </tbody>
                 </Table>
               </CardBody>
             </Card>
           )}
-          <Card className="mb-3">
-            <CardBody>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h5 className="mb-0">Invoices</h5>
-                <strong>Total billed: {amount(totalInvoiced)}</strong>
-              </div>
-              <Table responsive hover className="mb-0">
-                <thead>
-                  <tr>
-                    <th>Invoice</th>
-                    <th>Delivery address</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((invoice) => (
-                    <tr key={invoice._id}>
-                      <td>
-                        <Link to={`/invoices/${invoice._id}`}>{invoice.invoiceNumber}</Link>
-                      </td>
-                      <td>{deliveryAddress(invoice.site)}</td>
-                      <td>{new Date(invoice.invoiceDate).toLocaleDateString()}</td>
-                      <td>{amount(invoice.grandTotal)}</td>
-                      <td>
-                        <Badge bg={invoice.status === 'paid' ? 'success' : invoice.status === 'partially paid' ? 'warning' : 'secondary'}>
-                          {invoice.status}
-                        </Badge>
-                      </td>
-                      <td className="text-end">
-                        <Link to={`/invoices/${invoice._id}`}>
-                          <Button size="sm" variant="outline-primary" className="me-2">
-                            View
-                          </Button>
-                        </Link>
-                        <PdfActionButton
-                          size="sm"
-                          variant="outline-secondary"
-                          className="me-2"
-                          action={() => printPdf(`/invoices/${invoice._id}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open invoice PDF'))}>
-                          Print
-                        </PdfActionButton>
-                        <Button
-                          size="sm"
-                          variant="outline-success"
-                          disabled={downloading === `invoice-${invoice._id}`}
-                          onClick={() => { setDownloading(`invoice-${invoice._id}`); download(`/invoices/${invoice._id}/pdf`, `invoice-${invoice.invoiceNumber}.pdf`).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to download invoice')).finally(() => setDownloading('')) }}>
-                          {downloading === `invoice-${invoice._id}` && <Spinner size="sm" className="me-2" />}Download
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {!invoices.length && (
-                    <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
-                        No invoices yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h5 className="mb-0">Delivery challans</h5>
-              </div>
-              <Table responsive hover className="mb-0">
-                <thead>
-                  <tr>
-                    <th>Challan</th>
-                    <th>Delivery address</th>
-                    <th>Date</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {challans.map((challan) => (
-                    <tr key={challan._id}>
-                      <td>
-                        <Link to={`/challans/${challan._id}`}>{challan.challanNumber}</Link>
-                      </td>
-                      <td>{deliveryAddress(challan.site)}</td>
-                      <td>{new Date(challan.challanDate).toLocaleDateString()}</td>
-                      <td className="text-end">
-                        <Link to={`/challans/${challan._id}`}>
-                          <Button size="sm" variant="outline-primary" className="me-2">
-                            View
-                          </Button>
-                        </Link>
-                        <PdfActionButton
-                          size="sm"
-                          variant="outline-secondary"
-                          className="me-2"
-                          action={() => printPdf(`/challans/${challan._id}/pdf`, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to open delivery challan PDF'))}>
-                          Print
-                        </PdfActionButton>
-                        <Button
-                          size="sm"
-                          variant="outline-success"
-                          disabled={downloading === `challan-${challan._id}`}
-                          onClick={() => { setDownloading(`challan-${challan._id}`); download(`/challans/${challan._id}/pdf`, `challan-${challan.challanNumber}.pdf`).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to download challan')).finally(() => setDownloading('')) }}>
-                          {downloading === `challan-${challan._id}` && <Spinner size="sm" className="me-2" />}Download
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {!challans.length && (
-                    <tr>
-                    <td colSpan={4} className="text-center text-muted py-4">
-                        No challans yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            </CardBody>
-          </Card>
         </>
       )}
     </>

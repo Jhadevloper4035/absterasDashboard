@@ -15,6 +15,12 @@ const EMAIL_TEMPLATES = {
   'hr.leave.approved': { heading: 'Leave approved', intro: 'Your leave request was approved.' },
   'hr.leave.rejected': { heading: 'Leave rejected', intro: 'Your leave request was rejected.' },
   'hr.advance.approved': { heading: 'Advance approved', intro: 'Your advance request was approved.' },
+  'hr.advance.rejected': { heading: 'Advance rejected', intro: 'Your advance request was rejected.' },
+  'hr.expense.approved': { heading: 'Reimbursement approved', intro: 'Your reimbursement claim was approved.' },
+  'hr.expense.rejected': { heading: 'Reimbursement rejected', intro: 'Your reimbursement claim was rejected.' },
+  'hr.attendance.correction.approved': { heading: 'Attendance correction approved', intro: 'Your attendance correction was approved.' },
+  'hr.attendance.correction.rejected': { heading: 'Attendance correction rejected', intro: 'Your attendance correction was rejected.' },
+  'hr.request.pending': { heading: 'Approval needed', intro: 'An employee request is waiting for your review.' },
   'hr.payroll.processed': { heading: 'Payroll processed', intro: 'Your payroll has been processed.' },
   'hr.payroll.payslip': { heading: 'Salary slip ready', intro: 'Your salary slip is ready to download.' },
   'hr.document.expiring': { heading: 'Document expiring', intro: 'An employee document is nearing expiry.' },
@@ -49,7 +55,9 @@ export function renderNotificationEmail({ title, body, metadata } = {}) {
   if (templateKey === 'task.created' || templateKey === 'task.updated') return taskNotificationEmail(metadata);
   const template = EMAIL_TEMPLATES[templateKey] || EMAIL_TEMPLATES.default;
   const from = metadata?.fromName ? `From: ${metadata.fromName}${metadata.fromRole ? ` (${metadata.fromRole})` : ''}` : '';
-  return { template: templateKey, subject: title || template.heading, text: [template.intro, body, from].filter(Boolean).join('\n\n'), html: `<h2>${htmlEscape(template.heading)}</h2><p>${htmlEscape(template.intro)}</p>${body ? `<p><strong>${htmlEscape(body)}</strong></p>` : ''}${from ? `<p>${htmlEscape(from)}</p>` : ''}` };
+  const actionUrl = /^https?:\/\/[^\s]+$/i.test(String(metadata?.actionUrl || '')) ? String(metadata.actionUrl) : '';
+  const action = actionUrl ? `Review request: ${actionUrl}` : '';
+  return { template: templateKey, subject: title || template.heading, text: [template.intro, body, from, action].filter(Boolean).join('\n\n'), html: `<h2>${htmlEscape(template.heading)}</h2><p>${htmlEscape(template.intro)}</p>${body ? `<p><strong>${htmlEscape(body)}</strong></p>` : ''}${from ? `<p>${htmlEscape(from)}</p>` : ''}${actionUrl ? `<p><a href="${htmlEscape(actionUrl)}">Review request</a></p>` : ''}` };
 }
 
 export async function sendNotificationEmail({ to, title, body, metadata, attachments }) {

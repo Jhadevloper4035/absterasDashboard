@@ -1,10 +1,9 @@
 import { Todo, TODO_PRIORITIES, TODO_STATUSES } from '../models/todo.model.js';
 import { User } from '../../../models/user.model.js';
-
-const ADMIN_ROLES = ['superadmin', 'admin'];
+import { appAccessLevel } from '../../auth/middleware/auth.middleware.js';
 
 function canManageTodos(user) {
-  return ADMIN_ROLES.includes(user.role);
+  return appAccessLevel(user, 'todo') === 2;
 }
 
 function todoQueryFor(user, extra = {}) {

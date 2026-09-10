@@ -9,7 +9,7 @@ import { revokeActiveUserSessions } from '../../auth/services/auth-session.servi
 import { createEmployeeIdCardPdf } from '../services/id-card-pdf.service.js';
 
 const EMPLOYEE_FIELDS = ['employeeType', 'department', 'designation', 'manager', 'joiningDate', 'dateOfBirth', 'status', 'lastWorkingDate', 'emergencyContact'];
-const isAdmin = (user) => ['superadmin', 'admin'].includes(user.role);
+const isAdmin = (user) => ['superadmin', 'admin'].includes(user.role) || user.hrAccess === 'manage';
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const invalidId = (value) => !/^[a-f\d]{24}$/i.test(value || '');
 

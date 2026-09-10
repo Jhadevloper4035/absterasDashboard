@@ -8,18 +8,19 @@ const Users = lazy(() => import('@/app/(admin)/users/page'))
 const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
 const EditUser = lazy(() => import('@/app/(admin)/users/[userId]/edit/page'))
 const LoginHistory = lazy(() => import('@/app/(admin)/users/login-history/page'))
+const PasswordReset = lazy(() => import('@/app/(admin)/users/password-reset/page'))
 const HealthStatus = lazy(() => import('@/app/(admin)/health/status/page'))
 const Employees = lazy(() => import('@/app/(admin)/hr/employees/page'))
 const EmployeeDetail = lazy(() => import('@/app/(admin)/hr/employees/[employeeId]/page'))
 const EmployeeOverview = lazy(() => import('@/app/(admin)/hr/employee-overview/page'))
 const MyEmployeeProfile = lazy(() => import('@/app/(admin)/hr/my-profile/page'))
+const MyDashboard = lazy(() => import('@/app/(admin)/hr/my-dashboard/page'))
 const MyAttendance = lazy(() => import('@/app/(admin)/hr/my-attendance/page'))
 const MyIdCard = lazy(() => import('@/app/(admin)/hr/my-id-card/page'))
 const MyPayslips = lazy(() => import('@/app/(admin)/hr/my-payslips/page'))
+const UpcomingHolidays = lazy(() => import('@/app/(admin)/hr/upcoming-holidays/page'))
 const HrOrganization = lazy(() => import('@/app/(admin)/hr/settings/organization/page'))
 const Attendance = lazy(() => import('@/app/(admin)/hr/attendance/page'))
-const AttendanceReports = lazy(() => import('@/app/(admin)/hr/attendance/reports/page'))
-const HrDashboard = lazy(() => import('@/app/(admin)/hr/page'))
 const Leave = lazy(() => import('@/app/(admin)/hr/leave/page'))
 const Payroll = lazy(() => import('@/app/(admin)/hr/payroll/page'))
 const PayrollDetail = lazy(() => import('@/app/(admin)/hr/payroll/[runId]/page'))
@@ -28,12 +29,10 @@ const MyAdvances = lazy(() => import('@/app/(admin)/hr/advances/page'))
 const Settlements = lazy(() => import('@/app/(admin)/hr/payroll/settlements/page'))
 const Expenses = lazy(() => import('@/app/(admin)/hr/expenses/page'))
 const ExpenseApprovals = lazy(() => import('@/app/(admin)/hr/expenses/approvals/page'))
-const Leads = lazy(() => import('@/app/(admin)/leads/page'))
 const MyLeads = lazy(() => import('@/app/(admin)/leads/mine/page'))
+const MyArchitects = lazy(() => import('@/app/(admin)/leads/my-architects/page'))
 const CreateLead = lazy(() => import('@/app/(admin)/leads/create/page'))
 const SalesCreateLead = lazy(() => import('@/app/(admin)/leads/sales-create/page'))
-const PendingLeads = lazy(() => import('@/app/(admin)/leads/pending/page'))
-const ArchitectLeads = lazy(() => import('@/app/(admin)/leads/architect/page'))
 const ClientManagement = lazy(() => import('@/app/(admin)/clients/page'))
 const CreateClient = lazy(() => import('@/app/(admin)/clients/create/page'))
 const ClientOverview = lazy(() => import('@/app/(admin)/clients/[clientId]/page'))
@@ -45,7 +44,6 @@ const ScheduledLeads = lazy(() => import('@/app/(admin)/leads/scheduled/page'))
 const ClosedLeads = lazy(() => import('@/app/(admin)/leads/won/page'))
 const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
 const CreateTask = lazy(() => import('@/app/(admin)/tasks/create/page'))
-const WorkTypes = lazy(() => import('@/app/(admin)/tasks/work-types/page'))
 const TaskDetail = lazy(() => import('@/app/(admin)/tasks/[taskId]/page'))
 const UpdateTask = lazy(() => import('@/app/(admin)/tasks/[taskId]/edit/page'))
 
@@ -74,6 +72,7 @@ const LaserCutMoveOut = lazy(() => import('@/app/(admin)/laser-cut-management/mo
 const LaserCutVendors = lazy(() => import('@/app/(admin)/laser-cut-management/vendors/page'))
 const PowderCoatingManagement = lazy(() => import('@/app/(admin)/powder-coating-management/page'))
 const PowderCoatingOrders = lazy(() => import('@/app/(admin)/powder-coating-management/orders/page'))
+const PowderCoatingOrderDetail = lazy(() => import('@/app/(admin)/powder-coating-management/orders/[orderId]/detail/page'))
 const PowderCoatingOrderDispatch = lazy(() => import('@/app/(admin)/powder-coating-management/orders/[orderId]/page'))
 const CreatePowderCoatingOrder = lazy(() => import('@/app/(admin)/powder-coating-management/challans/create/page'))
 const PowderCoatingVendors = lazy(() => import('@/app/(admin)/powder-coating-management/vendors/page'))
@@ -201,6 +200,9 @@ export type RoutesProps = {
   name: string
   element: RouteProps['element']
   roles?: string[]
+  moduleAccess?: 'view' | 'manage'
+  allowModuleRoleBypass?: boolean
+  strictRoles?: boolean
   exact?: boolean
 }
 
@@ -235,7 +237,7 @@ const generalRoutes: RoutesProps[] = [
     path: '/dashboard/analytics',
     name: 'Admin Dashboard',
     element: <Analytics />,
-    roles: allRoles,
+    roles: [...allRoles, 'employee', 'client', 'director'],
   },
   {
     path: '/dashboard/finance',
@@ -246,7 +248,7 @@ const generalRoutes: RoutesProps[] = [
   {
     path: '/dashboard/sales',
     name: 'Dashboard',
-    element: <Navigate to="/dashboard/analytics" replace />,
+    element: <Profile />,
   },
   {
     path: '/users',
@@ -270,7 +272,11 @@ const generalRoutes: RoutesProps[] = [
     path: '/users/login-history',
     name: 'User Login History',
     element: <LoginHistory />,
-    roles: ['superadmin', 'admin'],
+  },
+  {
+    path: '/users/password-reset',
+    name: 'Password Reset',
+    element: <PasswordReset />,
   },
   {
     path: '/health/status',
@@ -278,94 +284,112 @@ const generalRoutes: RoutesProps[] = [
     element: <HealthStatus />,
     roles: ['superadmin'],
   },
-  { path: '/hr', name: 'HR Dashboard', element: <HrDashboard />, roles: hrAccessRoles },
-  { path: '/hr/employees', name: 'Employees', element: <Employees />, roles: hrAccessRoles },
-  { path: '/hr/employees/:employeeId', name: 'Employee', element: <EmployeeDetail />, roles: hrAccessRoles },
-  { path: '/hr/employee-overview', name: 'Employee monthly overview', element: <EmployeeOverview />, roles: hrAccessRoles },
-  { path: '/hr/my-overview', name: 'My monthly overview', element: <EmployeeOverview />, roles: ['employee'] },
-  { path: '/hr/my-profile', name: 'My Profile & Documents', element: <MyEmployeeProfile />, roles: ['employee'] },
-  { path: '/hr/my-attendance', name: 'My Attendance', element: <MyAttendance />, roles: ['employee'] },
-  { path: '/hr/my-id-card', name: 'My ID Card', element: <MyIdCard />, roles: ['employee'] },
-  { path: '/hr/my-payslips', name: 'My Salary Slips', element: <MyPayslips />, roles: ['employee'] },
-  { path: '/hr/settings/departments', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles },
-  { path: '/hr/settings/designations', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles },
-  { path: '/hr/attendance', name: 'Attendance', element: <Attendance />, roles: hrAccessRoles },
-  { path: '/hr/attendance/reports', name: 'Attendance reports', element: <AttendanceReports />, roles: hrAccessRoles },
-  { path: '/hr/settings/holidays', name: 'Holidays', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
-  { path: '/hr/leave', name: 'Leave', element: <Leave />, roles: [...hrAccessRoles, 'employee'] },
-  { path: '/hr/leave/approvals', name: 'Leave approvals', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
-  { path: '/hr/leave/calendar', name: 'Leave calendar', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
-  { path: '/hr/settings/leave-types', name: 'Leave types', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles },
-  { path: '/hr/payroll', name: 'Payroll', element: <Payroll />, roles: hrAccessRoles },
-  { path: '/hr/payroll/:runId', name: 'Payroll run', element: <PayrollDetail />, roles: hrAccessRoles },
-  { path: '/hr/payroll/salaries', name: 'Salary structures', element: <Navigate to="/hr/payroll" replace />, roles: hrAccessRoles },
-  { path: '/hr/payroll/advances', name: 'Advances', element: <Advances />, roles: hrAccessRoles },
-  { path: '/hr/advances', name: 'Salary advance', element: <MyAdvances />, roles: ['employee'] },
-  { path: '/hr/payroll/settlements', name: 'Settlements', element: <Settlements />, roles: hrAccessRoles },
-  { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'] },
-  { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles },
-  { path: '/hr/reports', name: 'HR reports', element: <Navigate to="/hr" replace />, roles: hrAccessRoles },
-  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: allRoles },
-  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: allRoles },
-  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: allRoles },
-  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: allRoles },
-  { path: '/challans', name: 'Delivery Challans', element: <Challans />, roles: allRoles },
-  { path: '/challans/create', name: 'Create Delivery Challan', element: <CreateChallan />, roles: allRoles },
-  { path: '/challans/:challanId/edit', name: 'Update Delivery Challan', element: <CreateChallan />, roles: allRoles },
-  { path: '/challans/:challanId', name: 'Delivery Challan', element: <ChallanDetail />, roles: allRoles },
+  { path: '/hr', name: 'HR Dashboard', element: <Navigate to="/dashboard/analytics" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/employees', name: 'Employees', element: <Employees />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/employees/:employeeId', name: 'Employee', element: <EmployeeDetail />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/employee-overview', name: 'Employee monthly overview', element: <EmployeeOverview />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/my-overview', name: 'My dashboard', element: <MyDashboard />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/my-profile', name: 'My Profile & Documents', element: <MyEmployeeProfile />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/my-attendance', name: 'My Attendance', element: <MyAttendance />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/my-id-card', name: 'My ID Card', element: <MyIdCard />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/my-payslips', name: 'My Salary Slips', element: <MyPayslips />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/upcoming-holidays', name: 'Upcoming Holidays', element: <UpcomingHolidays />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/settings/departments', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/settings/designations', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/attendance', name: 'Attendance', element: <Attendance />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/attendance/reports', name: 'Attendance reports', element: <Navigate to="/hr/attendance" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/settings/holidays', name: 'Holidays', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/leave', name: 'Leave', element: <Leave />, roles: [...hrAccessRoles, 'employee'], allowModuleRoleBypass: true },
+  { path: '/hr/leave/approvals', name: 'Leave approvals', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/leave/calendar', name: 'Leave calendar', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/settings/leave-types', name: 'Leave types', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/payroll', name: 'Payroll', element: <Payroll />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/payroll/:runId', name: 'Payroll run', element: <PayrollDetail />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/payroll/salaries', name: 'Salary structures', element: <Navigate to="/hr/payroll" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/payroll/advances', name: 'Advances', element: <Advances />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/advances', name: 'Salary advance', element: <MyAdvances />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/payroll/settlements', name: 'Settlements', element: <Settlements />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'], allowModuleRoleBypass: true },
+  { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/reports', name: 'HR reports', element: <Navigate to="/hr" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: allRoles, allowModuleRoleBypass: true },
+  { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: allRoles, moduleAccess: 'manage', allowModuleRoleBypass: true },
+  { path: '/clients/:clientId', name: 'Client', element: <ClientOverview />, roles: allRoles, allowModuleRoleBypass: true },
+  { path: '/invoices/create', name: 'Create Invoice', element: <CreateInvoice />, roles: allRoles, moduleAccess: 'manage', allowModuleRoleBypass: true },
+  { path: '/challans', name: 'Delivery Challans', element: <Challans />, roles: allRoles, allowModuleRoleBypass: true },
+  { path: '/challans/create', name: 'Create Delivery Challan', element: <CreateChallan />, roles: allRoles, moduleAccess: 'manage', allowModuleRoleBypass: true },
+  { path: '/challans/:challanId/edit', name: 'Update Delivery Challan', element: <CreateChallan />, roles: allRoles, moduleAccess: 'manage', allowModuleRoleBypass: true },
+  { path: '/challans/:challanId', name: 'Delivery Challan', element: <ChallanDetail />, roles: allRoles, allowModuleRoleBypass: true },
   {
     path: '/leads',
-    name: 'Leads',
-    element: <Leads />,
+    name: 'My Leads',
+    element: <Navigate to="/leads/mine" replace />,
     roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/all-leads',
-    name: 'All Leads',
-    element: <Navigate to="/leads" replace />,
-    roles: adminRoles,
+    name: 'My Leads',
+    element: <Navigate to="/leads/mine" replace />,
+    roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/mine',
     name: 'My Leads',
     element: <MyLeads />,
     roles: ['sales'],
+    allowModuleRoleBypass: true,
+  },
+  {
+    path: '/leads/my-architects',
+    name: 'My Architects',
+    element: <MyArchitects />,
+    roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/create',
     name: 'Create Lead',
     element: <CreateLead />,
     roles: ['superadmin', 'admin', 'sales'],
+    moduleAccess: 'manage',
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/pending',
-    name: 'Pending Lead Assignment',
-    element: <PendingLeads />,
-    roles: ['superadmin', 'admin'],
+    name: 'My Leads',
+    element: <Navigate to="/leads/mine" replace />,
+    roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/architect',
-    name: 'Architect Leads',
-    element: <ArchitectLeads />,
-    roles: ['superadmin', 'admin'],
+    name: 'My Leads',
+    element: <Navigate to="/leads/mine" replace />,
+    roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/scheduled',
-    name: 'Meeting Scheduled',
+    name: 'My Scheduled Meetings',
     element: <ScheduledLeads />,
     roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/closed',
-    name: 'Closed Leads',
+    name: 'My Closed Leads',
     element: <ClosedLeads />,
     roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/leads/:leadId',
     name: 'Lead Detail',
     element: <LeadDetail />,
     roles: leadRoles,
+    allowModuleRoleBypass: true,
   },
   {
     path: '/upcoming/hr-management',
@@ -401,24 +425,25 @@ const generalRoutes: RoutesProps[] = [
 
 const appsRoutes: RoutesProps[] = [
   { name: 'Inventory Management', path: '/inventory', element: <Inventory /> },
-  { name: 'Add Material', path: '/inventory/add', element: <AddInventoryItem /> },
-  { name: 'Update Material', path: '/inventory/:itemId/edit', element: <AddInventoryItem /> },
+  { name: 'Add Material', path: '/inventory/add', element: <AddInventoryItem />, moduleAccess: 'manage' },
+  { name: 'Update Material', path: '/inventory/:itemId/edit', element: <AddInventoryItem />, moduleAccess: 'manage' },
   { name: 'Material Details', path: '/inventory/:itemId', element: <InventoryMaterialDetail /> },
   { name: 'Purchase History', path: '/inventory/purchases', element: <InventoryPurchases /> },
   { name: 'Suppliers', path: '/inventory/suppliers', element: <InventorySuppliers /> },
   { name: 'Return Management', path: '/returns', element: <Returns /> },
-  { name: 'Record Return', path: '/returns/create', element: <CreateReturn /> },
-  { name: 'Create Return Transfer', path: '/returns/transfers/create', element: <CreateReturnTransfer /> },
+  { name: 'Record Return', path: '/returns/create', element: <CreateReturn />, moduleAccess: 'manage' },
+  { name: 'Create Return Transfer', path: '/returns/transfers/create', element: <CreateReturnTransfer />, moduleAccess: 'manage' },
   { name: 'Laser Cut Management', path: '/laser-cut-management', element: <LaserCutManagement /> },
   { name: 'Laser Cut Current Orders', path: '/laser-cut-management/orders', element: <LaserCutCurrentOrders /> },
   { name: 'Laser Cut Order Details', path: '/laser-cut-management/orders/:orderId', element: <LaserCutOrderDetail /> },
-  { name: 'Send to Laser Cut', path: '/laser-cut-management/challans/create', element: <CreateLaserCutChallan /> },
-  { name: 'Move Laser Cut Products Out', path: '/laser-cut-management/move-out', element: <LaserCutMoveOut /> },
+  { name: 'Send to Laser Cut', path: '/laser-cut-management/challans/create', element: <CreateLaserCutChallan />, moduleAccess: 'manage' },
+  { name: 'Move Laser Cut Products Out', path: '/laser-cut-management/move-out', element: <LaserCutMoveOut />, moduleAccess: 'manage' },
   { name: 'Laser Cut Vendors', path: '/laser-cut-management/vendors', element: <LaserCutVendors /> },
-  { name: 'Powder Coating Management', path: '/powder-coating-management', element: <PowderCoatingManagement /> },
+  { name: 'Powder Coating', path: '/powder-coating-management', element: <PowderCoatingManagement /> },
   { name: 'Powder Coating Orders', path: '/powder-coating-management/orders', element: <PowderCoatingOrders /> },
-  { name: 'Send Powder Coating Order to Site', path: '/powder-coating-management/orders/:orderId/dispatch', element: <PowderCoatingOrderDispatch /> },
-  { name: 'Create Powder Coating Order', path: '/powder-coating-management/challans/create', element: <CreatePowderCoatingOrder /> },
+  { name: 'Powder Coating Order', path: '/powder-coating-management/orders/:orderId', element: <PowderCoatingOrderDetail /> },
+  { name: 'Send Powder Coating Order to Site', path: '/powder-coating-management/orders/:orderId/dispatch', element: <PowderCoatingOrderDispatch />, moduleAccess: 'manage' },
+  { name: 'Create Powder Coating Order', path: '/powder-coating-management/challans/create', element: <CreatePowderCoatingOrder />, moduleAccess: 'manage' },
   { name: 'Powder Coating Vendors', path: '/powder-coating-management/vendors', element: <PowderCoatingVendors /> },
   {
     name: 'Products',
@@ -490,55 +515,34 @@ const appsRoutes: RoutesProps[] = [
     name: 'Create Task',
     path: '/tasks/create',
     element: <CreateTask />,
-    roles: teamRoles,
-  },
-  {
-    name: 'All Tasks',
-    path: '/tasks/all',
-    element: <Todo />,
-    roles: adminRoles,
+    moduleAccess: 'manage',
   },
   {
     name: 'Tasks Assigned By Me',
     path: '/tasks/assigned-by-me',
     element: <Todo />,
-    roles: teamRoles,
   },
   {
     name: 'Tasks Assigned To Me',
     path: '/tasks/assigned-to-me',
     element: <Todo />,
-    roles: teamRoles,
-  },
-  {
-    name: 'Pending Tasks',
-    path: '/tasks/pending',
-    element: <Todo />,
-    roles: ['superadmin', 'admin'],
-  },
-  {
-    name: 'Exceeded Deadline Tasks',
-    path: '/tasks/exceeded-deadline',
-    element: <Todo />,
-    roles: ['superadmin', 'admin'],
-  },
-  {
-    name: 'Work Types',
-    path: '/tasks/work-types',
-    element: <WorkTypes />,
-    roles: ['superadmin', 'admin'],
+    roles: [...teamRoles, 'employee'],
+    allowModuleRoleBypass: true,
   },
   {
     name: 'Task Detail',
     path: '/tasks/:taskId',
     element: <TaskDetail />,
-    roles: [...adminRoles, ...teamRoles],
+    roles: [...teamRoles, 'employee'],
+    allowModuleRoleBypass: true,
   },
   {
     name: 'Update Task',
     path: '/tasks/:taskId/edit',
     element: <UpdateTask />,
-    roles: [...adminRoles, ...teamRoles],
+    roles: [...teamRoles, 'employee'],
+    moduleAccess: 'manage',
+    allowModuleRoleBypass: true,
   },
   {
     name: 'Integration',
@@ -556,19 +560,19 @@ const appsRoutes: RoutesProps[] = [
     name: 'Todo',
     path: '/apps/todo',
     element: <Todo />,
-    roles: allRoles,
   },
   {
     name: 'Notifications',
     path: '/notifications',
     element: <NotificationsPage />,
-    roles: [...adminRoles, ...teamRoles],
   },
   {
     name: 'Create Lead',
     path: '/leads/sales-create',
     element: <SalesCreateLead />,
     roles: ['sales'],
+    moduleAccess: 'manage',
+    allowModuleRoleBypass: true,
   },
   {
     name: 'Social',
@@ -587,12 +591,14 @@ const appsRoutes: RoutesProps[] = [
     path: '/invoices',
     element: <Invoices />,
     roles: allRoles,
+    allowModuleRoleBypass: true,
   },
   {
     name: 'Invoices Details',
     path: '/invoices/:invoiceId',
     element: <InvoiceDetails />,
     roles: allRoles,
+    allowModuleRoleBypass: true,
   },
 ]
 

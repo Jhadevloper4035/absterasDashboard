@@ -5,7 +5,7 @@ import { authenticate, authorizeAppModule } from '../auth/middleware/auth.middle
 
 export const architectRouter = Router();
 
-architectRouter.use(asyncHandler(authenticate), authorizeAppModule('leads', 'manage'));
+architectRouter.use(asyncHandler(authenticate), authorizeAppModule('leads', 'view'));
 architectRouter.get('/', asyncHandler(listArchitects));
 architectRouter.post('/', asyncHandler(createArchitect));
 architectRouter.delete('/:id', asyncHandler(deleteArchitect));

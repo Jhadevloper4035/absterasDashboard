@@ -3,6 +3,7 @@ import Spinner from '@/components/Spinner'
 import ReactTable from '@/components/Table'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { useAuthStore } from '@/store/authStore'
 import type { LeadType } from '@/types/lead'
 import type { UserType } from '@/types/auth'
@@ -20,13 +21,16 @@ type LeadsPageProps = {
   architectOnly?: boolean
   title?: string
   apiPath?: string
+  description?: string
+  emptyMessage?: string
 }
 
 type PageMeta = { page: number; limit: number; total: number; totalPages: number }
 
-const isArchitectLead = (lead: LeadType) => [lead.name, lead.source, lead.sourceType, lead.productInterest, lead.company].some((value) => value?.toLowerCase().includes('architect'))
+const isArchitectLead = (lead: LeadType) =>
+  [lead.name, lead.source, lead.sourceType, lead.productInterest, lead.company].some((value) => value?.toLowerCase().includes('architect'))
 
-const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }: LeadsPageProps) => {
+const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50', description, emptyMessage = 'No leads found' }: LeadsPageProps) => {
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const [leads, setLeads] = useState<LeadType[]>([])
@@ -40,11 +44,13 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   const [deleteTarget, setDeleteTarget] = useState<LeadType>()
   const [meeting, setMeeting] = useState({ owner: '', startsAt: '', title: '', notes: '' })
   const [deleting, setDeleting] = useState(false)
-  const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
-  const canAssign = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
-  const canDelete = roles.includes('superadmin') || roles.includes('admin')
+  const canAssign = canManageModule(user, 'leads')
+  const canDelete = canManageModule(user, 'leads')
 
-  const salespeople = useMemo(() => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'), [users])
+  const salespeople = useMemo(
+    () => users.filter((item) => (item.role === 'sales' || item.additionalRoles?.includes('sales')) && item.status === 'active'),
+    [users],
+  )
   const visibleLeads = useMemo(() => (architectOnly ? leads.filter(isArchitectLead) : leads), [architectOnly, leads])
   const assignLead = async (leadId: string, owner: string) => {
     if (!token || !owner) return
@@ -267,10 +273,21 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
   return (
     <>
       <PageMetaData title={title || (architectOnly ? 'Architect Leads' : 'Leads')} />
+      {description && (
+        <Alert variant="primary" className="d-flex align-items-start gap-2">
+          <Badge bg="primary" className="rounded-circle p-2">
+            i
+          </Badge>
+          <div>
+            <strong>{title}</strong>
+            <div className="mt-1">{description}</div>
+          </div>
+        </Alert>
+      )}
       <Card>
         <CardBody>
           <div className="d-flex align-items-center justify-content-between mb-3">
-            <h4 className="card-title mb-0">{title || (architectOnly ? 'Architect Leads' : 'All Leads')}</h4>
+            <h4 className="card-title mb-0">{title || (architectOnly ? 'Architect Leads' : 'My Leads')}</h4>
             <Badge bg="light" text="dark">
               {loading ? 'Loading' : `${meta.total} leads`}
             </Badge>
@@ -278,13 +295,25 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
           {error && <Alert variant="danger">{error}</Alert>}
           <Row className="g-2 mb-3">
             <Col md={4}>
-              <Form.Control placeholder="Filter by name" value={filters.name} onChange={(event) => setFilters({ ...filters, name: event.target.value })} />
+              <Form.Control
+                placeholder="Filter by name"
+                value={filters.name}
+                onChange={(event) => setFilters({ ...filters, name: event.target.value })}
+              />
             </Col>
             <Col md={4}>
-              <Form.Control placeholder="Filter by mobile number" value={filters.phone} onChange={(event) => setFilters({ ...filters, phone: event.target.value })} />
+              <Form.Control
+                placeholder="Filter by mobile number"
+                value={filters.phone}
+                onChange={(event) => setFilters({ ...filters, phone: event.target.value })}
+              />
             </Col>
             <Col md={4}>
-              <Form.Control placeholder="Filter by email" value={filters.email} onChange={(event) => setFilters({ ...filters, email: event.target.value })} />
+              <Form.Control
+                placeholder="Filter by email"
+                value={filters.email}
+                onChange={(event) => setFilters({ ...filters, email: event.target.value })}
+              />
             </Col>
             <Col md={3}>
               <Form.Select value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })}>
@@ -298,10 +327,20 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
               </Form.Select>
             </Col>
             <Col md={3}>
-              <Form.Control type="date" aria-label="Lead from date" value={filters.createdFrom} onChange={(event) => setFilters({ ...filters, createdFrom: event.target.value })} />
+              <Form.Control
+                type="date"
+                aria-label="Lead from date"
+                value={filters.createdFrom}
+                onChange={(event) => setFilters({ ...filters, createdFrom: event.target.value })}
+              />
             </Col>
             <Col md={3}>
-              <Form.Control type="date" aria-label="Lead to date" value={filters.createdTo} onChange={(event) => setFilters({ ...filters, createdTo: event.target.value })} />
+              <Form.Control
+                type="date"
+                aria-label="Lead to date"
+                value={filters.createdTo}
+                onChange={(event) => setFilters({ ...filters, createdTo: event.target.value })}
+              />
             </Col>
             <Col md={3}>
               <Form.Select value={filters.meeting} onChange={(event) => setFilters({ ...filters, meeting: event.target.value })}>
@@ -311,24 +350,38 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
               </Form.Select>
             </Col>
           </Row>
-          {!visibleLeads.length && !loading ? <Alert variant="info">No leads found</Alert> : null}
+          {!visibleLeads.length && !loading ? <Alert variant="info">{emptyMessage}</Alert> : null}
           {loading && !visibleLeads.length ? (
             <div className="text-center py-5">
               <Spinner className="spinner-border-sm me-2" tag="span" />
               <span className="text-muted">Loading leads...</span>
             </div>
           ) : (
-            <ReactTable<LeadType> columns={columns} data={visibleLeads} pageSize={25} tableClass="text-nowrap mb-0" theadClass="bg-light bg-opacity-50" />
+            <ReactTable<LeadType>
+              columns={columns}
+              data={visibleLeads}
+              pageSize={25}
+              tableClass="text-nowrap mb-0"
+              theadClass="bg-light bg-opacity-50"
+            />
           )}
           <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
             <span className="text-muted fs-13">
               Showing page {meta.page} of {meta.totalPages}
             </span>
             <div className="d-flex gap-2">
-              <Button size="sm" variant="outline-secondary" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(value - 1, 1))}>
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                disabled={loading || page <= 1}
+                onClick={() => setPage((value) => Math.max(value - 1, 1))}>
                 Previous
               </Button>
-              <Button size="sm" variant="outline-secondary" disabled={loading || page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                disabled={loading || page >= meta.totalPages}
+                onClick={() => setPage((value) => value + 1)}>
                 Next
               </Button>
             </div>
@@ -359,16 +412,27 @@ const LeadsPage = ({ architectOnly = false, title, apiPath = '/leads?limit=50' }
               </Form.Group>
             )}
             <Form.Group className="mb-3">
-                <Form.Label>Meeting title</Form.Label>
+              <Form.Label>Meeting title</Form.Label>
               <Form.Control value={meeting.title} onChange={(event) => setMeeting({ ...meeting, title: event.target.value })} />
             </Form.Group>
             <Form.Group className="mb-3">
-                <Form.Label>Date and time</Form.Label>
-              <Form.Control type="datetime-local" required value={meeting.startsAt} onChange={(event) => setMeeting({ ...meeting, startsAt: event.target.value })} />
+              <Form.Label>Date and time</Form.Label>
+              <Form.Control
+                type="datetime-local"
+                required
+                value={meeting.startsAt}
+                onChange={(event) => setMeeting({ ...meeting, startsAt: event.target.value })}
+              />
             </Form.Group>
             <Form.Group>
               <Form.Label>Notes</Form.Label>
-              <Form.Control as="textarea" rows={3} placeholder="Add agenda, location, or next-step notes" value={meeting.notes} onChange={(event) => setMeeting({ ...meeting, notes: event.target.value })} />
+              <Form.Control
+                as="textarea"
+                rows={3}
+                placeholder="Add agenda, location, or next-step notes"
+                value={meeting.notes}
+                onChange={(event) => setMeeting({ ...meeting, notes: event.target.value })}
+              />
             </Form.Group>
           </Modal.Body>
           <Modal.Footer>

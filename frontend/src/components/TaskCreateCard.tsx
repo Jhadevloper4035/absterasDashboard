@@ -8,6 +8,7 @@ import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import Spinner from '@/components/Spinner'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { defaultTaskWorkTypes, mergeTaskWorkTypes } from '@/helpers/taskWorkTypes'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
@@ -67,10 +68,14 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   const [uploadFailed, setUploadFailed] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const canAssign = user?.modulePermissions?.some((permission) => permission.module === 'tasks' && permission.access === 'manage') || ['superadmin', 'admin'].includes(user?.role || '')
+  const canAssign = canManageModule(user, 'tasks')
   const canManageAssignee = canAssign && (!taskId || taskCreatorId === String(user?._id || ''))
+  const canChangePriority = !taskId || taskCreatorId === String(user?._id || '')
+  const canEditTask = !taskId || taskCreatorId === String(user?._id || '')
   const uploading = pendingUploads > 0
-  const workTypes = [...new Set([...(workTypesByRole.general || ['General']), form.projectEpic].filter(Boolean))]
+  const selectedAssignee = users.find((person) => person._id === form.assignee)
+  const selectedDepartment = selectedAssignee?.department
+  const workTypes = [...new Set([...(selectedDepartment ? workTypesByRole[selectedDepartment._id] || workTypesByRole.general : workTypesByRole.general || ['General']), form.projectEpic].filter(Boolean))]
 
   const updatePendingUploads = (change: number) => {
     pendingUploadsRef.current = Math.max(0, pendingUploadsRef.current + change)
@@ -149,11 +154,11 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
     setError('')
     setMessage('')
     try {
-      const { assignee, ...taskFields } = form
+      const { assignee, priority, ...taskFields } = form
       const response = await apiFetch<{ data: Task }>(taskId ? `/tasks/${taskId}` : '/tasks', {
         method: taskId ? 'PATCH' : 'POST',
         token,
-        body: JSON.stringify(canManageAssignee ? { ...taskFields, assignee } : taskFields),
+        body: JSON.stringify({ ...taskFields, ...(canManageAssignee ? { assignee } : {}), ...(canChangePriority ? { priority } : {}) }),
       })
       toast.success(taskId ? 'Task updated successfully' : 'Task assigned successfully')
       if (taskId) {
@@ -171,9 +176,9 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
     }
   }
 
-  const assigneeOptions: AssigneeOption[] = users.map((user) => ({
+  const assigneeOptions: AssigneeOption[] = users.filter((person) => person._id !== user?._id).map((user) => ({
     value: user._id,
-    label: `${user.name} (${user.email}) - ${user.role}`,
+        label: `${user.name} (${user.email}) - ${user.department?.name || (user.workProfile === 'director' ? 'Director' : 'No department')}`,
   }))
 
   return (
@@ -192,6 +197,8 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
           </div>
         ) : taskId && form.status === 'Done' ? (
           <Alert variant="secondary" className="mb-0">This task is closed and cannot be edited.</Alert>
+        ) : taskId && !canEditTask ? (
+          <Alert variant="secondary" className="mb-0">Only the task creator can update this task. You can add notes or mark it Done from the task detail page.</Alert>
         ) : (
           <Form onSubmit={saveTask}>
             <Row className="g-3 align-items-start">
@@ -212,7 +219,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                     options={assigneeOptions}
                     value={assigneeOptions.find((option) => option.value === form.assignee) ?? null}
                     onChange={(option) => setForm({ ...form, assignee: option?.value ?? '', projectEpic: '' })}
-                    placeholder="Search by name, email, or role"
+                    placeholder="Search by name, email, or department"
                     isClearable
                     isSearchable
                   />
@@ -247,23 +254,21 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
               <Form.Group as={Col} lg={4} md={6}>
                 <Form.Label className="fs-14 mb-1">Status</Form.Label>
                 <Form.Select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-                  <option>Backlog</option>
                   <option>To Do</option>
                   <option>In Progress</option>
                   <option>Review</option>
-                  <option>Testing</option>
-                  <option>Blocked</option>
                   <option>Done</option>
                 </Form.Select>
               </Form.Group>
               <Form.Group as={Col} lg={4} md={6}>
                 <Form.Label className="fs-14 mb-1">Priority</Form.Label>
-                <Form.Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
+                <Form.Select disabled={!canChangePriority} value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
                   <option>Critical</option>
                   <option>High</option>
                   <option>Medium</option>
                   <option>Low</option>
                 </Form.Select>
+                {!canChangePriority && <Form.Text className="text-muted">Only the task creator can change priority.</Form.Text>}
               </Form.Group>
 
               <Form.Group as={Col} lg={4}>
@@ -274,6 +279,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                     <option key={workType}>{workType}</option>
                   ))}
                 </Form.Select>
+                {selectedAssignee && <Form.Text className="text-muted">{selectedDepartment ? `Work types for ${selectedDepartment.name}` : 'Shared work types'}</Form.Text>}
               </Form.Group>
 
               <Form.Group as={Col} xs={12}>
@@ -326,9 +332,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                 <Button type="submit" disabled={saving || uploading}>
                   {uploading ? 'Uploading...' : saving ? 'Saving...' : taskId ? 'Update Task' : 'Create Task'}
                 </Button>
-                <Link to="/tasks/all" className="btn btn-light">
-                Cancel
-              </Link>
+                <Link to="/dashboard/analytics" className="btn btn-light">Cancel</Link>
               </Col>
             </Row>
           </Form>

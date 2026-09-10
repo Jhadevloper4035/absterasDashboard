@@ -7,7 +7,7 @@ import { RateLimit } from '../src/models/rate-limit.model.js';
 import { User } from '../src/models/user.model.js';
 import { env } from '../src/config/env.js';
 import { cleanIpAddress } from '../src/helpers/request-ip.js';
-import { allowFirstSuperadminOrUserManager, authorizeAppModule, authorizeHrModule, authorizeRoles } from '../src/modules/auth/middleware/auth.middleware.js';
+import { allowFirstSuperadminOrUserManager, appAccessLevel, authorizeAppModule, authorizeHrModule, authorizeRoles, userRoles } from '../src/modules/auth/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
 import { login, logout } from '../src/modules/auth/controllers/auth.controller.js';
 import { clearFailedLoginAttempts, recordFailedLoginAttempt, setLoginAttemptStoreForTest } from '../src/modules/auth/services/login-attempt.service.js';
@@ -84,14 +84,44 @@ test('role authorization accepts an assigned additional business role', () => {
   assert.equal(nextError, undefined);
 });
 
-test('HR and employee access types grant only their intended HR scope', async () => {
-  const employeeRequest = { method: 'GET', user: { accessTypes: ['employee'], modulePermissions: [{ module: 'hr', access: 'view' }] } };
-  await authorizeHrModule('expenses', 'view')(employeeRequest, {}, (error) => assert.equal(error, undefined));
-  assert.equal(employeeRequest.hrAccess, 'view');
+test('Superadmin work profile has full module access', () => {
+  const user = { workProfile: 'superadmin' };
+  assert.ok(userRoles(user).includes('superadmin'));
+  assert.equal(appAccessLevel(user, 'inventory'), 2);
 
-  const hrRequest = { method: 'GET', user: { accessTypes: ['hr-management'], modulePermissions: [{ module: 'hr', access: 'manage' }] } };
-  await authorizeHrModule('payroll', 'manage')(hrRequest, {}, (error) => assert.equal(error, undefined));
-  assert.equal(hrRequest.hrAccess, 'manage');
+  let nextError;
+  authorizeRoles('superadmin')({ user }, {}, (error) => { nextError = error; });
+  assert.equal(nextError, undefined);
+});
+
+test('module permissions determine app access for non-privileged profiles', () => {
+  assert.equal(appAccessLevel({ workProfile: 'admin' }, 'inventory'), 2);
+  assert.equal(appAccessLevel({ workProfile: 'client', modulePermissions: [{ module: 'leads', access: 'view' }] }, 'leads'), 1);
+  assert.equal(appAccessLevel({ workProfile: 'employee', modulePermissions: [{ module: 'inventory', access: 'view' }] }, 'inventory'), 1);
+  assert.equal(appAccessLevel({ workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] }, 'hr'), 2);
+});
+
+test('HR module management applies regardless of account profile', async () => {
+  const employeeRequest = { method: 'GET', user: { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] } };
+  await authorizeHrModule('expenses', 'manage')(employeeRequest, {}, (error) => assert.equal(error, undefined));
+  assert.equal(employeeRequest.hrAccess, 'manage');
+
+  const clientRequest = { method: 'GET', user: { workProfile: 'client', modulePermissions: [{ module: 'hr', access: 'manage' }] } };
+  await authorizeHrModule('payroll', 'manage')(clientRequest, {}, (error) => assert.equal(error, undefined));
+  assert.equal(clientRequest.hrAccess, 'manage');
+});
+
+test('explicit HR permission grants app and payroll management access', async () => {
+  const user = { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] };
+  assert.equal(appAccessLevel(user, 'hr'), 2);
+
+  let appError;
+  authorizeAppModule('hr')({ user }, {}, (error) => { appError = error; });
+  assert.equal(appError, undefined);
+
+  const request = { method: 'GET', user };
+  await authorizeHrModule('payroll', 'manage')(request, {}, (error) => assert.equal(error, undefined));
+  assert.equal(request.hrAccess, 'manage');
 });
 
 test('application access defaults to deny and distinguishes view from manage', () => {
@@ -108,10 +138,34 @@ test('application access defaults to deny and distinguishes view from manage', (
   assert.equal(mutationDenied.statusCode, 403);
 });
 
-test('directors cannot access HR', () => {
+test('notifications require an explicit module permission', () => {
   let denied;
-  authorizeAppModule('hr')({ user: { role: 'admin', workProfile: 'director' } }, {}, (error) => { denied = error; });
+  authorizeAppModule('notifications')({ user: { role: 'sales' } }, {}, (error) => { denied = error; });
   assert.equal(denied.statusCode, 403);
+
+  let allowed;
+  authorizeAppModule('notifications')({ user: { role: 'sales', modulePermissions: [{ module: 'notifications', access: 'view' }] } }, {}, (error) => { allowed = error; });
+  assert.equal(allowed, undefined);
+});
+
+test('employee profiles require assigned HR access', () => {
+  let denied;
+  const user = { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'none' }] };
+  authorizeAppModule('hr')({ method: 'GET', user }, {}, (error) => { denied = error; });
+  assert.equal(denied.statusCode, 403);
+  assert.equal(appAccessLevel(user, 'hr'), 0);
+});
+
+test('director HR access follows the assigned module permission', async () => {
+  let error;
+  const user = { workProfile: 'director', modulePermissions: [{ module: 'hr', access: 'manage' }] };
+  authorizeAppModule('hr')({ user }, {}, (nextError) => { error = nextError; });
+  assert.equal(error, undefined);
+
+  const request = { method: 'GET', user };
+  await authorizeHrModule('payroll', 'manage')(request, {}, (nextError) => { error = nextError; });
+  assert.equal(error, undefined);
+  assert.equal(request.hrAccess, 'manage');
 });
 
 test('production setup requires a one-time setup token', async () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { decideAttendanceCorrection, requestAttendanceCorrection } from '../src/modules/hr/controllers/attendance.controller.js';
+import { decideAttendanceCorrection, markAttendance, requestAttendanceCorrection } from '../src/modules/hr/controllers/attendance.controller.js';
 import { Attendance } from '../src/modules/hr/models/attendance.model.js';
 import { Employee } from '../src/modules/hr/models/employee.model.js';
 import { Holiday } from '../src/modules/hr/models/holiday.model.js';
@@ -22,6 +22,17 @@ afterEach(() => {
   Attendance.findOne = originalAttendanceFindOne;
   Attendance.create = originalAttendanceCreate;
   Holiday.exists = originalHolidayExists;
+});
+
+test('HR cannot mark attendance for a future date', async () => {
+  const future = new Date();
+  future.setUTCDate(future.getUTCDate() + 1);
+  const result = response();
+
+  await markAttendance({ body: { date: future.toISOString().slice(0, 10), records: [{ employee: 'employee-1', status: 'present' }] } }, result);
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.body.error.message, 'Attendance cannot be marked for a future date');
 });
 
 test('employees can request a correction for a missing working-day record', async () => {

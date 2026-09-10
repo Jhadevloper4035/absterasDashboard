@@ -119,6 +119,7 @@ const ChallanFormPage = () => {
         transportType,
         vehicleNumber,
         eWayBillNumber,
+        hardwareOnly,
         ...(challanId ? {} : { lineItems: lines.map((line) => ({
           ...line,
           quantity: Number(line.quantity),

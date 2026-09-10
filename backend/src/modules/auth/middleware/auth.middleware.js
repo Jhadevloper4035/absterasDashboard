@@ -14,7 +14,8 @@ function authError(statusCode, message) {
 }
 
 export function userRoles(user) {
-  return [...new Set([user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].filter(Boolean))];
+  const profileRole = ['superadmin', 'admin', 'employee'].includes(user?.workProfile) ? user.workProfile : null;
+  return [...new Set([user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || []), profileRole].filter(Boolean))];
 }
 
 export async function authenticate(req, res, next) {
@@ -47,8 +48,7 @@ export function authorizeRoles(...roles) {
 }
 
 export const appAccessLevel = (user, module) => {
-  if (userRoles(user).some((role) => ['superadmin', 'admin'].includes(role))) return 2;
-  if (['todo', 'notifications'].includes(module)) return 2;
+  if (userRoles(user).some((role) => role === 'superadmin' || role === 'admin')) return 2;
   const access = (user.modulePermissions || []).find((permission) => permission.module === module)?.access || 'none';
   return { none: 0, view: 1, manage: 2 }[access] || 0;
 };
@@ -59,7 +59,6 @@ export function authorizeAppModule(module, minAccess = 'view') {
 
   return (req, res, next) => {
     if (!req.user) return next(authError(401, 'Authentication required'));
-    if (module === 'hr' && req.user.workProfile === 'director') return next(authError(403, 'Forbidden'));
     if (appAccessLevel(req.user, module) < required) return next(authError(403, 'Forbidden'));
     return next();
   };
@@ -72,7 +71,7 @@ export function authorizeHrModule(module, minAccess = 'view') {
     if (!req.user) return next(authError(401, 'Authentication required'));
     if (appAccessLevel(req.user, 'hr') < (req.method === 'GET' ? required : 2)) return next(authError(403, 'Forbidden'));
     const accessTypes = userRoles(req.user);
-    if (appAccessLevel(req.user, 'hr') === 2 || accessTypes.some((role) => ['superadmin', 'admin', 'hr-management'].includes(role))) {
+    if (appAccessLevel(req.user, 'hr') === 2) {
       req.hrAccess = 'manage';
       return next();
     }

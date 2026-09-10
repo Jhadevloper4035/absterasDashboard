@@ -2,6 +2,7 @@ import PageMetaData from '@/components/PageTitle'
 import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { UploadFileType } from '@/types/component-props'
@@ -15,7 +16,12 @@ type FormMode = 'lead' | 'architect'
 type CreateMode = 'single' | 'csv'
 
 const sourceTypes = ['manual', 'csv', 'api', 'webhook', 'integration'] as const
-const documentTypes = [{ value: 'site_images', label: 'Site images' }, { value: 'psf', label: 'PSF' }, { value: 'boq', label: 'BOQ' }, { value: 'estimation', label: 'Estimation' }] as const
+const documentTypes = [
+  { value: 'site_images', label: 'Site images' },
+  { value: 'psf', label: 'PSF' },
+  { value: 'boq', label: 'BOQ' },
+  { value: 'estimation', label: 'Estimation' },
+] as const
 type LeadDocument = LeadAttachment & { type: (typeof documentTypes)[number]['value'] }
 
 const emptyLeadForm = {
@@ -162,13 +168,14 @@ const CreateLeadPage = () => {
   const [documentType, setDocumentType] = useState<LeadDocument['type']>('site_images')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const roles = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])]
-  const canCreate = roles.includes('superadmin') || roles.includes('admin') || roles.includes('sales')
+  const canCreate = canManageModule(user, 'leads')
   const isArchitect = mode === 'architect'
 
   useEffect(() => {
     if (!token || !canCreate) return
-    apiFetch<{ data: UserType[] }>('/leads/assignees', { token }).then((response) => setSalespeople(response.data)).catch((e) => setError(e instanceof Error ? e.message : 'Unable to load salespeople'))
+    apiFetch<{ data: UserType[] }>('/leads/assignees', { token })
+      .then((response) => setSalespeople(response.data))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Unable to load salespeople'))
   }, [canCreate, token])
 
   const createRecord = async (event: FormEvent) => {
@@ -205,7 +212,9 @@ const CreateLeadPage = () => {
     setMessage('')
 
     try {
-      const rows = parseCsv(await csvFile.text()).map((row) => (isArchitect ? architectFromCsv(row) : leadFromCsv(row))).filter((row) => row.name && row.phone)
+      const rows = parseCsv(await csvFile.text())
+        .map((row) => (isArchitect ? architectFromCsv(row) : leadFromCsv(row)))
+        .filter((row) => row.name && row.phone)
 
       if (!rows.length) throw new Error('CSV must include at least one row with a name and mobile number')
 
@@ -250,7 +259,7 @@ const CreateLeadPage = () => {
     return (
       <>
         <PageMetaData title="Create Lead" />
-        <Alert variant="warning">Only administrators can create leads.</Alert>
+        <Alert variant="warning">Lead Management access is required to create leads.</Alert>
       </>
     )
   }
@@ -258,32 +267,50 @@ const CreateLeadPage = () => {
   return (
     <>
       <PageMetaData title="Create Lead" />
-      <Card>
-        <CardBody>
-          <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
-            <div>
-              <h4 className="card-title mb-1">Create Lead</h4>
-              <div className="text-muted">Select the lead category, then capture the details needed for qualification and follow-up.</div>
+      <div className="rounded-3 border bg-primary bg-opacity-10 p-3 p-md-4 mb-3">
+        <div className="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+          <div className="d-flex align-items-center gap-3">
+            <div className="avatar-md rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0">
+              <IconifyIcon icon="bx:user-plus" className="fs-24" />
             </div>
-            <ButtonGroup>
-              <Button variant={mode === 'lead' ? 'primary' : 'outline-primary'} onClick={() => setMode('lead')}>
-                Lead
-              </Button>
-              <Button variant={mode === 'architect' ? 'primary' : 'outline-primary'} onClick={() => setMode('architect')}>
-                Architect Lead
-              </Button>
-            </ButtonGroup>
+            <div>
+              <h4 className="mb-1">Create lead</h4>
+              <p className="text-muted mb-0">Capture a new enquiry, then assign it to the right owner.</p>
+            </div>
           </div>
-
-          <div className="d-flex justify-content-center mb-4">
-            <ButtonGroup>
-              <Button variant={createMode === 'single' ? 'secondary' : 'outline-secondary'} onClick={() => setCreateMode('single')}>
-                Single entry
-              </Button>
-              <Button variant={createMode === 'csv' ? 'secondary' : 'outline-secondary'} onClick={() => setCreateMode('csv')}>
-                CSV upload
-              </Button>
-            </ButtonGroup>
+          <div className="text-md-end">
+            <span className="badge bg-white text-primary border">New record</span>
+            <div className="small text-muted mt-2"><span className="text-danger">*</span> Name and mobile number are required</div>
+          </div>
+        </div>
+      </div>
+      <Card className="border-0 shadow-sm">
+        <CardBody className="p-3 p-md-4">
+          <div className="rounded-3 border bg-light p-3 mb-4">
+            <Row className="g-3 align-items-center">
+              <Col md={6}>
+                <Form.Label className="fw-semibold mb-2">1. Contact type</Form.Label>
+                <ButtonGroup aria-label="Contact type" className="w-100">
+                  <Button variant={mode === 'lead' ? 'primary' : 'outline-primary'} onClick={() => setMode('lead')}>
+                    Customer lead
+                  </Button>
+                  <Button variant={mode === 'architect' ? 'primary' : 'outline-primary'} onClick={() => setMode('architect')}>
+                    Architect lead
+                  </Button>
+                </ButtonGroup>
+              </Col>
+              <Col md={6}>
+                <Form.Label className="fw-semibold mb-2">2. Add method</Form.Label>
+                <ButtonGroup aria-label="Entry method" className="w-100">
+                  <Button variant={createMode === 'single' ? 'secondary' : 'outline-secondary'} onClick={() => setCreateMode('single')}>
+                    Single entry
+                  </Button>
+                  <Button variant={createMode === 'csv' ? 'secondary' : 'outline-secondary'} onClick={() => setCreateMode('csv')}>
+                    Import CSV
+                  </Button>
+                </ButtonGroup>
+              </Col>
+            </Row>
           </div>
 
           {error && <Alert variant="danger">{error}</Alert>}
@@ -293,10 +320,17 @@ const CreateLeadPage = () => {
             <Form onSubmit={uploadCsv}>
               <Row className="g-3">
                 <Col xs={12}>
-                  <Form.Label>Upload {isArchitect ? 'architect leads' : 'leads'} CSV file</Form.Label>
+                  <h5 className="mb-1">Import {isArchitect ? 'architect contacts' : 'leads'}</h5>
+                  <p className="text-muted mb-3">Download the sample first, fill in your details, then upload the CSV file.</p>
+                  <Form.Label>CSV file</Form.Label>
                   <Form.Control required type="file" accept=".csv,text/csv" onChange={selectCsv} />
                   <div className="d-flex gap-2 flex-wrap mt-3">
-                    <Button as="a" href={csvDownloadHref(mode)} download={`${isArchitect ? 'architect-leads' : 'leads'}-sample.csv`} variant="outline-secondary" className="text-nowrap">
+                    <Button
+                      as="a"
+                      href={csvDownloadHref(mode)}
+                      download={`${isArchitect ? 'architect-leads' : 'leads'}-sample.csv`}
+                      variant="outline-secondary"
+                      className="text-nowrap">
                       Download sample CSV
                     </Button>
                     <Button type="submit" className="text-nowrap" disabled={saving || !csvFile}>
@@ -310,7 +344,9 @@ const CreateLeadPage = () => {
                     <h5 className="mb-3">CSV import guide</h5>
                     <ul className="ps-3 mb-3">
                       <li>Open Excel, Google Sheets, or another spreadsheet tool.</li>
-                      <li>Use this exact header row: <span className="fw-semibold">{csvHeaders(mode)}</span>.</li>
+                      <li>
+                        Use this exact header row: <span className="fw-semibold">{csvHeaders(mode)}</span>.
+                      </li>
                       <li>Add one {isArchitect ? 'architect lead' : 'lead'} per row below the header.</li>
                       <li>Name and mobile number are mandatory. Rows missing either value are skipped.</li>
                       <li>Email, company, product, city, and notes may stay blank if the details are not available.</li>
@@ -326,125 +362,253 @@ const CreateLeadPage = () => {
               </Row>
             </Form>
           ) : (
-          <Form onSubmit={createRecord}>
-            {isArchitect ? (
-              <Row className="g-3">
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Architect name</Form.Label>
-                  <Form.Control required value={architectForm.name} onChange={(event) => setArchitectForm({ ...architectForm, name: event.target.value })} placeholder="Full name" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Mobile number</Form.Label>
-                  <Form.Control required type="tel" inputMode="tel" value={architectForm.phone} onChange={(event) => setArchitectForm({ ...architectForm, phone: event.target.value })} placeholder="10-digit mobile number" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Email</Form.Label>
-                  <Form.Control type="email" value={architectForm.email} onChange={(event) => setArchitectForm({ ...architectForm, email: event.target.value })} placeholder="Email address" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Firm name</Form.Label>
-                  <Form.Control value={architectForm.company} onChange={(event) => setArchitectForm({ ...architectForm, company: event.target.value })} placeholder="Architecture firm or studio" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>City</Form.Label>
-                  <Form.Control value={architectForm.city} onChange={(event) => setArchitectForm({ ...architectForm, city: event.target.value })} placeholder="City" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Project type</Form.Label>
-                  <Form.Control value={architectForm.specialty} onChange={(event) => setArchitectForm({ ...architectForm, specialty: event.target.value })} placeholder="Residential, commercial, hospitality..." />
-                </Form.Group>
-                <Form.Group as={Col} xs={12}>
-                  <Form.Label>Notes</Form.Label>
-                  <Form.Control as="textarea" rows={3} value={architectForm.notes} onChange={(event) => setArchitectForm({ ...architectForm, notes: event.target.value })} placeholder="Requirement, representative, address, or next step" />
-                </Form.Group>
-              </Row>
-            ) : (
-              <Row className="g-3">
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Customer name</Form.Label>
-                  <Form.Control required value={leadForm.name} onChange={(event) => setLeadForm({ ...leadForm, name: event.target.value })} placeholder="Full name" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Mobile number</Form.Label>
-                  <Form.Control required type="tel" inputMode="tel" value={leadForm.phone} onChange={(event) => setLeadForm({ ...leadForm, phone: event.target.value })} placeholder="10-digit mobile number" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Email</Form.Label>
-                  <Form.Control type="email" value={leadForm.email} onChange={(event) => setLeadForm({ ...leadForm, email: event.target.value })} placeholder="Email address" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Company</Form.Label>
-                  <Form.Control value={leadForm.company} onChange={(event) => setLeadForm({ ...leadForm, company: event.target.value })} placeholder="Company or firm" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Site address</Form.Label>
-                  <Form.Control value={leadForm.siteAddress} onChange={(event) => setLeadForm({ ...leadForm, siteAddress: event.target.value })} placeholder="Project or site address" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Google Map URL</Form.Label>
-                  <Form.Control type="url" value={leadForm.googleMapUrl} onChange={(event) => setLeadForm({ ...leadForm, googleMapUrl: event.target.value })} placeholder="https://maps.google.com/..." />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Product enquiry</Form.Label>
-                  <Form.Control value={leadForm.productInterest} onChange={(event) => setLeadForm({ ...leadForm, productInterest: event.target.value })} placeholder="Product or service required" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Campaign</Form.Label>
-                  <Form.Control value={leadForm.campaign} onChange={(event) => setLeadForm({ ...leadForm, campaign: event.target.value })} placeholder="Campaign or event name" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Territory</Form.Label>
-                  <Form.Control value={leadForm.territory} onChange={(event) => setLeadForm({ ...leadForm, territory: event.target.value })} placeholder="City, region, or territory" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Lead cost</Form.Label>
-                  <Form.Control min="0" step="0.01" type="number" value={leadForm.leadCost} onChange={(event) => setLeadForm({ ...leadForm, leadCost: event.target.value })} placeholder="0.00" />
-                </Form.Group>
-                <Form.Group as={Col} md={6}>
-                  <Form.Label>Assign lead</Form.Label>
-                  <Form.Select value={leadForm.owner} onChange={(event) => setLeadForm({ ...leadForm, owner: event.target.value })}>
-                    <option value="">Unassigned</option>
-                    {user?._id && <option value={user._id}>Assign to me</option>}
-                    {salespeople.filter((person) => person._id !== user?._id).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}
-                  </Form.Select>
-                </Form.Group>
-                <Form.Group as={Col} md={3}>
-                  <Form.Label>Lead source</Form.Label>
-                  <Form.Control required value={leadForm.source} onChange={(event) => setLeadForm({ ...leadForm, source: event.target.value })} placeholder="Expo, website, call..." />
-                </Form.Group>
-                <Form.Group as={Col} md={3}>
-                  <Form.Label>Source type</Form.Label>
-                  <Form.Select value={leadForm.sourceType} onChange={(event) => setLeadForm({ ...leadForm, sourceType: event.target.value })}>
-                    {sourceTypes.map((sourceType) => (
-                      <option key={sourceType} value={sourceType}>
-                        {sourceType}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-                <Col xs={12}>
-                  <Form.Label>Supporting documents <span className="text-muted fw-normal">(optional)</span></Form.Label>
-                  <div className="d-flex gap-2 mb-2" style={{ maxWidth: 260 }}>
-                    <Form.Select aria-label="Document category" value={documentType} onChange={(event) => setDocumentType(event.target.value as LeadDocument['type'])}>
-                      {documentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+            <Form onSubmit={createRecord}>
+              <div className="d-flex align-items-start justify-content-between gap-3 flex-wrap border-bottom pb-3 mb-4">
+                <div>
+                  <h5 className="mb-1">{isArchitect ? 'Architect contact details' : 'Customer and project details'}</h5>
+                  <p className="text-muted mb-0">Start with the contact details. All other information can be added later.</p>
+                </div>
+                <span className="badge bg-light text-dark border">Required fields marked <span className="text-danger">*</span></span>
+              </div>
+              {isArchitect ? (
+                <Row className="g-3">
+                  <Col xs={12}><h6 className="text-uppercase text-muted fs-12 mb-0">Contact details</h6></Col>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Architect name <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      required
+                      value={architectForm.name}
+                      onChange={(event) => setArchitectForm({ ...architectForm, name: event.target.value })}
+                      placeholder="Full name"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Mobile number <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      required
+                      type="tel"
+                      inputMode="tel"
+                      value={architectForm.phone}
+                      onChange={(event) => setArchitectForm({ ...architectForm, phone: event.target.value })}
+                      placeholder="10-digit mobile number"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Email</Form.Label>
+                    <Form.Control
+                      type="email"
+                      value={architectForm.email}
+                      onChange={(event) => setArchitectForm({ ...architectForm, email: event.target.value })}
+                      placeholder="Email address"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Firm name</Form.Label>
+                    <Form.Control
+                      value={architectForm.company}
+                      onChange={(event) => setArchitectForm({ ...architectForm, company: event.target.value })}
+                      placeholder="Architecture firm or studio"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>City</Form.Label>
+                    <Form.Control
+                      value={architectForm.city}
+                      onChange={(event) => setArchitectForm({ ...architectForm, city: event.target.value })}
+                      placeholder="City"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Project type</Form.Label>
+                    <Form.Control
+                      value={architectForm.specialty}
+                      onChange={(event) => setArchitectForm({ ...architectForm, specialty: event.target.value })}
+                      placeholder="Residential, commercial, hospitality..."
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} xs={12}>
+                    <Form.Label>Notes</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={architectForm.notes}
+                      onChange={(event) => setArchitectForm({ ...architectForm, notes: event.target.value })}
+                      placeholder="Requirement, representative, address, or next step"
+                    />
+                  </Form.Group>
+                </Row>
+              ) : (
+                <Row className="g-3">
+                  <Col xs={12}><h6 className="text-uppercase text-muted fs-12 mb-0">Contact details</h6></Col>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Customer name <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      required
+                      value={leadForm.name}
+                      onChange={(event) => setLeadForm({ ...leadForm, name: event.target.value })}
+                      placeholder="Full name"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Mobile number <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      required
+                      type="tel"
+                      inputMode="tel"
+                      value={leadForm.phone}
+                      onChange={(event) => setLeadForm({ ...leadForm, phone: event.target.value })}
+                      placeholder="10-digit mobile number"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Email</Form.Label>
+                    <Form.Control
+                      type="email"
+                      value={leadForm.email}
+                      onChange={(event) => setLeadForm({ ...leadForm, email: event.target.value })}
+                      placeholder="Email address"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Company</Form.Label>
+                    <Form.Control
+                      value={leadForm.company}
+                      onChange={(event) => setLeadForm({ ...leadForm, company: event.target.value })}
+                      placeholder="Company or firm"
+                    />
+                  </Form.Group>
+                  <Col xs={12} className="pt-2"><div className="border-top pt-3"><h6 className="text-uppercase text-muted fs-12 mb-0">Project details</h6></div></Col>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Site address</Form.Label>
+                    <Form.Control
+                      value={leadForm.siteAddress}
+                      onChange={(event) => setLeadForm({ ...leadForm, siteAddress: event.target.value })}
+                      placeholder="Project or site address"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Google Map URL</Form.Label>
+                    <Form.Control
+                      type="url"
+                      value={leadForm.googleMapUrl}
+                      onChange={(event) => setLeadForm({ ...leadForm, googleMapUrl: event.target.value })}
+                      placeholder="https://maps.google.com/..."
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Product enquiry</Form.Label>
+                    <Form.Control
+                      value={leadForm.productInterest}
+                      onChange={(event) => setLeadForm({ ...leadForm, productInterest: event.target.value })}
+                      placeholder="Product or service required"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Campaign</Form.Label>
+                    <Form.Control
+                      value={leadForm.campaign}
+                      onChange={(event) => setLeadForm({ ...leadForm, campaign: event.target.value })}
+                      placeholder="Campaign or event name"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Territory</Form.Label>
+                    <Form.Control
+                      value={leadForm.territory}
+                      onChange={(event) => setLeadForm({ ...leadForm, territory: event.target.value })}
+                      placeholder="City, region, or territory"
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Lead cost</Form.Label>
+                    <Form.Control
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={leadForm.leadCost}
+                      onChange={(event) => setLeadForm({ ...leadForm, leadCost: event.target.value })}
+                      placeholder="0.00"
+                    />
+                  </Form.Group>
+                  <Col xs={12} className="pt-2"><div className="border-top pt-3"><h6 className="text-uppercase text-muted fs-12 mb-0">Assignment and source</h6></div></Col>
+                  <Form.Group as={Col} md={6}>
+                    <Form.Label>Assign lead</Form.Label>
+                    <Form.Select value={leadForm.owner} onChange={(event) => setLeadForm({ ...leadForm, owner: event.target.value })}>
+                      <option value="">Assign to me (default)</option>
+                      {salespeople
+                        .filter((person) => person._id !== user?._id)
+                        .map((person) => (
+                          <option key={person._id} value={person._id}>
+                            {person.name}
+                          </option>
+                        ))}
                     </Form.Select>
-                  </div>
-                  <DropzoneFormInput label="" text="Drop site images or PDF documents here" showPreview={false} helpText="Choose a category first, then upload up to 5 files at a time." onFileUpload={uploadDocuments} />
-                  {!!leadForm.documents.length && <div className="mt-2 small">{leadForm.documents.map((document) => <div key={document.key}>{documentTypes.find((type) => type.value === document.type)?.label}: {document.originalName || document.key}</div>)}</div>}
-                </Col>
-              </Row>
-            )}
+                  </Form.Group>
+                  <Form.Group as={Col} md={3}>
+                    <Form.Label>Lead source <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      required
+                      value={leadForm.source}
+                      onChange={(event) => setLeadForm({ ...leadForm, source: event.target.value })}
+                      placeholder="Expo, website, call..."
+                    />
+                  </Form.Group>
+                  <Form.Group as={Col} md={3}>
+                    <Form.Label>Source type</Form.Label>
+                    <Form.Select value={leadForm.sourceType} onChange={(event) => setLeadForm({ ...leadForm, sourceType: event.target.value })}>
+                      {sourceTypes.map((sourceType) => (
+                        <option key={sourceType} value={sourceType}>
+                          {sourceType}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                  <Col xs={12}>
+                    <Form.Label>
+                      Supporting documents <span className="text-muted fw-normal">(optional)</span>
+                    </Form.Label>
+                    <div className="d-flex gap-2 mb-2" style={{ maxWidth: 260 }}>
+                      <Form.Select
+                        aria-label="Document category"
+                        value={documentType}
+                        onChange={(event) => setDocumentType(event.target.value as LeadDocument['type'])}>
+                        {documentTypes.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <DropzoneFormInput
+                      label=""
+                      text="Drop site images or PDF documents here"
+                      showPreview={false}
+                      helpText="Choose a category first, then upload up to 5 files at a time."
+                      onFileUpload={uploadDocuments}
+                    />
+                    {!!leadForm.documents.length && (
+                      <div className="mt-2 small">
+                        {leadForm.documents.map((document) => (
+                          <div key={document.key}>
+                            {documentTypes.find((type) => type.value === document.type)?.label}: {document.originalName || document.key}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Col>
+                </Row>
+              )}
 
-            <div className="d-flex justify-content-end mt-4">
-              <Button type="button" variant="outline-secondary" className="me-2" onClick={loadDummy}>
-                Use dummy
-              </Button>
-              <Button type="submit" className="px-4" disabled={saving || uploading}>
-                <IconifyIcon icon="bx:plus" className="me-1" />
-                {uploading ? 'Uploading...' : saving ? 'Creating...' : isArchitect ? 'Create Architect Lead' : 'Create Lead'}
-              </Button>
-            </div>
-          </Form>
+              <div className="d-flex justify-content-end mt-4">
+                <Button type="button" variant="outline-secondary" className="me-2" onClick={loadDummy}>
+                  Use dummy
+                </Button>
+                <Button type="submit" className="px-4" disabled={saving || uploading}>
+                  <IconifyIcon icon="bx:plus" className="me-1" />
+                  {uploading ? 'Uploading...' : saving ? 'Creating...' : isArchitect ? 'Create Architect Lead' : 'Create Lead'}
+                </Button>
+              </div>
+            </Form>
           )}
         </CardBody>
       </Card>

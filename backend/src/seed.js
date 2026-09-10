@@ -203,9 +203,9 @@ const demoTasks = [
   ['Review duplicate lead queue', 'Check uncertain phone/email matches before assignment.', 'In Progress', 'Critical', 'Data Quality'],
   ['Prepare WhatsApp reminder template', 'Draft salesperson meeting reminder copy for approval.', 'Review', 'High', 'Notifications'],
   ['Update meeting MOM checklist', 'Confirm required fields for meeting outcome capture.', 'To Do', 'Medium', 'Meetings'],
-  ['Reassign stale leads', 'Move overdue uncontacted leads to the manager exception queue.', 'Blocked', 'High', 'Assignment'],
-  ['Audit pending follow-ups', 'Find follow-ups due today and mark missed items for escalation.', 'Testing', 'Medium', 'Follow Ups'],
-  ['Create pipeline export sample', 'Generate a manager-friendly pipeline CSV sample.', 'Backlog', 'Low', 'Reports'],
+  ['Reassign stale leads', 'Move overdue uncontacted leads to the manager exception queue.', 'In Progress', 'High', 'Assignment'],
+  ['Audit pending follow-ups', 'Find follow-ups due today and mark missed items for escalation.', 'Review', 'Medium', 'Follow Ups'],
+  ['Create pipeline export sample', 'Generate a manager-friendly pipeline CSV sample.', 'To Do', 'Low', 'Reports'],
   ['Verify upload attachment rules', 'Test PDF, image, CSV, and rejected file uploads.', 'In Progress', 'Medium', 'Files'],
   ['Document lost reason options', 'List approved lost/on-hold reasons for configuration.', 'To Do', 'Low', 'Configuration'],
   ['Close won demo lead', 'Convert one qualified lead into a customer/deal test record.', 'Done', 'High', 'Conversion'],
@@ -282,7 +282,7 @@ async function seed() {
 
   for (const architect of demoArchitects) {
     if (!(await Architect.exists({ email: architect.email }))) {
-      await Architect.create(architect);
+      if (creator) await Architect.create({ ...architect, owner: creator._id });
     }
   }
 

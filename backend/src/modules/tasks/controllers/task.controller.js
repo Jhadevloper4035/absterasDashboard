@@ -1,6 +1,7 @@
 import { Task, TASK_PRIORITIES, TASK_STATUSES } from '../models/task.model.js';
 import { DEFAULT_TASK_WORK_TYPES, TaskWorkType, normalizeTaskWorkType } from '../models/task-work-type.model.js';
 import { User } from '../../../models/user.model.js';
+import { Employee } from '../../hr/models/employee.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
@@ -9,7 +10,7 @@ import { cachedJson, invalidateCache } from '../../../services/redis-cache.servi
 
 
 function canAssignTasks(user) {
-  return appAccessLevel(user, 'tasks') === 2;
+  return appAccessLevel(user, 'tasks') === 2 && ![user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].some((role) => role === 'superadmin' || role === 'admin');
 }
 
 function isTaskAdmin(user) {
@@ -81,7 +82,21 @@ async function taskData(task) {
 }
 
 async function findAssignee(id) {
-  return User.findOne({ _id: id, status: 'active', modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } } });
+  return User.findOne(taskAssigneeQuery({ _id: id }));
+}
+
+function taskAssigneeQuery(extra = {}) {
+  return {
+    ...extra,
+    status: 'active',
+    modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } },
+    $nor: [
+      { role: { $in: ['admin', 'superadmin'] } },
+      { additionalRoles: { $in: ['admin', 'superadmin'] } },
+      { accessTypes: { $in: ['admin', 'superadmin'] } },
+      { workProfile: { $in: ['admin', 'superadmin'] } },
+    ],
+  };
 }
 
 function notificationMetadata(type, taskId, actor) {
@@ -115,8 +130,20 @@ export async function listTaskAssignees(req, res) {
     return res.status(403).json({ error: { message: 'Forbidden' } });
   }
 
-  const users = await User.find({ status: 'active', modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } } }).select('name email status').sort({ name: 1 }).limit(1000);
-  return res.json({ data: users });
+  const users = await User.find({ ...taskAssigneeQuery(), _id: { $ne: req.user._id } }).select('name email status workProfile').sort({ name: 1 }).limit(1000);
+  const employees = users.length
+    ? await Employee.find({ user: { $in: users.map((user) => user._id) } }).populate('department', 'name').select('user department')
+    : [];
+  const departmentByUserId = new Map(employees.map((employee) => [String(employee.user), employee.department]));
+  const data = users.map((user) => {
+    const department = departmentByUserId.get(String(user._id));
+    return {
+      ...(user.toObject ? user.toObject() : user),
+      department: department ? { _id: String(department._id), name: department.name } : undefined,
+    };
+  });
+
+  return res.json({ data });
 }
 
 export async function listTaskWorkTypes(req, res) {
@@ -194,7 +221,7 @@ export async function listTasks(req, res) {
     extra.dueDate = { $lt: today };
   }
   if (req.query.group) {
-    const users = await User.find({ status: 'active', modulePermissions: { $elemMatch: { module: 'tasks', access: 'manage' } } }).select('_id').limit(1000);
+    const users = await User.find(taskAssigneeQuery()).select('_id').limit(1000);
     extra.assignee = { $in: users.map((user) => user._id) };
   }
   if (req.query.assignee) extra.assignee = req.query.assignee;
@@ -248,6 +275,9 @@ export async function createTask(req, res) {
   if (!req.body.title?.trim()) {
     return res.status(400).json({ error: { message: 'Task title is required' } });
   }
+  if (String(req.body.assignee || '') === String(req.user._id)) {
+    return res.status(400).json({ error: { message: 'Assign the task to another active user with Task Management access' } });
+  }
 
   const assignee = await findAssignee(req.body.assignee);
   if (!assignee) {
@@ -268,9 +298,6 @@ export async function createTask(req, res) {
 }
 
 export async function updateTask(req, res) {
-  if (!canAssignTasks(req.user)) {
-    return res.status(403).json({ error: { message: 'Admins can view tasks only' } });
-  }
   const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
   const previousStatus = task?.status;
   const previousAssignee = task?.assignee;
@@ -280,20 +307,49 @@ export async function updateTask(req, res) {
   if (task.status === 'Done') {
     return res.status(409).json({ error: { message: 'Closed tasks cannot be edited' } });
   }
+  const isTaskCreator = String(task.createdBy) === String(req.user._id);
+  const isTaskAssignee = String(task.assignee) === String(req.user._id);
+  const isTaskSubmission = isTaskAssignee
+    && req.body.status === 'Done'
+    && Object.keys(req.body).every((key) => key === 'status' || key === 'submissionAttachments' || key === 'submissionDescription');
+
+  if (req.body.priority !== undefined && !isTaskCreator) {
+    return res.status(403).json({ error: { message: 'Only the task creator can change priority' } });
+  }
+
+  if (req.body.assignee !== undefined && !isTaskCreator) {
+    return res.status(403).json({ error: { message: 'Only the task creator can reassign it' } });
+  }
+
+  if (!isTaskCreator && !isTaskSubmission) {
+    return res.status(403).json({ error: { message: 'Only the task creator can update this task. Assignees can only mark it Done.' } });
+  }
 
   if (req.body.assignee !== undefined) {
-    if (String(task.createdBy) !== String(req.user._id)) {
+    if (!isTaskCreator) {
       return res.status(403).json({ error: { message: 'Only the task creator can reassign it' } });
+    }
+    if (String(req.body.assignee) === String(req.user._id)) {
+      return res.status(400).json({ error: { message: 'Assign the task to another active user with Task Management access' } });
     }
     const assignee = await findAssignee(req.body.assignee);
     if (!assignee) {
-      return res.status(400).json({ error: { message: 'Assign task to an active sales, operations, accounts, or designers user' } });
+      return res.status(400).json({ error: { message: 'Assign task to an active user with Task Management access' } });
     }
     task.assignee = assignee._id;
   }
 
   patchTask(task, req.body, req.user._id);
-  await task.save();
+  const submissionDescription = typeof req.body.submissionDescription === 'string' ? req.body.submissionDescription.trim() : '';
+  if (isTaskSubmission && (req.body.submissionAttachments !== undefined || submissionDescription)) {
+    task.notes.push({
+      title: 'Task submitted',
+      description: submissionDescription || 'Task marked as Done.',
+      attachments: cleanAttachments(req.body.submissionAttachments),
+      createdBy: req.user._id,
+    });
+  }
+  await task.save({ validateModifiedOnly: true });
   await invalidateCache('task-lists');
   if (previousStatus !== task.status) {
     await auditEvent(req, { action: 'task.status', entity: 'task', entityId: task._id, before: { status: previousStatus }, after: { status: task.status } });
@@ -311,15 +367,15 @@ export async function updateTask(req, res) {
 }
 
 export async function addTaskNote(req, res) {
-  if (!canAssignTasks(req.user)) {
-    return res.status(403).json({ error: { message: 'Admins can view tasks only' } });
-  }
   const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
   if (!task) {
     return res.status(404).json({ error: { message: 'Task not found' } });
   }
   if (task.status === 'Done') {
     return res.status(409).json({ error: { message: 'Closed tasks cannot be edited' } });
+  }
+  if (String(task.createdBy) !== String(req.user._id) && String(task.assignee) !== String(req.user._id)) {
+    return res.status(403).json({ error: { message: 'Only the task creator or assignee can add notes' } });
   }
 
   if (!req.body.title?.trim() || !req.body.description?.trim()) {

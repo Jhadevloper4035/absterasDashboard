@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { leaveAttendanceDates, leaveDays } from '../src/modules/hr/services/leave.service.js';
+import { isBirthdayMonth, leaveAttendanceDates, leaveDays } from '../src/modules/hr/services/leave.service.js';
 
 test('leave days exclude configured holidays without assuming weekend policy', () => {
   assert.equal(leaveDays('2026-08-03', '2026-08-05', [new Date('2026-08-04T00:00:00.000Z')]), 2);
@@ -13,4 +13,9 @@ test('approved leave produces one attendance date per non-holiday leave day', ()
 
 test('leave date helpers accept persisted Date values', () => {
   assert.equal(leaveDays(new Date('2026-08-03T12:00:00.000Z'), new Date('2026-08-04T12:00:00.000Z')), 2);
+});
+
+test('birthday leave is limited to the employee birthday month', () => {
+  assert.equal(isBirthdayMonth('1995-08-17', '2026-08-04'), true);
+  assert.equal(isBirthdayMonth('1995-08-17', '2026-09-04'), false);
 });

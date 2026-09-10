@@ -12,6 +12,6 @@ taskRouter.post('/work-types', authorizeAppModule('tasks', 'manage'), asyncHandl
 taskRouter.delete('/work-types/:role/:name', authorizeAppModule('tasks', 'manage'), asyncHandler(deleteTaskWorkType));
 taskRouter.post('/', authorizeAppModule('tasks', 'manage'), asyncHandler(createTask));
 taskRouter.get('/:id', asyncHandler(getTask));
-taskRouter.patch('/:id', authorizeAppModule('tasks', 'manage'), asyncHandler(updateTask));
-taskRouter.post('/:id/notes', authorizeAppModule('tasks', 'manage'), asyncHandler(addTaskNote));
+taskRouter.patch('/:id', asyncHandler(updateTask));
+taskRouter.post('/:id/notes', asyncHandler(addTaskNote));
 taskRouter.delete('/:id', authorizeAppModule('tasks', 'manage'), asyncHandler(deleteTask));

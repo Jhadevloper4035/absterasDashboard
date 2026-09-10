@@ -1,5 +1,6 @@
 import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
+import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
 import { useUserManagementStore } from '@/store/userManagementStore'
 import type { UserType } from '@/types/auth'
@@ -83,6 +84,7 @@ const logoutText = (item: LoginHistoryItem) => {
 }
 
 const UserLoginHistoryPage = () => {
+  const { user } = useAuthContext()
   const users = useUserManagementStore((state) => state.users)
   const fetchUsers = useUserManagementStore((state) => state.fetchUsers)
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -93,13 +95,14 @@ const UserLoginHistoryPage = () => {
   const [loggingOutUserId, setLoggingOutUserId] = useState('')
   const [error, setError] = useState('')
 
+  const canManageUsers = [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].some((role) => role === 'superadmin' || role === 'admin')
   const userOptions = useMemo(() => [...users].sort((a, b) => a.name.localeCompare(b.name)), [users])
   const currentCount = history.filter((item) => !item.logoutAt).length
-  const selectedUserName = selectedUserId ? userOptions.find((item) => item._id === selectedUserId)?.name || 'Selected user' : 'All users'
+  const selectedUserName = canManageUsers ? (selectedUserId ? userOptions.find((item) => item._id === selectedUserId)?.name || 'Selected user' : 'All users') : user?.name || 'My account'
 
   useEffect(() => {
-    fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
-  }, [fetchUsers])
+    if (canManageUsers) fetchUsers('?limit=100').catch((e) => setError(e instanceof Error ? e.message : 'Unable to load users'))
+  }, [canManageUsers, fetchUsers])
 
   const loadHistory = async () => {
     setLoading(true)
@@ -167,7 +170,7 @@ const UserLoginHistoryPage = () => {
                 </Badge>
               </div>
             </Col>
-            <Col lg={5}>
+            {canManageUsers && <Col lg={5}>
               <Form.Label>User</Form.Label>
               <Form.Select value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
                 <option value="">All users</option>
@@ -177,13 +180,13 @@ const UserLoginHistoryPage = () => {
                   </option>
                 ))}
               </Form.Select>
-            </Col>
+            </Col>}
           </Row>
 
           {error && <Alert variant="danger">{error}</Alert>}
 
           <div className="table-responsive rounded border" style={{ maxHeight: '62vh', overflow: 'auto' }}>
-            <Table hover className="align-middle mb-0" style={{ minWidth: 1040 }}>
+            <Table hover className="align-middle mb-0" style={{ minWidth: canManageUsers ? 1040 : 900 }}>
               <thead className="table-light position-sticky top-0" style={{ zIndex: 1 }}>
                 <tr>
                   <th style={{ width: '22%' }}>User</th>
@@ -192,13 +195,13 @@ const UserLoginHistoryPage = () => {
                   <th style={{ width: '17%' }}>Logout</th>
                   <th style={{ width: '12%' }}>IP Address</th>
                   <th style={{ width: '14%' }}>Device</th>
-                  <th style={{ width: '6%' }} className="text-end">Action</th>
+                  {canManageUsers && <th style={{ width: '6%' }} className="text-end">Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={7} className="text-center py-5">
+                    <td colSpan={canManageUsers ? 7 : 6} className="text-center py-5">
                       <Spinner className="spinner-border-sm me-2" tag="span" />
                       <span className="text-muted">Loading history...</span>
                     </td>
@@ -242,18 +245,18 @@ const UserLoginHistoryPage = () => {
                           {browserLabel(item.userAgent)}
                         </div>
                       </td>
-                      <td className="text-end">
+                      {canManageUsers && <td className="text-end">
                         {!item.logoutAt && (
                           <Button size="sm" variant="outline-danger" className="text-nowrap" disabled={loggingOutUserId === item.user?._id} onClick={() => logoutUser(item)}>
                             {loggingOutUserId === item.user?._id ? 'Logging out...' : 'Logout'}
                           </Button>
                         )}
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                 {!loading && !history.length && (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={canManageUsers ? 7 : 6} className="text-center text-muted py-4">
                       No login history found
                     </td>
                   </tr>

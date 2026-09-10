@@ -14,8 +14,6 @@ const round = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 const plain = (value) => value?.toObject ? value.toObject() : value;
 const vendorFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'notes', 'status'];
 const vendorPayload = (body) => Object.fromEntries(vendorFields.filter((field) => body?.[field] !== undefined).map((field) => [field, body[field]]));
-export const LASER_CUT_DROP_ADDRESS = 'PLOT NO -A-1140 SUSHANT LOK-1, GURUGRAM, HARYANA';
-
 function dimensionsFor(materialType, values = {}) {
   const dimensions = { heightFt: number(values.heightFt), widthFt: number(values.widthFt), lengthFt: number(values.lengthFt) };
   if (materialType === 'SHEET' && (!Number.isFinite(dimensions.heightFt) || dimensions.heightFt <= 0 || !Number.isFinite(dimensions.widthFt) || dimensions.widthFt <= 0)) throw badRequest('Sheet height and width must be greater than zero');
@@ -23,27 +21,88 @@ function dimensionsFor(materialType, values = {}) {
   return Object.fromEntries(Object.entries(dimensions).filter(([, value]) => Number.isFinite(value)));
 }
 
-function materialKey(materialType, dimensions, inventoryItemRef) {
+export function materialKey(materialType, dimensions, inventoryItemRef) {
   if (materialType === 'OTHER') return `PRODUCT-${inventoryItemRef}`;
-  return materialType === 'SHEET' ? `SHEET-${dimensions.heightFt}x${dimensions.widthFt}` : `TUBE-${dimensions.lengthFt}`;
+  const productKey = inventoryItemRef ? `${inventoryItemRef}-` : '';
+  return materialType === 'SHEET' ? `SHEET-${productKey}${dimensions.heightFt}x${dimensions.widthFt}` : `TUBE-${productKey}${dimensions.lengthFt}`;
+}
+
+function cutOutputsFor(item, materialType, dimensions, quantity) {
+  if (item?.cutOutputs !== undefined && !Array.isArray(item.cutOutputs)) throw badRequest('Smaller cut outputs must be a list');
+  const requested = item?.cutOutputs || (item?.cutOutput ? [item.cutOutput] : []);
+  const outputs = requested.map((output) => {
+    const outputQuantity = number(output?.quantity);
+    if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw badRequest('Smaller cut quantity must be greater than zero');
+    return { quantity: round(outputQuantity), dimensions: dimensionsFor(materialType, output.dimensions) };
+  });
+  const sourceSize = materialType === 'SHEET' ? quantity * dimensions.heightFt * dimensions.widthFt : quantity * dimensions.lengthFt;
+  const outputSize = outputs.reduce((total, output) => total + (materialType === 'SHEET' ? output.quantity * output.dimensions.heightFt * output.dimensions.widthFt : output.quantity * output.dimensions.lengthFt), 0);
+  if (outputSize > sourceSize + Number.EPSILON) throw badRequest(`Smaller ${materialType === 'SHEET' ? 'sheet area' : 'tube length'} cannot exceed the source material`);
+  return outputs;
 }
 
 export function orderStatus(order) {
-  const expected = order.expected || {}; const sent = order.sent || {};
+  const planned = order.planned || {}; const ready = order.ready || {};
+  const hasCutPlan = number(planned.sheets) + number(planned.tubes) > 0;
+  const expected = hasCutPlan ? planned : order.expected || {};
+  const sent = hasCutPlan ? ready : order.sent || {};
   const remainingSheets = Math.max(number(expected.sheets) - number(sent.sheets), 0);
   const remainingTubes = Math.max(number(expected.tubes) - number(sent.tubes), 0);
   const expectedTotal = number(expected.sheets) + number(expected.tubes);
   const sentTotal = number(sent.sheets) + number(sent.tubes);
-  return { remainingSheets: round(remainingSheets), remainingTubes: round(remainingTubes), status: expectedTotal === 0 && sentTotal === 0 ? 'PENDING' : remainingSheets || remainingTubes ? 'PARTIAL' : 'COMPLETE' };
+  return { remainingSheets: round(remainingSheets), remainingTubes: round(remainingTubes), status: expectedTotal === 0 || (hasCutPlan && sentTotal === 0) ? 'PENDING' : remainingSheets || remainingTubes ? 'PARTIAL' : 'COMPLETE' };
 }
 
-function orderView(order) { return { ...plain(order), ...orderStatus(order) }; }
+function sameDimensions(left = {}, right = {}) {
+  return ['heightFt', 'widthFt', 'lengthFt'].every((field) => number(left[field] ?? 0) === number(right[field] ?? 0));
+}
+
+export function productionOutputs(challans, usages) {
+  const rows = [];
+  for (const challan of challans.filter((entry) => entry.type === 'OUT' && entry.status === 'DISPATCHED')) {
+    for (const [lineIndex, item] of (challan.items || []).entries()) {
+      const cutOutputs = item.cutOutputs?.length ? item.cutOutputs : item.cutOutput ? [item.cutOutput] : [];
+      for (const [outputIndex, output] of cutOutputs.entries()) {
+        rows.push({ challanRef: String(challan._id), lineIndex, outputIndex, vendorRef: String(challan.vendorRef), challanNo: challan.challanNo, itemName: item.itemName, inventoryItemRef: String(item.inventoryItemRef), materialType: item.materialType, sourceDimensions: item.dimensions, dimensions: output.dimensions, plannedQuantity: number(output.quantity), readyQuantity: 0 });
+      }
+    }
+  }
+  for (const usage of usages) {
+    for (const output of usage.outputs?.length ? usage.outputs : usage.outputStockRef ? [{ quantity: usage.panelsProduced, dimensions: usage.outputDimensions }] : []) {
+      const matches = rows.filter((row) => {
+        if (usage.challanRef) return row.challanRef === String(usage.challanRef) && row.lineIndex === number(usage.sourceLineIndex) && (output.plannedOutputIndex === undefined || row.outputIndex === number(output.plannedOutputIndex));
+        return row.materialType === usage.materialType && sameDimensions(row.sourceDimensions, usage.dimensions) && sameDimensions(row.dimensions, output.dimensions);
+      });
+      if (matches.length === 1) matches[0].readyQuantity = round(matches[0].readyQuantity + number(output.quantity));
+    }
+  }
+  return rows.map((row) => ({ ...row, readyQuantity: round(row.readyQuantity), remainingQuantity: round(Math.max(row.plannedQuantity - row.readyQuantity, 0)) }));
+}
+
+function productionTotals(outputs, field) {
+  return outputs.reduce((totals, output) => output.materialType === 'SHEET' ? { ...totals, sheets: round(totals.sheets + number(output[field])) } : output.materialType === 'TUBE' ? { ...totals, tubes: round(totals.tubes + number(output[field])) } : totals, { sheets: 0, tubes: 0 });
+}
+
+function orderView(order) {
+  const value = plain(order);
+  return { ...value, planned: { sheets: number(value.planned?.sheets || 0), tubes: number(value.planned?.tubes || 0) }, ready: { sheets: number(value.ready?.sheets || 0), tubes: number(value.ready?.tubes || 0) }, ...orderStatus(value) };
+}
 
 async function ordersWithClientNames(orders) {
   const clientIds = orders.map((order) => order.customerRef).filter(validId);
-  const clients = clientIds.length ? await Client.find({ _id: { $in: clientIds } }).select('name').lean() : [];
-  const clientNames = new Map(clients.map((client) => [String(client._id), client.name]));
-  return orders.map((order) => ({ ...orderView(order), clientName: clientNames.get(String(order.customerRef)) || '—' }));
+  const orderIds = orders.map((order) => order._id);
+  const [clients, challans] = await Promise.all([
+    clientIds.length ? Client.find({ _id: { $in: clientIds } }).select('name billingAddress shippingAddress').lean() : [],
+    orderIds.length ? LaserCutChallan.find({ orderRef: { $in: orderIds }, type: 'OUT', status: 'DISPATCHED' }).sort({ createdAt: -1 }).lean() : [],
+  ]);
+  const clientById = new Map(clients.map((client) => [String(client._id), client]));
+  const latestDispatchByOrder = new Map();
+  for (const challan of challans) if (!latestDispatchByOrder.has(String(challan.orderRef))) latestDispatchByOrder.set(String(challan.orderRef), challan);
+  return orders.map((order) => {
+    const client = clientById.get(String(order.customerRef));
+    const dispatch = latestDispatchByOrder.get(String(order._id));
+    return { ...orderView(order), clientName: client?.name || '—', clientSiteName: dispatch?.clientSiteName, clientAddress: dispatch?.clientSiteAddressSnapshot || client?.shippingAddress || client?.billingAddress };
+  });
 }
 
 async function writeAudit({ session, entityType, entityId, action, performedBy, before, after, metadata }) {
@@ -65,8 +124,10 @@ export async function normalizedItems(items) {
     if (!Number.isFinite(quantity) || quantity <= 0) throw badRequest('Material quantity must be greater than zero');
     const { materialType, defaultDimensions } = laserCutMaterialDetails(material);
     const dimensions = ['SHEET', 'TUBE'].includes(materialType) ? dimensionsFor(materialType, defaultDimensions) : undefined;
+    if (!dimensions && (item.cutOutput || item.cutOutputs?.length)) throw badRequest('Smaller cut outputs are only available for sheets and tubes');
+    const cutOutputs = dimensions ? cutOutputsFor(item, materialType, dimensions, quantity) : [];
     const pickupSupplier = supplierById.get(String(material.supplier));
-    return { inventoryItemRef: material._id, itemName: material.name, hsnCode: String(material.hsnCode || DEFAULT_HSN_CODE), unit: material.unit, pickupSupplierRef: pickupSupplier?._id, pickupSupplierName: pickupSupplier?.name, pickupAddressSnapshot: pickupSupplier?.address, materialType, quantity: round(quantity), dimensions };
+    return { inventoryItemRef: material._id, itemName: material.name, hsnCode: String(material.hsnCode || DEFAULT_HSN_CODE), unit: material.unit, pickupSupplierRef: pickupSupplier?._id, pickupSupplierName: pickupSupplier?.name, pickupAddressSnapshot: pickupSupplier?.address, materialType, quantity: round(quantity), dimensions, cutOutputs };
   });
 }
 
@@ -79,6 +140,14 @@ function orderIncrement(items) {
   return items.reduce((totals, item) => {
     const field = item.materialType === 'SHEET' ? 'sheets' : item.materialType === 'TUBE' ? 'tubes' : undefined;
     return field ? { ...totals, [field]: round(totals[field] + item.quantity) } : totals;
+  }, { sheets: 0, tubes: 0 });
+}
+
+function cutOutputIncrement(items) {
+  return items.reduce((totals, item) => {
+    const field = item.materialType === 'SHEET' ? 'sheets' : item.materialType === 'TUBE' ? 'tubes' : undefined;
+    const outputs = item.cutOutputs?.length ? item.cutOutputs : item.cutOutput ? [item.cutOutput] : [];
+    return field ? { ...totals, [field]: round(totals[field] + outputs.reduce((total, output) => total + number(output.quantity), 0)) } : totals;
   }, { sheets: 0, tubes: 0 });
 }
 
@@ -158,11 +227,14 @@ export async function getOrder(req, res) {
   if (!validId(req.params.id)) throw badRequest('Invalid order id');
   const order = await LaserCutOrder.findById(req.params.id).lean();
   if (!order) throw missing('Order not found');
-  const [challans, client] = await Promise.all([
+  const [challans, client, usages] = await Promise.all([
     LaserCutChallan.find({ orderRef: order._id }).sort({ createdAt: -1 }).lean(),
     validId(order.customerRef) ? Client.findById(order.customerRef).select('name gstin billingAddress shippingAddress state stateCode phone email').lean() : null,
+    LaserCutUsage.find({ orderRef: order._id }).sort({ reportedAt: -1 }).lean(),
   ]);
-  return res.json({ data: { ...orderView(order), clientName: client?.name || '—', client: client || undefined, challans } });
+  const outputs = productionOutputs(challans, usages);
+  const productionOrder = outputs.length ? { ...order, planned: productionTotals(outputs, 'plannedQuantity'), ready: productionTotals(outputs, 'readyQuantity') } : order;
+  return res.json({ data: { ...orderView(productionOrder), clientName: client?.name || '—', client: client || undefined, challans, production: { outputs, batches: usages.filter((usage) => usage.outputs?.length || usage.outputStockRef).map((usage) => ({ batchNo: usage.batchNo, reportedAt: usage.reportedAt, materialType: usage.materialType, panelsProduced: usage.panelsProduced })) } } });
 }
 
 export async function listChallans(req, res) {
@@ -181,10 +253,13 @@ export async function createChallan(req, res) {
   if (req.body.orderRef && !validId(req.body.orderRef)) throw badRequest('Invalid order');
   const [vendor, client, clientSite, order, items] = await Promise.all([LaserCutVendor.findOne({ _id: req.body.vendorRef, status: 'active' }).lean(), req.body.clientRef ? Client.findOne({ _id: req.body.clientRef, parentClient: null }).lean() : null, req.body.clientSiteRef ? Client.findOne({ _id: req.body.clientSiteRef, parentClient: req.body.clientRef }).lean() : null, req.body.orderRef ? LaserCutOrder.findById(req.body.orderRef).lean() : null, normalizedItems(req.body.items)]);
   if (!vendor) throw missing('Active vendor not found');
+  const vendorAddress = String(vendor.address || '').trim();
+  if (!vendorAddress) throw badRequest('Laser-cut vendor address is required for the drop location');
   if (type === 'OUT' && !client) throw missing('Parent client not found');
   if (req.body.clientSiteRef && !clientSite) throw missing('Child client site not found');
   if (req.body.orderRef && !order) throw missing('Order not found');
-  const challan = await LaserCutChallan.create({ challanNo: `LC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, type, challanDate: req.body.challanDate || undefined, clientRef: client?._id, clientName: client?.name, clientSiteRef: clientSite?._id, clientSiteName: clientSite?.siteName || clientSite?.name, clientSiteAddressSnapshot: clientSite?.siteAddress || clientSite?.shippingAddress || clientSite?.billingAddress, deliveryAddress: LASER_CUT_DROP_ADDRESS, vendorRef: vendor._id, vendorName: vendor.name, vendorAddressSnapshot: String(vendor.address || '').trim() || undefined, transportType: String(req.body.transportType || '').trim() || undefined, vehicleNumber: String(req.body.vehicleNumber || '').trim() || undefined, eWayBillNumber: String(req.body.eWayBillNumber || '').trim() || undefined, orderRef: order?._id, items, createdBy: req.user._id });
+  if (items.some((item) => item.cutOutputs?.length) && (type !== 'OUT' || !order)) throw badRequest('Smaller cut outputs require an outward challan linked to an order');
+  const challan = await LaserCutChallan.create({ challanNo: `LC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, type, challanDate: req.body.challanDate || undefined, clientRef: client?._id, clientName: client?.name, clientSiteRef: clientSite?._id, clientSiteName: clientSite?.siteName || clientSite?.name, clientSiteAddressSnapshot: clientSite?.siteAddress || clientSite?.shippingAddress || clientSite?.billingAddress, deliveryAddress: vendorAddress, vendorRef: vendor._id, vendorName: vendor.name, vendorAddressSnapshot: vendorAddress, transportType: String(req.body.transportType || '').trim() || undefined, vehicleNumber: String(req.body.vehicleNumber || '').trim() || undefined, eWayBillNumber: String(req.body.eWayBillNumber || '').trim() || undefined, orderRef: order?._id, items, createdBy: req.user._id });
   await writeAudit({ entityType: 'CHALLAN', entityId: challan._id, action: 'CREATE', performedBy: req.user._id, after: plain(challan), metadata: { challanNo: challan.challanNo, vendorName: vendor.name } });
   return res.status(201).json({ data: challan });
 }
@@ -208,7 +283,8 @@ export async function dispatchChallan(req, res) {
       }
       if (challan.orderRef) {
         const totals = orderIncrement(challan.items);
-        const order = await LaserCutOrder.findByIdAndUpdate(challan.orderRef, { $inc: { 'sent.sheets': totals.sheets, 'sent.tubes': totals.tubes } }, { new: true, session });
+        const planned = cutOutputIncrement(challan.items);
+        const order = await LaserCutOrder.findByIdAndUpdate(challan.orderRef, { $inc: { 'sent.sheets': totals.sheets, 'sent.tubes': totals.tubes, 'planned.sheets': planned.sheets, 'planned.tubes': planned.tubes } }, { new: true, session });
         order.status = orderStatus(order).status; await order.save({ session });
         await writeAudit({ session, entityType: 'ORDER', entityId: order._id, action: 'DISPATCH', performedBy: req.user._id, after: plain(order), metadata: { challanNo: challan.challanNo } });
       }
@@ -252,6 +328,10 @@ export async function createUsage(req, res) {
   if (!validId(req.body?.vendorRef) || !validId(req.body?.orderRef) || !['SHEET', 'TUBE'].includes(req.body?.materialType)) throw badRequest('Vendor, order, and material type are required');
   const quantityConsumed = number(req.body.quantityConsumed); if (!Number.isFinite(quantityConsumed) || quantityConsumed <= 0) throw badRequest('Consumed quantity must be greater than zero');
   const dimensions = dimensionsFor(req.body.materialType, req.body.dimensions); const panelsProduced = number(req.body.panelsProduced || 0); if (!Number.isFinite(panelsProduced) || panelsProduced < 0) throw badRequest('Panels produced must be zero or greater');
+  const outputDimensions = panelsProduced > 0 ? dimensionsFor(req.body.materialType, req.body.outputDimensions) : undefined;
+  const consumedSize = req.body.materialType === 'SHEET' ? quantityConsumed * dimensions.heightFt * dimensions.widthFt : quantityConsumed * dimensions.lengthFt;
+  const producedSize = outputDimensions && (req.body.materialType === 'SHEET' ? panelsProduced * outputDimensions.heightFt * outputDimensions.widthFt : panelsProduced * outputDimensions.lengthFt);
+  if (producedSize && producedSize > consumedSize + Number.EPSILON) throw badRequest(`Produced ${req.body.materialType === 'SHEET' ? 'sheet area' : 'tube length'} cannot exceed consumed ${req.body.materialType === 'SHEET' ? 'sheet area' : 'tube length'}`);
   const session = await mongoose.startSession(); let usage;
   try {
     await session.withTransaction(async () => {
@@ -259,15 +339,95 @@ export async function createUsage(req, res) {
       const key = materialKey(req.body.materialType, dimensions);
       const stock = await LaserCutStock.findOneAndUpdate({ vendorRef: req.body.vendorRef, materialKey: key, quantityAvailable: { $gte: quantityConsumed } }, { $inc: { quantityAvailable: -quantityConsumed } }, { new: true, session });
       if (!stock) throw conflict('Vendor stock is insufficient for this usage entry');
+      let outputStock;
+      if (outputDimensions) {
+        const outputKey = materialKey(req.body.materialType, outputDimensions, stock.inventoryItemRef);
+        outputStock = await LaserCutStock.findOneAndUpdate(
+          { vendorRef: stock.vendorRef, materialKey: outputKey },
+          { $setOnInsert: { vendorName: stock.vendorName, inventoryItemRef: stock.inventoryItemRef, itemName: stock.itemName, hsnCode: stock.hsnCode, unit: stock.unit, materialType: req.body.materialType, dimensions: outputDimensions }, $inc: { quantityAvailable: panelsProduced } },
+          { new: true, upsert: true, session },
+        );
+      }
       const panelArea = number(order.panelSpec?.panelAreaSqFt); const consumedArea = req.body.materialType === 'SHEET' ? quantityConsumed * dimensions.heightFt * dimensions.widthFt : undefined;
       const wastageAreaSqFt = consumedArea && Number.isFinite(panelArea) && panelArea > 0 ? round(Math.max(consumedArea - panelsProduced * panelArea, 0)) : undefined;
       const wastagePercent = wastageAreaSqFt === undefined ? undefined : round((wastageAreaSqFt / consumedArea) * 100);
-      [usage] = await LaserCutUsage.create([{ vendorRef: req.body.vendorRef, orderRef: order._id, materialType: req.body.materialType, dimensions, quantityConsumed: round(quantityConsumed), panelsProduced, wastageAreaSqFt, wastagePercent, createdBy: req.user._id }], { session });
+      [usage] = await LaserCutUsage.create([{ vendorRef: req.body.vendorRef, orderRef: order._id, materialType: req.body.materialType, dimensions, quantityConsumed: round(quantityConsumed), panelsProduced, outputDimensions, outputStockRef: outputStock?._id, wastageAreaSqFt, wastagePercent, createdBy: req.user._id }], { session });
       await writeAudit({ session, entityType: 'LASER_CUT_STOCK', entityId: stock._id, action: 'USAGE_REPORTED', performedBy: req.user._id, after: plain(stock), metadata: { usageId: usage._id } });
+      if (outputStock) await writeAudit({ session, entityType: 'LASER_CUT_STOCK', entityId: outputStock._id, action: 'CUT_OUTPUT', performedBy: req.user._id, after: plain(outputStock), metadata: { usageId: usage._id, quantity: panelsProduced } });
       await writeAudit({ session, entityType: 'USAGE_ENTRY', entityId: usage._id, action: 'USAGE_REPORTED', performedBy: req.user._id, after: plain(usage) });
     });
   } finally { await session.endSession(); }
   return res.status(201).json({ data: usage });
+}
+
+export async function recordReadyBatch(req, res) {
+  if (!validId(req.params.id) || !Array.isArray(req.body?.items) || !req.body.items.length) throw badRequest('Select at least one ready cut output');
+  const entries = new Map();
+  for (const item of req.body.items) {
+    const quantityReady = number(item?.quantity);
+    const lineIndex = number(item?.lineIndex); const outputIndex = number(item?.outputIndex);
+    if (!validId(item?.challanRef) || !Number.isInteger(lineIndex) || lineIndex < 0 || !Number.isInteger(outputIndex) || outputIndex < 0 || !Number.isFinite(quantityReady) || quantityReady <= 0) throw badRequest('Each ready batch quantity must be valid');
+    const key = `${item.challanRef}:${lineIndex}:${outputIndex}`;
+    entries.set(key, { challanRef: String(item.challanRef), lineIndex, outputIndex, quantity: round((entries.get(key)?.quantity || 0) + quantityReady) });
+  }
+  const session = await mongoose.startSession(); let result;
+  try {
+    await session.withTransaction(async () => {
+      const order = await LaserCutOrder.findById(req.params.id).session(session);
+      if (!order) throw missing('Order not found');
+      const challanRefs = new Set([...entries.values()].map((entry) => entry.challanRef));
+      const challans = await LaserCutChallan.find({ orderRef: order._id, type: 'OUT', status: 'DISPATCHED' }).session(session).lean();
+      if ([...challanRefs].some((challanRef) => !challans.some((challan) => String(challan._id) === challanRef))) throw badRequest('Ready output must belong to a dispatched challan for this order');
+      const existingUsages = await LaserCutUsage.find({ orderRef: order._id }).session(session).lean();
+      const rows = productionOutputs(challans, existingUsages);
+      const rowByKey = new Map(rows.map((row) => [`${row.challanRef}:${row.lineIndex}:${row.outputIndex}`, row]));
+      const selected = [...entries.values()].map((entry) => ({ ...entry, row: rowByKey.get(`${entry.challanRef}:${entry.lineIndex}:${entry.outputIndex}`) }));
+      if (selected.some((entry) => !entry.row || entry.quantity > entry.row.remainingQuantity)) throw conflict('Ready quantity exceeds the planned smaller cut output');
+      const challanById = new Map(challans.map((challan) => [String(challan._id), challan]));
+      const bySource = new Map();
+      for (const entry of selected) {
+        const key = `${entry.challanRef}:${entry.lineIndex}`;
+        const source = bySource.get(key) || { challan: challanById.get(entry.challanRef), lineIndex: entry.lineIndex, entries: [] };
+        source.entries.push(entry); bySource.set(key, source);
+      }
+      const ready = { sheets: 0, tubes: 0 };
+      const batchNo = `LCB-${Date.now().toString(36).toUpperCase()}`;
+      for (const source of bySource.values()) {
+        const item = source.challan.items[source.lineIndex];
+        if (!item) throw badRequest('Ready output source material was not found');
+        const sourceSize = item.materialType === 'SHEET' ? number(item.dimensions?.heightFt) * number(item.dimensions?.widthFt) : number(item.dimensions?.lengthFt);
+        const outputSize = source.entries.reduce((total, entry) => total + entry.quantity * (item.materialType === 'SHEET' ? number(entry.row.dimensions?.heightFt) * number(entry.row.dimensions?.widthFt) : number(entry.row.dimensions?.lengthFt)), 0);
+        const quantityConsumed = round(outputSize / sourceSize);
+        if (!Number.isFinite(quantityConsumed) || quantityConsumed <= 0) throw badRequest('Ready output dimensions are invalid');
+        const sourceKey = materialKey(item.materialType, item.dimensions, item.inventoryItemRef);
+        const sourceStock = await LaserCutStock.findOneAndUpdate({ vendorRef: source.challan.vendorRef, materialKey: sourceKey, quantityAvailable: { $gte: quantityConsumed } }, { $inc: { quantityAvailable: -quantityConsumed } }, { new: true, session });
+        if (!sourceStock) throw conflict(`Laser-cut stock is insufficient for ${item.itemName}`);
+        const outputs = [];
+        for (const entry of source.entries) {
+          const outputKey = materialKey(item.materialType, entry.row.dimensions, item.inventoryItemRef);
+          const outputStock = await LaserCutStock.findOneAndUpdate(
+            { vendorRef: source.challan.vendorRef, materialKey: outputKey },
+            { $setOnInsert: { vendorName: source.challan.vendorName, inventoryItemRef: item.inventoryItemRef, itemName: item.itemName, hsnCode: item.hsnCode, unit: item.unit, materialType: item.materialType, dimensions: entry.row.dimensions }, $inc: { quantityAvailable: entry.quantity } },
+            { new: true, upsert: true, session },
+          );
+          outputs.push({ quantity: entry.quantity, dimensions: entry.row.dimensions, outputStockRef: outputStock._id, plannedOutputIndex: entry.outputIndex, stock: outputStock });
+          if (item.materialType === 'SHEET') ready.sheets = round(ready.sheets + entry.quantity);
+          if (item.materialType === 'TUBE') ready.tubes = round(ready.tubes + entry.quantity);
+        }
+        const [usage] = await LaserCutUsage.create([{ vendorRef: source.challan.vendorRef, orderRef: order._id, challanRef: source.challan._id, sourceLineIndex: source.lineIndex, batchNo, materialType: item.materialType, dimensions: item.dimensions, quantityConsumed, panelsProduced: outputs.reduce((total, output) => total + output.quantity, 0), outputs: outputs.map(({ stock, ...output }) => output), createdBy: req.user._id }], { session });
+        await writeAudit({ session, entityType: 'LASER_CUT_STOCK', entityId: sourceStock._id, action: 'READY_BATCH_CONSUME', performedBy: req.user._id, after: plain(sourceStock), metadata: { batchNo, usageId: usage._id } });
+        for (const output of outputs) await writeAudit({ session, entityType: 'LASER_CUT_STOCK', entityId: output.outputStockRef, action: 'READY_BATCH_OUTPUT', performedBy: req.user._id, after: plain(output.stock), metadata: { batchNo, usageId: usage._id, quantity: output.quantity } });
+      }
+      const planned = productionTotals(rows, 'plannedQuantity');
+      const previousReady = productionTotals(rows, 'readyQuantity');
+      order.planned = planned;
+      order.ready = { sheets: round(previousReady.sheets + ready.sheets), tubes: round(previousReady.tubes + ready.tubes) };
+      order.status = orderStatus(order).status; await order.save({ session });
+      await writeAudit({ session, entityType: 'ORDER', entityId: order._id, action: 'READY_BATCH', performedBy: req.user._id, after: plain(order), metadata: { batchNo, ready } });
+      result = { order: orderView(order), batchNo };
+    });
+  } finally { await session.endSession(); }
+  return res.status(201).json({ data: result });
 }
 
 export async function listUsage(req, res) {

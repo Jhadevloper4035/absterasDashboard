@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Col, Dropdown, DropdownItem, DropdownMenu, DropdownToggle, Row } from 'react-bootstrap'
+import { Link } from 'react-router-dom'
 
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import SimplebarReactClient from '@/components/wrappers/SimplebarReactClient'
@@ -11,11 +12,12 @@ type AppNotification = {
   title?: string
   body?: string
   createdAt?: string
+  metadata?: { taskId?: string; leadId?: string; link?: string }
 }
 
-const NotificationItem = ({ title, body, createdAt }: AppNotification) => {
-  return (
-    <DropdownItem className="py-3 border-bottom text-wrap">
+const NotificationItem = ({ title, body, createdAt, metadata }: AppNotification) => {
+  const link = metadata?.link || (metadata?.taskId ? `/tasks/${metadata.taskId}` : metadata?.leadId ? `/leads/${metadata.leadId}` : undefined)
+  const content = (
       <div className="d-flex">
         <div className="flex-shrink-0">
           <div className="avatar-sm me-2">
@@ -30,7 +32,11 @@ const NotificationItem = ({ title, body, createdAt }: AppNotification) => {
           {createdAt && <p className="mb-0 text-muted fs-12">{new Date(createdAt).toLocaleString()}</p>}
         </div>
       </div>
-    </DropdownItem>
+  )
+  return link ? (
+    <DropdownItem as={Link} to={link} className="py-3 border-bottom text-wrap">{content}</DropdownItem>
+  ) : (
+    <DropdownItem className="py-3 border-bottom text-wrap">{content}</DropdownItem>
   )
 }
 

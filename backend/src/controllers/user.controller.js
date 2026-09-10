@@ -55,16 +55,6 @@ function cleanModulePermissions(permissions) {
   return APP_MODULES.map((module) => ({ module, access: accessByModule.get(module) || 'none' }));
 }
 
-function employeeModulePermissions(permissions, workProfile) {
-  if (workProfile !== 'employee' || !permissions) return permissions;
-  return permissions.map((permission) => permission.module === 'hr' && permission.access === 'none' ? { ...permission, access: 'view' } : permission);
-}
-
-function requiredModulePermissions(permissions) {
-  if (!permissions) return permissions;
-  return permissions.map((permission) => ['todo', 'notifications'].includes(permission.module) ? { ...permission, access: 'manage' } : permission);
-}
-
 function cleanTerritories(territories) {
   return (Array.isArray(territories) ? territories : String(territories || '').split(','))
     .map((territory) => String(territory).trim())
@@ -108,17 +98,27 @@ async function roleLimitError(role, currentUserId) {
   return (await User.exists(filter)) ? `Only one ${role} is allowed` : '';
 }
 
+async function superadminProfileLimitError(currentUserId) {
+  const filter = { $or: [{ role: SUPERADMIN_ROLE }, { additionalRoles: SUPERADMIN_ROLE }, { accessTypes: SUPERADMIN_ROLE }, { workProfile: SUPERADMIN_ROLE }] };
+  if (currentUserId) filter._id = { $ne: currentUserId };
+  return (await User.exists(filter)) ? 'Only one superadmin is allowed' : '';
+}
+
 function adminCanManage(actor, targetUser) {
   return userRoles(actor).includes(SUPERADMIN_ROLE) || !userRoles(targetUser).includes(SUPERADMIN_ROLE);
 }
 
+function canManageUsers(user) {
+  return userRoles(user).some((role) => role === SUPERADMIN_ROLE || role === 'admin');
+}
+
 function hasAdminAccess(user) {
-  return user?.role === 'admin' || user?.additionalRoles?.includes('admin') || user?.accessTypes?.includes('admin');
+  return user?.role === 'admin' || user?.additionalRoles?.includes('admin') || user?.accessTypes?.includes('admin') || user?.workProfile === 'admin';
 }
 
 async function adminAccessLimitError(user, currentUserId) {
   if (!hasAdminAccess(user)) return '';
-  const filter = { $or: [{ role: 'admin' }, { additionalRoles: 'admin' }, { accessTypes: 'admin' }] };
+  const filter = { $or: [{ role: 'admin' }, { additionalRoles: 'admin' }, { accessTypes: 'admin' }, { workProfile: 'admin' }] };
   if (currentUserId) filter._id = { $ne: currentUserId };
   return (await User.exists(filter)) ? 'Only one admin is allowed' : '';
 }
@@ -165,9 +165,16 @@ export async function createUser(req, res) {
   const userFields = allowedUserUpdate(stripPassword(req.body));
   if (userFields.modulePermissions === null) return res.status(400).json({ error: { message: 'Invalid module permissions' } });
   if (userFields.workProfile === null) return res.status(400).json({ error: { message: 'Invalid work profile' } });
+  if (userFields.workProfile === SUPERADMIN_ROLE && (!req.user || !userRoles(req.user).includes(SUPERADMIN_ROLE))) return res.status(403).json({ error: { message: 'Only Superadmin can assign the Superadmin profile' } });
+  if (userFields.workProfile === SUPERADMIN_ROLE) {
+    const limitError = await superadminProfileLimitError();
+    if (limitError) return res.status(400).json({ error: { message: limitError } });
+  }
+  if (userFields.workProfile === 'admin') {
+    const limitError = await adminAccessLimitError(userFields);
+    if (limitError) return res.status(400).json({ error: { message: limitError } });
+  }
   if (!req.user && req.body.role === SUPERADMIN_ROLE) userFields.role = SUPERADMIN_ROLE;
-  userFields.modulePermissions = employeeModulePermissions(requiredModulePermissions(userFields.modulePermissions), userFields.workProfile);
-  if (userFields.workProfile === 'director' && userFields.modulePermissions?.some((permission) => permission.module === 'hr' && permission.access !== 'none')) return res.status(400).json({ error: { message: 'Directors cannot receive HR Management access' } });
   const user = await User.create({
     ...userFields,
     passwordHash: await hashPassword(req.body.password),
@@ -211,6 +218,51 @@ export async function listUsers(req, res) {
   res.json({ data: users, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
+export async function requestPasswordReset(req, res) {
+  const passwordError = passwordPolicyError(req.body?.password);
+  if (passwordError) return res.status(400).json({ error: { message: passwordError } });
+  if (req.user.passwordResetRequestedAt) return res.status(409).json({ error: { message: 'A password reset request is already pending' } });
+
+  const requestedAt = new Date();
+  await User.findByIdAndUpdate(req.user._id, {
+    $set: { passwordResetPasswordHash: await hashPassword(req.body.password), passwordResetRequestedAt: requestedAt },
+    $push: { passwordResetHistory: { requestedAt, status: 'pending' } },
+  });
+  await auditEvent(req, { action: 'user.password_reset_requested', entity: 'user', entityId: req.user._id });
+  return res.status(201).json({ data: { ok: true, requestedAt } });
+}
+
+export async function listMyPasswordResetHistory(req, res) {
+  const user = await User.findById(req.user._id).select('passwordResetHistory').lean();
+  return res.json({ data: (user?.passwordResetHistory || []).sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt)) });
+}
+
+export async function listPasswordResetRequests(req, res) {
+  const users = await User.find({ passwordResetRequestedAt: { $exists: true } })
+    .select('name email role workProfile passwordResetRequestedAt')
+    .sort({ passwordResetRequestedAt: -1 })
+    .lean();
+  return res.json({ data: users });
+}
+
+export async function approvePasswordResetRequest(req, res) {
+  const requestedUser = await User.findById(req.params.id).select('+passwordResetPasswordHash');
+  if (!requestedUser) return res.status(404).json({ error: { message: 'User not found' } });
+  if (!requestedUser.passwordResetPasswordHash) return res.status(400).json({ error: { message: 'No pending password reset request' } });
+  if (!adminCanManage(req.user, requestedUser)) return res.status(403).json({ error: { message: 'Only Superadmin can approve this request' } });
+
+  await User.findByIdAndUpdate(requestedUser._id, {
+    $set: { passwordHash: requestedUser.passwordResetPasswordHash, failedLoginAttempts: 0, loginLockedAt: null, 'passwordResetHistory.$[request].approvedAt': new Date(), 'passwordResetHistory.$[request].status': 'approved' },
+    $unset: { passwordResetPasswordHash: 1, passwordResetRequestedAt: 1 },
+  }, {
+    arrayFilters: [{ 'request.status': 'pending' }],
+  });
+  await clearFailedLoginAttempts(requestedUser._id);
+  await revokeActiveUserSessions(requestedUser._id);
+  await auditEvent(req, { action: 'user.password_reset_approved', entity: 'user', entityId: requestedUser._id });
+  return res.json({ data: { ok: true } });
+}
+
 export async function listLoginHistory(req, res) {
   const filter = {};
   const sessionFilter = { revokedAt: null, expiresAt: { $gt: new Date() } };
@@ -218,8 +270,11 @@ export async function listLoginHistory(req, res) {
   const page = Math.max(Number(req.query.page || 1), 1);
   const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 50);
 
-  if (req.query.userId) {
-    const selectedUser = await User.findById(req.query.userId).select('role');
+  const userId = canManageUsers(req.user) ? req.query.userId : req.user._id;
+  if (userId) {
+    const selectedUser = canManageUsers(req.user) && req.query.userId
+      ? await User.findById(req.query.userId).select('role')
+      : req.user;
     if (!selectedUser) return res.status(404).json({ error: { message: 'User not found' } });
     filter.user = selectedUser._id;
     sessionFilter.user = selectedUser._id;
@@ -341,10 +396,16 @@ export async function updateUser(req, res) {
   if (!adminCanManage(req.user, currentUser) || (!actorIsSuperadmin && currentUser.role === SUPERADMIN_ROLE)) {
     return res.status(403).json({ error: { message: 'Only Superadmin can manage the Superadmin account' } });
   }
-
-  const nextUser = { ...currentUser, ...update };
-  update.modulePermissions = employeeModulePermissions(requiredModulePermissions(update.modulePermissions), nextUser.workProfile);
-  if (nextUser.workProfile === 'director' && nextUser.modulePermissions?.some((permission) => permission.module === 'hr' && permission.access !== 'none')) return res.status(400).json({ error: { message: 'Directors cannot receive HR Management access' } });
+  if (update.workProfile === SUPERADMIN_ROLE && !actorIsSuperadmin) return res.status(403).json({ error: { message: 'Only Superadmin can assign the Superadmin profile' } });
+  if (update.workProfile === SUPERADMIN_ROLE) {
+    const limitError = await superadminProfileLimitError(currentUser._id);
+    if (limitError) return res.status(400).json({ error: { message: limitError } });
+  }
+  if (update.workProfile === 'admin') {
+    const currentUserData = typeof currentUser.toObject === 'function' ? currentUser.toObject() : currentUser;
+    const limitError = await adminAccessLimitError({ ...currentUserData, ...update }, currentUser._id);
+    if (limitError) return res.status(400).json({ error: { message: limitError } });
+  }
 
   if (update.phone !== undefined && !String(update.phone).trim()) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });

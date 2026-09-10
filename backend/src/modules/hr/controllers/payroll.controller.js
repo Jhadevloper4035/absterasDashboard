@@ -6,6 +6,7 @@ import { PayrollRun } from '../models/payroll-run.model.js';
 import { SalaryStructure } from '../models/salary-structure.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { notifyUsers } from '../../notifications/services/notification.service.js';
+import { notifyEmployeeRequestDecision, notifyHrApprovers } from '../services/approval-notification.service.js';
 import { createPayslipPdf } from '../services/payslip-pdf.service.js';
 import { calculatePayroll, generateBankFile } from '../services/payroll.service.js';
 
@@ -57,6 +58,7 @@ export async function requestAdvance(req, res) {
   if (!salary || monthlyAmount > salary) return res.status(400).json({ error: { message: 'Monthly deduction must not exceed the employee monthly salary' } });
   const advance = await Advance.create({ employee: employee._id, amount, reason: String(req.body.reason).trim(), deductionSchedule: { monthlyAmount } });
   await auditEvent(req, { action: 'hr.advance.request', entity: 'advance', entityId: advance._id, after: { amount } });
+  await notifyHrApprovers(req.user, { title: 'Salary advance awaiting approval', body: `${req.user.name || 'An employee'} requested an advance of ${amount}.`, link: '/hr/payroll/advances' });
   return res.status(201).json({ data: advance });
 }
 export async function createAdvance(req, res) {
@@ -75,10 +77,8 @@ export async function decideAdvance(req, res) {
   if (status === 'approved' && advance.deductionSchedule.monthlyAmount > await currentMonthlySalary(advance.employee)) return res.status(400).json({ error: { message: 'Monthly deduction exceeds the employee monthly salary' } });
   advance.status = status; advance.approvedBy = req.user._id; await advance.save();
   await auditEvent(req, { action: `hr.advance.${status}`, entity: 'advance', entityId: advance._id, after: { status } });
-  if (status === 'approved') {
-    const employee = await Employee.findById(advance.employee).select('user');
-    await notifyUsers([employee?.user], { title: 'Advance approved', body: `Your advance of ${advance.amount} was approved.`, metadata: { type: 'hr.advance.approved', fromUserId: req.user._id } });
-  }
+  const employee = await Employee.findById(advance.employee).select('user');
+  await notifyEmployeeRequestDecision(req.user, employee?.user, { title: `Advance ${status}`, body: `Your advance of ${advance.amount} was ${status}.`, type: `hr.advance.${status}`, link: '/hr/advances' });
   return res.json({ data: advance });
 }
 

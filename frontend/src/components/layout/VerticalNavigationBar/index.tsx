@@ -25,7 +25,7 @@ const VerticalNavigationBar = () => {
       .then((response) => setInventoryModules(response.data.filter((item) => item.access !== 'none').map((item) => item.module)))
       .catch(() => setInventoryModules([]))
   }, [token])
-  const menuItems = getMenuItems([user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || [])].filter(Boolean) as UserRole[], hrModules, inventoryModules, user?.modulePermissions || [], user?.workProfile)
+  const menuItems = getMenuItems([user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || []), ...(user?.workProfile === 'employee' ? ['employee'] : []), ...(user?.workProfile === 'admin' ? ['admin'] : []), ...(user?.workProfile === 'superadmin' ? ['superadmin'] : [])].filter(Boolean) as UserRole[], hrModules, inventoryModules, user?.modulePermissions || [], user?.workProfile)
 
   return (
     <div className="main-nav" id="leftside-menu-container">

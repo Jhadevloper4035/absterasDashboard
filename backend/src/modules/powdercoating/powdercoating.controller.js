@@ -3,7 +3,7 @@ import { DEFAULT_HSN_CODE, InventoryItem } from '../inventory/models/item.model.
 import { Client } from '../clients/models/client.model.js';
 import { Supplier } from '../inventory/models/supplier.model.js';
 import { StockTransaction } from '../inventory/models/transaction.model.js';
-import { LaserCutAudit, LaserCutOrder, LaserCutStock, LaserCutVendor } from '../lasercut/models.js';
+import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage, LaserCutVendor } from '../lasercut/models.js';
 import { PowderCoatChallan, PowderCoatOrder, PowderCoatVendor } from './models.js';
 
 const badRequest = (message) => Object.assign(new Error(message), { statusCode: 400 });
@@ -15,18 +15,105 @@ const orderNumber = () => `PC-${Date.now().toString(36).toUpperCase()}-${Math.ra
 const challanNumber = () => `PC-C-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const vendorFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'notes', 'status'];
 const vendorPayload = (body) => Object.fromEntries(vendorFields.filter((field) => body?.[field] !== undefined).map((field) => [field, body[field]]));
+const transferKey = (vendorRef, inventoryItemRef) => `${String(vendorRef)}:${String(inventoryItemRef)}`;
+const orderItemKey = (item) => item.laserCutStockRef ? `stock:${String(item.laserCutStockRef)}` : `product:${String(item.inventoryItemRef)}`;
+const usageOutputs = (usage) => usage.outputs?.length ? usage.outputs : usage.outputStockRef ? [{ outputStockRef: usage.outputStockRef, quantity: usage.panelsProduced }] : [];
+export const transactionUnsupported = (error) => /transactions are not supported|only servers in a sharded cluster can start a new transaction/i.test(String(error?.message || ''));
+
+export function remainingLaserCutTransferItems(challans, powderOrders) {
+  const available = new Map();
+  for (const challan of challans.filter((entry) => entry.type === 'OUT' && entry.status === 'DISPATCHED')) {
+    for (const item of challan.items || []) {
+      const key = transferKey(challan.vendorRef, item.inventoryItemRef);
+      const current = available.get(key) || { inventoryItemRef: item.inventoryItemRef, vendorRef: challan.vendorRef, vendorName: challan.vendorName, pickupAddressSnapshot: challan.deliveryAddress || challan.vendorAddressSnapshot, itemName: item.itemName, hsnCode: item.hsnCode, unit: item.unit, quantity: 0 };
+      current.quantity += Number(item.quantity);
+      available.set(key, current);
+    }
+  }
+  for (const order of powderOrders) {
+    for (const item of order.items || []) {
+      if (item.source !== 'LASER_CUT') continue;
+      const current = available.get(transferKey(item.pickupSupplierRef, item.inventoryItemRef));
+      if (current) current.quantity -= Number(item.quantity);
+    }
+  }
+  return [...available.values()].map((item) => ({ ...item, quantity: quantity(Math.max(item.quantity, 0)) })).filter((item) => item.quantity > 0);
+}
+
+async function laserCutTransferItemsFor(orderRef, session) {
+  const usages = LaserCutUsage.find({ orderRef, $or: [{ outputStockRef: { $exists: true } }, { 'outputs.outputStockRef': { $exists: true } }] }).select('outputStockRef panelsProduced outputs');
+  const challans = LaserCutChallan.find({ orderRef, type: 'OUT', status: 'DISPATCHED' });
+  const powderOrders = PowderCoatOrder.find({ laserCutOrderRef: orderRef }).select('items');
+  if (session) { usages.session(session); challans.session(session); powderOrders.session(session); }
+  const [producedUsages, dispatchedChallans, previousPowderOrders] = await Promise.all([usages.lean(), challans.lean(), powderOrders.lean()]);
+  const producedOutputs = producedUsages.flatMap(usageOutputs);
+  if (producedOutputs.length) {
+    const outputStocks = LaserCutStock.find({ _id: { $in: producedOutputs.map((output) => output.outputStockRef) } });
+    if (session) outputStocks.session(session);
+    return remainingProducedLaserCutTransferItems(await outputStocks.lean(), producedUsages, previousPowderOrders);
+  }
+  if (dispatchedChallans.some((challan) => challan.items.some((item) => item.cutOutputs?.length || item.cutOutput))) return [];
+  return remainingLaserCutTransferItems(dispatchedChallans, previousPowderOrders);
+}
+
+export function remainingProducedLaserCutTransferItems(stocks, usages, powderOrders) {
+  const stockById = new Map(stocks.map((stock) => [String(stock._id), stock]));
+  const available = new Map();
+  for (const usage of usages) {
+    for (const output of usageOutputs(usage)) {
+      const stock = stockById.get(String(output.outputStockRef));
+      if (!stock) continue;
+      const key = String(stock._id);
+      const current = available.get(key) || { laserCutStockRef: stock._id, inventoryItemRef: stock.inventoryItemRef, vendorRef: stock.vendorRef, vendorName: stock.vendorName, itemName: stock.itemName, hsnCode: stock.hsnCode, unit: stock.unit, dimensions: stock.dimensions, quantity: 0 };
+      current.quantity += Number(output.quantity);
+      available.set(key, current);
+    }
+  }
+  for (const order of powderOrders) for (const item of order.items || []) {
+    if (item.source !== 'LASER_CUT' || !item.laserCutStockRef) continue;
+    const current = available.get(String(item.laserCutStockRef));
+    if (current) current.quantity -= Number(item.quantity);
+  }
+  return [...available.values()].map((item) => ({ ...item, quantity: quantity(Math.max(item.quantity, 0)) })).filter((item) => item.quantity > 0);
+}
+
+async function assertLaserCutTransferAvailability(orderRef, items, session) {
+  const available = new Map((await laserCutTransferItemsFor(orderRef, session)).map((item) => [orderItemKey(item), item.quantity]));
+  const requested = new Map();
+  for (const item of items.filter((entry) => entry.source === 'LASER_CUT')) {
+    const key = orderItemKey(item);
+    requested.set(key, quantity((requested.get(key) || 0) + item.quantity));
+  }
+  for (const [key, amount] of requested) {
+    if (amount > Number(available.get(key) || 0)) throw conflict('Selected quantity exceeds the remaining balance for this Laser Cut order');
+  }
+}
+
+export function readyItemsFor(order) {
+  const ready = new Map();
+  for (const item of order.items || []) {
+    const key = orderItemKey(item);
+    const current = ready.get(key) || { ...(item.toObject?.() || item), quantity: 0 };
+    ready.set(key, current);
+  }
+  for (const batch of order.coatingBatches || []) for (const item of batch.items || []) {
+    const current = ready.get(orderItemKey(item));
+    if (current) current.quantity += Number(item.quantity);
+  }
+  return [...ready.values()];
+}
 
 export function remainingItemsFor(order, challans = []) {
   const expected = new Map();
-  for (const item of order.items || []) {
-    const key = String(item.inventoryItemRef);
-    const current = expected.get(key) || { ...(item.toObject?.() || item), quantity: 0 };
+  for (const item of readyItemsFor(order)) {
+    const key = orderItemKey(item);
+    const current = expected.get(key) || { ...item, quantity: 0 };
     current.quantity += Number(item.quantity);
     expected.set(key, current);
   }
   for (const challan of challans.filter((entry) => entry.type === 'SITE_OUT')) {
     for (const item of challan.items || []) {
-      const current = expected.get(String(item.inventoryItemRef));
+      const current = expected.get(orderItemKey(item));
       if (current) current.quantity = Math.max(current.quantity - Number(item.quantity), 0);
     }
   }
@@ -36,10 +123,23 @@ export function remainingItemsFor(order, challans = []) {
 function orderView(order, challans = []) {
   const undeliveredItems = remainingItemsFor(order, challans);
   const totalQuantity = (order.items || []).reduce((total, item) => total + Number(item.quantity), 0);
+  const readyQuantity = readyItemsFor(order).reduce((total, item) => total + Number(item.quantity), 0);
   const remainingItems = order.status === 'RETURNED' ? [] : undeliveredItems;
   const remainingQuantity = remainingItems.reduce((total, item) => total + Number(item.quantity), 0);
-  const deliveredQuantity = totalQuantity - undeliveredItems.reduce((total, item) => total + Number(item.quantity), 0);
-  return { ...(order.toObject?.() || order), remainingItems, totalQuantity, deliveredQuantity, remainingQuantity, deliveryStatus: remainingQuantity ? remainingQuantity === totalQuantity ? 'AT_VENDOR' : 'PARTIAL' : 'DELIVERED' };
+  const deliveredQuantity = readyQuantity - undeliveredItems.reduce((total, item) => total + Number(item.quantity), 0);
+  const pendingCoatingQuantity = Math.max(totalQuantity - readyQuantity, 0);
+  const deliveryStatus = order.status === 'RETURNED'
+    ? 'RETURNED'
+    : pendingCoatingQuantity === 0 && remainingQuantity === 0
+      ? 'DELIVERED'
+      : deliveredQuantity > 0
+        ? 'PARTIAL_DELIVERY'
+        : readyQuantity > 0 && pendingCoatingQuantity > 0
+          ? 'PARTIAL_READY'
+          : readyQuantity > 0
+            ? 'READY_FOR_DELIVERY'
+            : 'IN_COATING';
+  return { ...(order.toObject?.() || order), remainingItems, totalQuantity, readyQuantity, pendingCoatingQuantity, deliveredQuantity, remainingQuantity, deliveryStatus };
 }
 
 export async function normalizedItems(items) {
@@ -74,6 +174,7 @@ export async function normalizedItems(items) {
       itemName: product.name,
       hsnCode: String(product.hsnCode || DEFAULT_HSN_CODE),
       unit: product.unit,
+      ...(sourceStock?.dimensions ? { dimensions: sourceStock.dimensions } : {}),
       quantity: amount,
       shadeName,
       shadeCode,
@@ -97,12 +198,15 @@ async function orderContext(body, items) {
   ]);
   if (!client) throw missing('Parent client not found');
   if (!vendor) throw missing('Active powder-coating vendor not found');
+  const vendorAddress = String(vendor.address || '').trim();
+  if (!vendorAddress) throw badRequest('Powder-coating vendor address is required for the drop location');
   if (body.clientSiteRef && !site) throw missing('Child client site not found');
   let laserCutOrder;
   if (body.laserCutOrderRef) {
     if (!validId(body.laserCutOrderRef)) throw badRequest('Invalid laser-cut order');
     laserCutOrder = await LaserCutOrder.findById(body.laserCutOrderRef).lean();
     if (!laserCutOrder) throw missing('Laser-cut order not found');
+    if (items.some((item) => item.source !== 'LASER_CUT')) throw badRequest('A laser-cut order can only move laser-cut stock to powder coating');
   }
   // ponytail: Laser-cut stock is a shared vendor pool; add per-order stock allocation only if batches must reserve a specific dispatch.
   if (items.some((item) => item.source === 'LASER_CUT') && !laserCutOrder) throw badRequest('A laser-cut order is required for laser-cut stock');
@@ -114,7 +218,7 @@ async function orderContext(body, items) {
     clientSiteAddressSnapshot: site?.siteAddress || site?.shippingAddress || site?.billingAddress,
     vendorRef: vendor._id,
     vendorName: vendor.name,
-    vendorAddressSnapshot: String(vendor.address || '').trim() || undefined,
+    vendorAddressSnapshot: vendorAddress,
     transportType: String(body.transportType || '').trim() || undefined,
     vehicleNumber: String(body.vehicleNumber || '').trim() || undefined,
     eWayBillNumber: String(body.eWayBillNumber || '').trim() || undefined,
@@ -135,27 +239,39 @@ export async function createOrder(req, res) {
   const context = await orderContext(req.body || {}, items);
   const session = await mongoose.startSession();
   let created;
-  try {
-    await session.withTransaction(async () => {
-      const [order] = await PowderCoatOrder.create([{ ...context, orderNo: orderNumber(), createdBy: req.user._id }], { session });
-      const [challan] = await PowderCoatChallan.create([{ ...context, challanNo: challanNumber(), type: 'OUT', orderRef: order._id, createdBy: req.user._id }], { session });
-      for (const item of items) {
-        if (item.source === 'LASER_CUT') {
-          const stock = await LaserCutStock.findOneAndUpdate({ _id: item.laserCutStockRef, inventoryItemRef: item.inventoryItemRef, quantityAvailable: { $gte: item.quantity } }, { $inc: { quantityAvailable: -item.quantity } }, { new: true, session });
-          if (!stock) throw conflict(`Insufficient laser-cut stock for ${item.itemName}`);
-          await LaserCutAudit.create([{ entityType: 'LASER_CUT_STOCK', entityId: String(stock._id), action: 'TRANSFER_TO_POWDER_COATING', performedBy: req.user._id, after: stock.toObject(), metadata: { orderNo: order.orderNo, challanNo: challan.challanNo, quantity: item.quantity } }], { session });
-          continue;
-        }
-        const product = await InventoryItem.findOneAndUpdate({ _id: item.inventoryItemRef, quantityInStock: { $gte: item.quantity } }, { $inc: { quantityInStock: -item.quantity } }, { new: true, session });
-        if (!product) throw conflict(`Insufficient stock for ${item.itemName}`);
-        await StockTransaction.create([{ item: product._id, type: 'out', quantity: item.quantity, reference: challan.challanNo, note: `Powder coating outward challan ${challan.challanNo}`, performedBy: req.user._id }], { session });
+  const writeOrder = async (activeSession) => {
+    if (context.laserCutOrderRef) await assertLaserCutTransferAvailability(context.laserCutOrderRef, items, activeSession);
+    const [order] = await PowderCoatOrder.create([{ ...context, orderNo: orderNumber(), createdBy: req.user._id }], { session: activeSession });
+    const [challan] = await PowderCoatChallan.create([{ ...context, challanNo: challanNumber(), type: 'OUT', orderRef: order._id, createdBy: req.user._id }], { session: activeSession });
+    for (const item of items) {
+      if (item.source === 'LASER_CUT') {
+        const stock = await LaserCutStock.findOneAndUpdate({ _id: item.laserCutStockRef, inventoryItemRef: item.inventoryItemRef, quantityAvailable: { $gte: item.quantity } }, { $inc: { quantityAvailable: -item.quantity } }, { new: true, session: activeSession });
+        if (!stock) throw conflict(`Insufficient laser-cut stock for ${item.itemName}`);
+        await LaserCutAudit.create([{ entityType: 'LASER_CUT_STOCK', entityId: String(stock._id), action: 'TRANSFER_TO_POWDER_COATING', performedBy: req.user._id, after: stock.toObject(), metadata: { orderNo: order.orderNo, challanNo: challan.challanNo, quantity: item.quantity } }], { session: activeSession });
+        continue;
       }
-      order.outwardChallanRef = challan._id;
-      await order.save({ session });
-      created = { order, challan };
-    });
+      const product = await InventoryItem.findOneAndUpdate({ _id: item.inventoryItemRef, quantityInStock: { $gte: item.quantity } }, { $inc: { quantityInStock: -item.quantity } }, { new: true, session: activeSession });
+      if (!product) throw conflict(`Insufficient stock for ${item.itemName}`);
+      await StockTransaction.create([{ item: product._id, type: 'out', quantity: item.quantity, reference: challan.challanNo, note: `Powder coating outward challan ${challan.challanNo}`, performedBy: req.user._id }], { session: activeSession });
+    }
+    order.outwardChallanRef = challan._id;
+    await order.save({ session: activeSession });
+    created = { order, challan };
+  };
+  try {
+    await session.withTransaction(() => writeOrder(session));
+  } catch (error) {
+    if (!transactionUnsupported(error)) throw error;
+    await writeOrder();
   } finally { await session.endSession(); }
   return res.status(201).json({ data: created });
+}
+
+export async function getLaserCutTransferItems(req, res) {
+  if (!validId(req.params.id)) throw badRequest('Invalid laser-cut order');
+  const [order, items] = await Promise.all([LaserCutOrder.findById(req.params.id).lean(), laserCutTransferItemsFor(req.params.id)]);
+  if (!order) throw missing('Laser-cut order not found');
+  return res.json({ data: items });
 }
 
 export async function receiveOrder(req, res) {
@@ -193,35 +309,59 @@ export async function dispatchToSite(req, res) {
   const requested = new Map();
   for (const item of req.body.items) {
     if (!validId(item?.inventoryItemRef)) throw badRequest('Invalid powder-coating product');
+    if (item.laserCutStockRef && !validId(item.laserCutStockRef)) throw badRequest('Invalid laser-cut stock item');
     const amount = quantity(item.quantity);
     if (!Number.isFinite(amount) || amount <= 0) throw badRequest('Product quantity must be greater than zero');
-    requested.set(String(item.inventoryItemRef), (requested.get(String(item.inventoryItemRef)) || 0) + amount);
+    const key = orderItemKey(item);
+    const current = requested.get(key) || { inventoryItemRef: String(item.inventoryItemRef), laserCutStockRef: item.laserCutStockRef, quantity: 0 };
+    current.quantity += amount;
+    requested.set(key, current);
   }
-  const session = await mongoose.startSession();
-  let created;
-  try {
-    await session.withTransaction(async () => {
-      const order = await PowderCoatOrder.findOne({ _id: req.params.id, status: 'OUT' }).session(session);
-      if (!order) throw conflict('Only outward powder-coating orders can be sent to a client site');
-      const previous = await PowderCoatChallan.find({ orderRef: order._id, type: 'SITE_OUT' }).session(session);
-      const remainingByItem = new Map(remainingItemsFor(order, previous).map((item) => [String(item.inventoryItemRef), item]));
-      const items = [...requested].map(([inventoryItemRef, amount]) => {
-        const item = remainingByItem.get(inventoryItemRef);
-        if (!item) throw badRequest('Product does not belong to this powder-coating order');
-        if (amount > item.quantity) throw conflict(`Only ${item.quantity} ${item.unit || ''} of ${item.itemName} remains at powder coating`);
-        return { ...item, quantity: amount };
-      });
-      const [challan] = await PowderCoatChallan.create([{
-        challanNo: challanNumber(), type: 'SITE_OUT', challanDate: req.body.challanDate || undefined, orderRef: order._id,
-        clientRef: order.clientRef, clientName: order.clientName, clientSiteRef: order.clientSiteRef, clientSiteName: order.clientSiteName, clientSiteAddressSnapshot: order.clientSiteAddressSnapshot,
-        vendorRef: order.vendorRef, vendorName: order.vendorName, vendorAddressSnapshot: order.vendorAddressSnapshot,
-        transportType: String(req.body.transportType || '').trim() || undefined, vehicleNumber: String(req.body.vehicleNumber || '').trim() || undefined, eWayBillNumber: String(req.body.eWayBillNumber || '').trim() || undefined,
-        items, createdBy: req.user._id,
-      }], { session });
-      created = { challan, order: orderView(order, [...previous, challan]) };
-    });
-  } finally { await session.endSession(); }
+  const order = await PowderCoatOrder.findOne({ _id: req.params.id, status: 'OUT' });
+  if (!order) throw conflict('Only outward powder-coating orders can be sent to a client site');
+  const previous = await PowderCoatChallan.find({ orderRef: order._id, type: 'SITE_OUT' });
+  const remainingByItem = new Map(remainingItemsFor(order, previous).map((item) => [orderItemKey(item), item]));
+  const items = [...requested].map(([key, requestedItem]) => {
+    const item = remainingByItem.get(key);
+    if (!item) throw badRequest('Product does not belong to this powder-coating order');
+    if (requestedItem.quantity > item.quantity) throw conflict(`Only ${item.quantity} ${item.unit || ''} of ${item.itemName} remains at powder coating`);
+    return { ...item, quantity: requestedItem.quantity };
+  });
+  const [challan] = await PowderCoatChallan.create([{
+    challanNo: challanNumber(), type: 'SITE_OUT', challanDate: req.body.challanDate || undefined, orderRef: order._id,
+    clientRef: order.clientRef, clientName: order.clientName, clientSiteRef: order.clientSiteRef, clientSiteName: order.clientSiteName, clientSiteAddressSnapshot: order.clientSiteAddressSnapshot,
+    vendorRef: order.vendorRef, vendorName: order.vendorName, vendorAddressSnapshot: order.vendorAddressSnapshot,
+    transportType: String(req.body.transportType || '').trim() || undefined, vehicleNumber: String(req.body.vehicleNumber || '').trim() || undefined, eWayBillNumber: String(req.body.eWayBillNumber || '').trim() || undefined,
+    items, createdBy: req.user._id,
+  }]);
+  const created = { challan, order: orderView(order, [...previous, challan]) };
   return res.status(201).json({ data: created });
+}
+
+export async function recordReadyBatch(req, res) {
+  if (!validId(req.params.id)) throw badRequest('Invalid powder-coating order');
+  if (!Array.isArray(req.body?.items) || !req.body.items.length) throw badRequest('Enter at least one ready quantity');
+  const order = await PowderCoatOrder.findOne({ _id: req.params.id, status: 'OUT' });
+  if (!order) throw conflict('Only outward powder-coating orders can record ready batches');
+  const planned = new Map((order.items || []).map((item) => [orderItemKey(item), Number(item.quantity)]));
+  const ready = new Map(readyItemsFor(order).map((item) => [orderItemKey(item), Number(item.quantity)]));
+  const entries = new Map();
+  for (const item of req.body.items) {
+    if (!validId(item?.inventoryItemRef) || (item.laserCutStockRef && !validId(item.laserCutStockRef))) throw badRequest('Each ready product must be valid');
+    const amount = quantity(item.quantity);
+    if (!Number.isFinite(amount) || amount <= 0) throw badRequest('Each ready quantity must be greater than zero');
+    const key = orderItemKey(item);
+    entries.set(key, { inventoryItemRef: item.inventoryItemRef, laserCutStockRef: item.laserCutStockRef, quantity: quantity((entries.get(key)?.quantity || 0) + amount) });
+  }
+  for (const [key, item] of entries) {
+    if (!planned.has(key)) throw badRequest('Ready product does not belong to this powder-coating order');
+    if (item.quantity > Number(planned.get(key) || 0) - Number(ready.get(key) || 0)) throw conflict('Ready quantity cannot exceed the pending coating quantity');
+  }
+  const batchNo = `PCB-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  order.coatingBatches.push({ batchNo, items: [...entries.values()], recordedAt: new Date(), createdBy: req.user._id });
+  await order.save();
+  const challans = await PowderCoatChallan.find({ orderRef: order._id, type: 'SITE_OUT' }).lean();
+  return res.status(201).json({ data: { order: orderView(order, challans), batchNo } });
 }
 
 export async function listOrders(_req, res) {

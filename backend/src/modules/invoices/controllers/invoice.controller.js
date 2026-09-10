@@ -4,7 +4,7 @@ import { Client } from '../../clients/models/client.model.js';
 import { Invoice } from '../models/invoice.model.js';
 import { createInvoicePdf } from '../services/invoice-pdf.service.js';
 
-const INVOICE_FIELDS = ['financialYear', 'client', 'site', 'invoiceDate', 'grRrNumber', 'transport', 'placeOfSupply', 'placeOfSupplyCode', 'reverseCharge', 'vehicleNumber', 'station', 'dispatchFromAddress', 'lineItems', 'taxableAmount', 'igstAmount', 'cgstAmount', 'sgstAmount', 'roundOff', 'grandTotal', 'status', 'pdfFileUrl'];
+const INVOICE_FIELDS = ['financialYear', 'client', 'site', 'invoiceDate', 'poNumber', 'poDate', 'grRrNumber', 'transport', 'placeOfSupply', 'placeOfSupplyCode', 'reverseCharge', 'vehicleNumber', 'station', 'dispatchFromAddress', 'lineItems', 'taxableAmount', 'igstAmount', 'cgstAmount', 'sgstAmount', 'roundOff', 'grandTotal', 'status', 'pdfFileUrl'];
 const invoiceNumber = (financialYear) => `ABS-${financialYear}-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
 const requestedInvoiceNumber = (value, financialYear) => /^\d{4}-\d{2}$/.test(financialYear) && new RegExp(`^ABS-${financialYear}-[A-F0-9]{10}$`).test(String(value || '')) ? value : undefined;
 
@@ -50,11 +50,20 @@ export async function listInvoices(req, res) {
   if (req.query.site) query.site = req.query.site;
   if (req.query.status) query.status = req.query.status;
   if (search) query.invoiceNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+  const sort = req.query.sort === 'createdAt' ? { createdAt: -1 } : { invoiceDate: -1, createdAt: -1 };
   const [invoices, total] = await Promise.all([
-    Invoice.find(query).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').sort({ invoiceDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    Invoice.find(query).populate('client', 'name siteName').populate('site', 'name siteName siteAddress').sort(sort).skip((page - 1) * limit).limit(limit),
     Invoice.countDocuments(query),
   ]);
   return res.json({ data: invoices, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
+}
+
+export async function listInvoiceClients(_req, res) {
+  const clients = await Client.find({})
+    .select('name siteName siteAddress billingAddress shippingAddress state stateCode parentClient')
+    .sort({ name: 1 })
+    .limit(100);
+  return res.json({ data: clients });
 }
 
 export async function getInvoice(req, res) {

@@ -2,6 +2,7 @@ import { Employee } from '../models/employee.model.js';
 import { ExpenseClaim } from '../models/expense-claim.model.js';
 import { auditEvent } from '../../../services/audit.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../../services/upload.service.js';
+import { notifyEmployeeRequestDecision, notifyHrApprovers } from '../services/approval-notification.service.js';
 
 const ownEmployee = (user) => Employee.findOne({ user: user._id }).select('_id');
 const monthRange = (value) => {
@@ -37,6 +38,7 @@ export async function createExpenseClaim(req, res) {
   if (!employee || !String(req.body?.category || '').trim() || !note || !Number.isFinite(amount) || amount <= 0 || !receipts.length) return res.status(400).json({ error: { message: 'Category, amount, payment note, and at least one payment screenshot image are required' } });
   const claim = await ExpenseClaim.create({ employee: employee._id, category: String(req.body.category).trim(), amount, note, receipts });
   await auditEvent(req, { action: 'hr.expense.create', entity: 'expense_claim', entityId: claim._id, after: { amount, category: claim.category } });
+  await notifyHrApprovers(req.user, { title: 'Reimbursement awaiting approval', body: `${req.user.name || 'An employee'} submitted a ${claim.category} claim for ${amount}.`, link: '/hr/expenses/approvals' });
   return res.status(201).json({ data: await claimData(claim) });
 }
 
@@ -46,5 +48,7 @@ export async function decideExpenseClaim(req, res) {
   if (claim.status !== 'pending' || !['approved', 'rejected'].includes(status)) return res.status(400).json({ error: { message: 'Only pending claims can be approved or rejected' } });
   claim.status = status; claim.approvedBy = req.user._id; claim.decisionNote = String(req.body.decisionNote || '').trim(); await claim.save();
   await auditEvent(req, { action: `hr.expense.${status}`, entity: 'expense_claim', entityId: claim._id, after: { status } });
+  const employee = await Employee.findById(claim.employee).select('user');
+  await notifyEmployeeRequestDecision(req.user, employee?.user, { title: `Reimbursement ${status}`, body: `Your ${claim.category} reimbursement claim for ${claim.amount} was ${status}.`, type: `hr.expense.${status}`, link: '/hr/expenses' });
   return res.json({ data: await claimData(claim) });
 }

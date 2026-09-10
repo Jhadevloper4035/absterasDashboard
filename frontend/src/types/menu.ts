@@ -14,6 +14,7 @@ export type MenuItemType = {
   target?: HTMLAttributeAnchorTarget
   isDisabled?: boolean
   roles?: string[]
+  requiresManage?: boolean
   children?: MenuItemType[]
 }
 

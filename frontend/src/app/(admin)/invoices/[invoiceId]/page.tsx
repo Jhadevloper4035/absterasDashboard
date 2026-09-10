@@ -8,7 +8,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Alert, Button, Card, CardBody, Table } from 'react-bootstrap'
 
 type Invoice = {
-  invoiceNumber: string; financialYear: string; invoiceDate: string; placeOfSupply?: string; placeOfSupplyCode?: string; reverseCharge: boolean; grRrNumber?: string; transport?: string; vehicleNumber?: string; station?: string; dispatchFromAddress?: string; taxableAmount: number; igstAmount: number; cgstAmount: number; sgstAmount: number; roundOff: number; grandTotal: number
+  invoiceNumber: string; financialYear: string; invoiceDate: string; poNumber?: string; poDate?: string; placeOfSupply?: string; placeOfSupplyCode?: string; reverseCharge: boolean; grRrNumber?: string; transport?: string; vehicleNumber?: string; station?: string; dispatchFromAddress?: string; taxableAmount: number; igstAmount: number; cgstAmount: number; sgstAmount: number; roundOff: number; grandTotal: number
   lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string; unitPrice: number; lineAmount: number }[]
   client: { name: string; gstin?: string; billingAddress?: string; shippingAddress?: string }
   site?: { name: string; siteName?: string; siteAddress?: string; billingAddress?: string; shippingAddress?: string }
@@ -35,7 +35,7 @@ const InvoiceDetailPage = () => {
       </div>
       <div className="text-center border-bottom pb-3 mb-3"><h5 className="mb-1">TAX INVOICE</h5><h2 className="mb-1">ABSTERAS</h2><div>GSTIN: 06ABXFA0801H1ZK</div></div>
       <div className="row border-bottom mb-3 pb-3">
-        <div className="col-md-6"><strong>Invoice No.</strong> {invoice.invoiceNumber}<br /><strong>Date:</strong> {new Date(invoice.invoiceDate).toLocaleDateString()}<br /><strong>Place of Supply:</strong> {[invoice.placeOfSupply, invoice.placeOfSupplyCode && `(${invoice.placeOfSupplyCode})`].filter(Boolean).join(' ')}<br /><strong>Reverse Charge:</strong> {invoice.reverseCharge ? 'Yes' : 'No'}</div>
+        <div className="col-md-6"><strong>Invoice No.</strong> {invoice.invoiceNumber}<br /><strong>Date:</strong> {new Date(invoice.invoiceDate).toLocaleDateString()}<br /><strong>PO No.:</strong> {invoice.poNumber || '-'}<br /><strong>PO Date:</strong> {invoice.poDate ? new Date(invoice.poDate).toLocaleDateString() : '-'}<br /><strong>Place of Supply:</strong> {[invoice.placeOfSupply, invoice.placeOfSupplyCode && `(${invoice.placeOfSupplyCode})`].filter(Boolean).join(' ')}<br /><strong>Reverse Charge:</strong> {invoice.reverseCharge ? 'Yes' : 'No'}</div>
         <div className="col-md-6"><strong>GR/RR No.:</strong> {invoice.grRrNumber || '-'}<br /><strong>Transport:</strong> {invoice.transport || '-'}<br /><strong>Vehicle No.:</strong> {invoice.vehicleNumber || '-'}<br /><strong>Station:</strong> {invoice.station || '-'}<br /><strong>Dispatch from:</strong> {invoice.dispatchFromAddress || '-'}</div>
       </div>
       <div className="row mb-3">

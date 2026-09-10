@@ -19,7 +19,7 @@ export async function createArchitect(req, res) {
     return res.status(400).json({ error: { message: 'Mobile number is required' } });
   }
 
-  const architect = await Architect.create(architectPayload(req.body));
+  const architect = await Architect.create({ ...architectPayload(req.body), owner: req.user._id });
   return res.status(201).json({ data: architect });
 }
 
@@ -27,15 +27,15 @@ export async function listArchitects(req, res) {
   const page = Math.max(Number(req.query.page || 1), 1);
   const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 50);
   const [architects, total] = await Promise.all([
-    Architect.find().sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-    Architect.countDocuments(),
+    Architect.find({ owner: req.user._id }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    Architect.countDocuments({ owner: req.user._id }),
   ]);
 
   res.json({ data: architects, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
 }
 
 export async function deleteArchitect(req, res) {
-  const architect = await Architect.findOneAndDelete({ _id: req.params.id });
+  const architect = await Architect.findOneAndDelete({ _id: req.params.id, owner: req.user._id });
   if (!architect) {
     return res.status(404).json({ error: { message: 'Architect lead not found' } });
   }

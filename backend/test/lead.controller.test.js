@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { createLead, deleteLead, getLead, listLeads, updateLead } from '../src/modules/leads/controllers/lead.controller.js';
+import { createLead, deleteLead, getLead, listLeadAssignees, listLeads, updateLead } from '../src/modules/leads/controllers/lead.controller.js';
 import { Lead } from '../src/modules/leads/models/lead.model.js';
 import { User } from '../src/models/user.model.js';
 import { createAttachmentToken } from '../src/services/upload.service.js';
@@ -11,6 +11,7 @@ const originalLeadFindOne = Lead.findOne;
 const originalLeadFindOneAndDelete = Lead.findOneAndDelete;
 const originalLeadCountDocuments = Lead.countDocuments;
 const originalUserFindOne = User.findOne;
+const originalUserFind = User.find;
 
 function res() {
   return {
@@ -34,9 +35,10 @@ afterEach(() => {
   Lead.findOneAndDelete = originalLeadFindOneAndDelete;
   Lead.countDocuments = originalLeadCountDocuments;
   User.findOne = originalUserFindOne;
+  User.find = originalUserFind;
 });
 
-test('created leads always enter the admin assignment queue', async () => {
+test('created leads are assigned to their creator', async () => {
   let payload;
   Lead.create = async (body) => {
     payload = body;
@@ -52,23 +54,23 @@ test('created leads always enter the admin assignment queue', async () => {
         phone: '9876543210',
         status: 'ASSIGNED',
       },
-      user: { _id: 'sales-1', role: 'sales' },
+      user: { _id: 'sales-1', role: 'sales', modulePermissions: [{ module: 'leads', access: 'manage' }] },
     },
     response,
   );
 
   assert.equal(response.statusCode, 201);
-  assert.equal(payload.owner, undefined);
+  assert.equal(payload.owner, 'sales-1');
   assert.equal(payload.createdBy, 'sales-1');
-  assert.equal(payload.status, 'NEW');
-  assert.equal(payload.assignmentException, true);
+  assert.equal(payload.status, 'ASSIGNED');
+  assert.equal(payload.assignmentException, false);
 });
 
 test('lead creation requires mobile number', async () => {
   const response = res();
   await createLead(
     {
-      user: { _id: 'sales-1', role: 'sales' },
+      user: { _id: 'sales-1', role: 'sales', modulePermissions: [{ module: 'leads', access: 'manage' }] },
       body: {
         name: 'Acme',
         source: 'website',
@@ -90,11 +92,42 @@ test('salespeople can assign a lead when creating it', async () => {
   };
 
   const response = res();
-  await createLead({ user: { _id: 'sales-1', role: 'sales' }, body: { name: 'Acme', source: 'website', phone: '9876543210', owner: 'sales-2' } }, response);
+  await createLead({ user: { _id: 'sales-1', role: 'sales', modulePermissions: [{ module: 'leads', access: 'manage' }] }, body: { name: 'Acme', source: 'website', phone: '9876543210', owner: 'sales-2' } }, response);
 
   assert.equal(response.statusCode, 201);
   assert.equal(payload.owner, 'sales-2');
   assert.equal(payload.status, 'ASSIGNED');
+});
+
+test('lead creators cannot explicitly assign a lead to themselves', async () => {
+  const response = res();
+
+  await createLead({ user: { _id: 'sales-1', modulePermissions: [{ module: 'leads', access: 'manage' }] }, body: { name: 'Acme', source: 'website', phone: '9876543210', owner: 'sales-1' } }, response);
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.error.message, 'Assign the lead to another active user with Lead Management access');
+});
+
+test('lead assignees include active lead managers but exclude administrators', async () => {
+  let query;
+  User.find = (filter) => {
+    query = filter;
+    return { select() { return this; }, sort() { return this; }, limit() { return Promise.resolve([]); } };
+  };
+
+  await listLeadAssignees({ user: { _id: 'sales-1' } }, res());
+
+  assert.deepEqual(query, {
+    status: 'active',
+    _id: { $ne: 'sales-1' },
+    modulePermissions: { $elemMatch: { module: 'leads', access: 'manage' } },
+    $nor: [
+      { role: { $in: ['admin', 'superadmin'] } },
+      { additionalRoles: { $in: ['admin', 'superadmin'] } },
+      { accessTypes: { $in: ['admin', 'superadmin'] } },
+      { workProfile: { $in: ['admin', 'superadmin'] } },
+    ],
+  });
 });
 
 test('lead creation stores lead cost and trusted categorized documents', async () => {
@@ -131,7 +164,7 @@ test('non-sales team roles cannot create leads directly', async () => {
   assert.equal(response.statusCode, 403);
 });
 
-test('salespeople can list only their assigned leads', async () => {
+test('users can list leads they created or are assigned', async () => {
   let query;
   Lead.find = (filter) => {
     query = filter;
@@ -152,9 +185,9 @@ test('salespeople can list only their assigned leads', async () => {
   };
   Lead.countDocuments = async () => 0;
 
-  await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: {} }, res());
+  await listLeads({ user: { _id: 'sales-1', modulePermissions: [{ module: 'leads', access: 'manage' }] }, query: {} }, res());
 
-  assert.deepEqual(query, { owner: 'sales-1' });
+  assert.deepEqual(query, { $or: [{ owner: 'sales-1' }, { createdBy: 'sales-1' }] });
 });
 
 test('closed leads filter can be limited to the salesperson who closed them', async () => {
@@ -167,10 +200,10 @@ test('closed leads filter can be limited to the salesperson who closed them', as
 
   await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: { closed: 'true', closedByMe: 'true' } }, res());
 
-  assert.deepEqual(query, { owner: 'sales-1', status: { $in: ['WON', 'LOST', 'ON_HOLD'] }, statusHistory: { $elemMatch: { actor: 'sales-1', to: { $in: ['WON', 'LOST', 'ON_HOLD'] } } } });
+  assert.deepEqual(query, { $or: [{ owner: 'sales-1' }, { createdBy: 'sales-1' }], status: { $in: ['WON', 'LOST', 'ON_HOLD'] }, statusHistory: { $elemMatch: { actor: 'sales-1', to: { $in: ['WON', 'LOST', 'ON_HOLD'] } } } });
 });
 
-test('my leads filter always uses the signed-in salesperson', async () => {
+test('my leads cannot be widened with an owner query parameter', async () => {
   let query;
   Lead.find = (filter) => {
     query = filter;
@@ -180,7 +213,7 @@ test('my leads filter always uses the signed-in salesperson', async () => {
 
   await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: { mine: 'true', owner: 'sales-2' } }, res());
 
-  assert.deepEqual(query, { owner: 'sales-1' });
+  assert.deepEqual(query, { $or: [{ owner: 'sales-1' }, { createdBy: 'sales-1' }] });
 });
 
 test('lead list supports status and upcoming meeting filters', async () => {
@@ -210,6 +243,23 @@ test('lead list supports status and upcoming meeting filters', async () => {
   assert.ok(query['meetingHistory.startsAt'].$gte instanceof Date);
 });
 
+test('scheduled meetings can be limited to the user who scheduled them', async () => {
+  let query;
+  Lead.find = (filter) => {
+    query = filter;
+    return { populate() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return Promise.resolve([]); } };
+  };
+  Lead.countDocuments = async () => 0;
+
+  await listLeads({ user: { _id: 'sales-1', role: 'sales' }, query: { status: 'MEETING_SCHEDULED', scheduledByMe: 'true' } }, res());
+
+  assert.deepEqual(query, {
+    $or: [{ owner: 'sales-1' }, { createdBy: 'sales-1' }],
+    status: 'MEETING_SCHEDULED',
+    meetingHistory: { $elemMatch: { scheduledBy: 'sales-1', status: 'SCHEDULED' } },
+  });
+});
+
 test('lead list supports pending assignment filter', async () => {
   let query;
   Lead.find = (filter) => {
@@ -233,7 +283,7 @@ test('lead list supports pending assignment filter', async () => {
 
   await listLeads({ user: { _id: 'admin-1', role: 'admin' }, query: { assignmentException: 'true' } }, res());
 
-  assert.deepEqual(query, { assignmentException: true });
+  assert.deepEqual(query, { $or: [{ owner: 'admin-1' }, { createdBy: 'admin-1' }], assignmentException: true });
 });
 
 test('lead list ignores invalid status filters', async () => {
@@ -259,22 +309,27 @@ test('lead list ignores invalid status filters', async () => {
 
   await listLeads({ user: { _id: 'admin-1', role: 'admin' }, query: { status: 'NOT_REAL' } }, res());
 
-  assert.deepEqual(query, {});
+  assert.deepEqual(query, { $or: [{ owner: 'admin-1' }, { createdBy: 'admin-1' }] });
 });
 
 test('lead detail populates meeting schedule history', async () => {
   const populated = [];
-  Lead.findOne = () => ({
-    populate(path) {
-      populated.push(path);
-      return this;
-    },
-  });
+  let query;
+  Lead.findOne = (filter) => {
+    query = filter;
+    return {
+      populate(path) {
+        populated.push(path);
+        return this;
+      },
+    };
+  };
 
   const response = res();
   await getLead({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'lead-1' } }, response);
 
   assert.equal(response.statusCode, 200);
+  assert.deepEqual(query, { _id: 'lead-1', $or: [{ owner: 'admin-1' }, { createdBy: 'admin-1' }] });
   assert.ok(populated.includes('meetingHistory.scheduledBy'));
 });
 
@@ -285,7 +340,7 @@ test('salespeople can assign leads', async () => {
   const response = res();
   await updateLead(
     {
-      user: { _id: 'sales-1', role: 'sales' },
+      user: { _id: 'sales-1', role: 'sales', modulePermissions: [{ module: 'leads', access: 'manage' }] },
       params: { id: 'lead-1' },
       body: { owner: 'sales-2' },
     },
@@ -320,7 +375,7 @@ test('assigned salesperson closing a lead records the closure', async () => {
   assert.deepEqual(lead.statusHistory, [{ from: 'NEGOTIATION', to: 'WON', reason: undefined, actor: 'sales-1' }]);
 });
 
-test('only admins can delete leads', async () => {
+test('only lead managers can delete leads they created or are assigned', async () => {
   let deletedFilter;
   Lead.findOneAndDelete = async (filter) => {
     deletedFilter = filter;
@@ -332,10 +387,10 @@ test('only admins can delete leads', async () => {
   assert.equal(salesResponse.statusCode, 403);
   assert.equal(deletedFilter, undefined);
 
-  const adminResponse = res();
-  await deleteLead({ user: { _id: 'admin-1', role: 'admin' }, params: { id: 'lead-1' } }, adminResponse);
-  assert.equal(adminResponse.statusCode, 200);
-  assert.deepEqual(deletedFilter, { _id: 'lead-1' });
+  const managerResponse = res();
+  await deleteLead({ user: { _id: 'manager-1', modulePermissions: [{ module: 'leads', access: 'manage' }] }, params: { id: 'lead-1' } }, managerResponse);
+  assert.equal(managerResponse.statusCode, 200);
+  assert.deepEqual(deletedFilter, { _id: 'lead-1', $or: [{ owner: 'manager-1' }, { createdBy: 'manager-1' }] });
 });
 
 test('admin and assigned salespeople can add lead notes', async () => {
@@ -369,7 +424,10 @@ test('admin and assigned salespeople can add lead notes', async () => {
     res(),
   );
 
-  assert.deepEqual(queries, [{ _id: 'lead-1' }, { _id: 'lead-1', owner: 'sales-1' }]);
+  assert.deepEqual(queries, [
+    { _id: 'lead-1', $or: [{ owner: 'admin-1' }, { createdBy: 'admin-1' }] },
+    { _id: 'lead-1', $or: [{ owner: 'sales-1' }, { createdBy: 'sales-1' }] },
+  ]);
   assert.deepEqual(
     lead.notes.map((note) => [note.text, note.createdBy]),
     [

@@ -40,6 +40,7 @@ type Task = {
 
 const personName = (person?: string | TaskUser) => (typeof person === 'object' ? person.name : 'Not assigned')
 const personRole = (person?: string | TaskUser) => (typeof person === 'object' ? person.role : '')
+const personId = (person?: string | TaskUser) => (typeof person === 'object' ? person._id : person)
 const text = (value?: string, empty = 'Not added yet') => {
   const clean = value?.trim()
   if (!clean) return empty
@@ -94,14 +95,21 @@ const TaskDetail = () => {
   const user = useAuthStore((state) => state.user)
   const [task, setTask] = useState<Task>()
   const [note, setNote] = useState({ title: '', description: '', attachments: [] as TaskAttachment[] })
+  const [submissionAttachments, setSubmissionAttachments] = useState<TaskAttachment[]>([])
+  const [submissionDescription, setSubmissionDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadingNote, setUploadingNote] = useState(false)
   const [uploadNoteProgress, setUploadNoteProgress] = useState(0)
   const [uploadNoteFailed, setUploadNoteFailed] = useState(false)
+  const [uploadingSubmission, setUploadingSubmission] = useState(false)
+  const [submissionUploadProgress, setSubmissionUploadProgress] = useState(0)
+  const [submissionUploadFailed, setSubmissionUploadFailed] = useState(false)
   const [error, setError] = useState('')
-  const canUpdateTask = ['sales', 'operations', 'accounts', 'designers'].includes(user?.role || '')
-  const backPath = ['superadmin', 'admin'].includes(user?.role || '') ? '/tasks/all' : '/tasks/assigned-to-me'
+  const isTaskCreator = Boolean(task && String(personId(task.createdBy)) === String(user?._id || ''))
+  const canCloseTask = Boolean(task && task.status !== 'Done' && String(personId(task.assignee)) === String(user?._id || ''))
+  const canAddTaskNote = isTaskCreator || canCloseTask
+  const backPath = ['superadmin', 'admin'].includes(user?.role || '') ? '/dashboard/analytics' : '/tasks/assigned-to-me'
 
   useEffect(() => {
     if (!token || !taskId) return
@@ -115,7 +123,7 @@ const TaskDetail = () => {
 
   const addNote = async (event: FormEvent) => {
     event.preventDefault()
-    if (!token || !taskId || !note.title.trim() || !note.description.trim()) return
+    if (!token || !taskId || !canAddTaskNote || !note.title.trim() || !note.description.trim()) return
     if (uploadingNote) {
       setError('Please wait until attachments finish uploading before saving the note.')
       return
@@ -163,6 +171,49 @@ const TaskDetail = () => {
     }
   }
 
+  const uploadSubmissionFiles = async (files: UploadFileType[]) => {
+    if (!token || !files.length) return
+    setUploadingSubmission(true)
+    setSubmissionUploadProgress(0)
+    setSubmissionUploadFailed(false)
+    setError('')
+    try {
+      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setSubmissionUploadProgress)
+      setSubmissionAttachments((value) => [...value, ...attachments])
+    } catch (e) {
+      setSubmissionUploadFailed(true)
+      setError(e instanceof Error ? e.message : 'Unable to upload submission attachments')
+    } finally {
+      setUploadingSubmission(false)
+    }
+  }
+
+  const submitTask = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!token || !taskId || !canCloseTask) return
+    if (uploadingSubmission) {
+      setError('Please wait until attachments finish uploading before submitting the task.')
+      return
+    }
+    if (submissionUploadFailed) {
+      setError('Attachment upload failed. Please upload the file again before submitting the task.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await apiFetch<{ data: Task }>(`/tasks/${taskId}`, { method: 'PATCH', token, body: JSON.stringify({ status: 'Done', submissionDescription, submissionAttachments }) })
+      setTask(res.data)
+      toast.success('Task submitted')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to submit task'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <>
       <PageBreadcrumb subName="Task Management" title={task?.title || 'Task Detail'} />
@@ -182,7 +233,7 @@ const TaskDetail = () => {
               <div className="text-muted">{task.ticketNumber ? `${task.ticketNumber} · ` : ''}Assignee: {personName(task.assignee)}</div>
             </div>
             <div className="d-flex gap-2">
-              {task.status !== 'Done' && canUpdateTask && <Link to={`/tasks/${task._id}/edit`} className="btn btn-primary">Update</Link>}
+              {task.status !== 'Done' && isTaskCreator && <Link to={`/tasks/${task._id}/edit`} className="btn btn-primary">Update</Link>}
               <Link to={backPath} className="btn btn-outline-secondary">
                 Back
               </Link>
@@ -251,7 +302,44 @@ const TaskDetail = () => {
               </Card>
             </Col>
             <Col xl={4}>
-              {task.status !== 'Done' && <Card>
+              {canCloseTask && <Card className="mb-3">
+                <CardBody>
+                  <h4 className="card-title mb-1">Submit task</h4>
+                  <p className="text-muted mb-3">Add closing words or completion files if needed, then submit the task.</p>
+                  <Form onSubmit={submitTask}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Closing words / explanation (optional)</Form.Label>
+                      <Form.Control as="textarea" rows={3} value={submissionDescription} onChange={(event) => setSubmissionDescription(event.target.value)} placeholder="Explain anything the task creator should know." />
+                    </Form.Group>
+                    <DropzoneFormInput
+                      label="Completion attachments (optional)"
+                      labelClassName="form-label"
+                      iconProps={{ icon: 'bx:cloud-upload', height: 28, width: 28 }}
+                      text="Attach files"
+                      textClassName="fs-5"
+                      helpText={<span className="text-muted fs-13">Images, PDF, CSV, TXT. Up to 5 files.</span>}
+                      showPreview={false}
+                      onFileUpload={uploadSubmissionFiles}
+                    />
+                    {uploadingSubmission && (
+                      <div className="text-muted fs-13 mt-2">
+                        <div className="d-flex align-items-center gap-2 mb-1">
+                          <Spinner className="spinner-border-sm" tag="span" />
+                          <span>Uploading attachment... {submissionUploadProgress}%</span>
+                        </div>
+                        <div className="progress" style={{ height: 6 }}>
+                          <div className="progress-bar" style={{ width: `${submissionUploadProgress}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    {!!submissionAttachments.length && <div className="mt-3"><AttachmentDownloadList attachments={submissionAttachments} /></div>}
+                    <Button className="mt-3" type="submit" variant="success" disabled={saving || uploadingSubmission}>
+                      {uploadingSubmission ? 'Uploading...' : saving ? 'Submitting...' : 'Submit Task'}
+                    </Button>
+                  </Form>
+                </CardBody>
+              </Card>}
+              {task.status !== 'Done' && canAddTaskNote && <Card>
                 <CardBody>
                   <h4 className="card-title mb-3">Add note</h4>
                   <Form onSubmit={addNote}>
