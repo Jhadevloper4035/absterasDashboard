@@ -1,0 +1,38 @@
+Development users
+Source database: development
+
+1. Abhay
+   Email: raj.abhay6860@gmail.com
+   Access: director; role=sales; todo=manage, notifications=manage, leads=manage, tasks=manage
+
+2. Absteras admin
+   Email: absterasdigital@gmail.com
+   Access: admin; role=user; full administrative access
+
+3. Harpreet
+   Email: mrharpreet6@gmail.com
+   Access: director; role=sales; todo=manage, notifications=manage, leads=manage, tasks=manage
+
+4. Lalit
+   Email: absteras.lalitverma@gmail.com
+   Access: employee; role=designers; accessTypes=employee; todo=manage, notifications=manage, tasks=manage
+
+5. Manish
+   Email: absteras.manishsangwan@gmail.com
+   Access: employee; role=operations; accessTypes=employee; todo=manage, notifications=manage, tasks=manage, clients=manage, challans=manage, inventory=manage, laser-cut=manage, powder-coating=manage, returns=manage
+
+6. Navroj kumar jha
+   Email: navrojjha21@gmail.com
+   Access: superadmin; role=superadmin; full administrative access
+
+7. Ritu
+   Email: absteras.ritu@gmail.com
+   Access: employee; role=accounts; accessTypes=employee, hr-management; todo=manage, notifications=manage, tasks=manage, hr=manage, clients=manage, invoices=manage
+
+8. Saurav
+   Email: absteras.sauravpanday@gmail.com
+   Access: employee; role=designers; accessTypes=employee; todo=manage, notifications=manage, tasks=manage
+
+9. Shailender
+   Email: shailendrakumardpmt@gmail.com
+   Access: director; role=sales; todo=manage, notifications=manage, leads=manage, tasks=manage
