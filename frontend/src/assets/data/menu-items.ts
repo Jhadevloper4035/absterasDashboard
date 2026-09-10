@@ -200,9 +200,6 @@ export const MENU_ITEMS: MenuItemType[] = [
     children: [
       { key: 'laser-cut-dashboard', label: 'Dashboard', url: '/laser-cut-management', parentKey: 'laser-cut-management' },
       { key: 'laser-cut-current-orders', label: 'Current Orders', url: '/laser-cut-management/orders', parentKey: 'laser-cut-management' },
-      { key: 'laser-cut-create-challan', label: 'Move In', url: '/laser-cut-management/challans/create', parentKey: 'laser-cut-management', requiresManage: true },
-      { key: 'laser-cut-move-out', label: 'Move Out', url: '/laser-cut-management/move-out', parentKey: 'laser-cut-management', requiresManage: true },
-      { key: 'laser-cut-vendors', label: 'Vendors', url: '/laser-cut-management/vendors', parentKey: 'laser-cut-management' },
     ],
   },
   {

@@ -15,9 +15,9 @@ const hasInventoryAccess = (modules: string[], permissions: ModulePermission[], 
 const hasAppAccess = (permissions: ModulePermission[], module?: AppModule, requiresManage = false) => !module || permissions.some((permission) => permission.module === module && (requiresManage ? permission.access === 'manage' : permission.access !== 'none'))
 const hasFullAppAccess = (roles: string[], workProfile?: string) => roles.includes('superadmin') || roles.includes('admin') || workProfile === 'superadmin' || workProfile === 'admin'
 const isSuperadminOnly = (item: MenuItemType) => item.roles?.length === 1 && item.roles[0] === 'superadmin'
-const HIDDEN_DEMO_MENU_KEYS = new Set(['pages', 'widgets', 'base-ui', 'advanced-ui', 'charts', 'tables', 'icons', 'maps', 'badge-menu', 'menuitem', 'disabled-item'])
+const HIDDEN_SIDEBAR_MENU_KEYS = new Set(['pages', 'widgets', 'base-ui', 'advanced-ui', 'charts', 'tables', 'icons', 'maps', 'badge-menu', 'menuitem', 'disabled-item'])
 const isVisible = (item: MenuItemType, roles: string[] = [], hrModules: string[] = [], inventoryModules: string[] = [], modulePermissions: ModulePermission[] = [], workProfile?: 'superadmin' | 'admin' | 'client' | 'director' | 'employee', parentModule?: AppModule) => {
-  if (HIDDEN_DEMO_MENU_KEYS.has(item.key)) return false
+  if (HIDDEN_SIDEBAR_MENU_KEYS.has(item.key)) return false
   if ((item.key === 'employee-panel' || item.parentKey === 'employee-panel') && workProfile !== 'employee') return false
   const module = APP_MENU_MODULES[item.key] || parentModule
   const fullAccess = hasFullAppAccess(roles, workProfile)

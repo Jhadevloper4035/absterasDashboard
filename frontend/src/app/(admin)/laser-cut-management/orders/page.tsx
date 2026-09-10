@@ -1,6 +1,6 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 import Swal from 'sweetalert2'
@@ -22,8 +22,9 @@ export default function LaserCutCurrentOrdersPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState('')
-  const [orderFilter, setOrderFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [clientFilter, setClientFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const load = async () => {
     setLoading(true)
     try {
@@ -40,8 +41,14 @@ export default function LaserCutCurrentOrdersPage() {
   }, [])
   const remainingClass = (value: number) => (value > 0 ? 'text-danger fw-semibold' : 'text-success fw-semibold')
   const progress = (planned: number, ready: number, pending: number) => `${planned} planned · ${ready} ready · ${pending} pending`
-  const clientNames = [...new Set(orders.map((order) => order.clientName || '—'))].sort()
-  const visibleOrders = orders.filter((order) => (!orderFilter || order._id === orderFilter) && (!clientFilter || (order.clientName || '—') === clientFilter))
+  const clientNames = useMemo(() => [...new Set(orders.map((order) => order.clientName || '—'))].sort(), [orders])
+  const visibleOrders = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return orders.filter((order) => {
+      const matchesSearch = !query || [order.orderName, order.clientName].some((value) => value?.toLowerCase().includes(query))
+      return matchesSearch && (!clientFilter || (order.clientName || '—') === clientFilter) && (!statusFilter || order.status === statusFilter)
+    })
+  }, [orders, search, clientFilter, statusFilter])
   const daysInLaserCut = (createdAt: string) => Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000))
   const remove = async (order: Order) => {
     const confirmation = await Swal.fire({ icon: 'warning', title: `Delete order ${order.orderName}?`, text: 'Dispatched products will be moved back to inventory. This cannot be undone.', showCancelButton: true, confirmButtonText: 'Delete order', confirmButtonColor: '#dc3545', cancelButtonText: 'Keep order', reverseButtons: true })
@@ -51,7 +58,6 @@ export default function LaserCutCurrentOrdersPage() {
     try {
       const response = await apiFetch<{ data: { restoredItems: number } }>(`/laser-cut-management/orders/${order._id}`, { method: 'DELETE' })
       setOrders((current) => current.filter((item) => item._id !== order._id))
-      if (orderFilter === order._id) setOrderFilter('')
       await Swal.fire({ icon: 'success', title: 'Order deleted', text: `${response.data.restoredItems} product line(s) moved back to inventory.`, timer: 1800, showConfirmButton: false })
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Unable to delete laser-cut order'
@@ -74,9 +80,6 @@ export default function LaserCutCurrentOrdersPage() {
           <Button variant="outline-secondary" onClick={load} disabled={loading}>
             Refresh
           </Button>
-          <Link className="btn btn-primary" to="/laser-cut-management">
-            Laser cut dashboard
-          </Link>
         </div>
       </div>
       {error && <Alert variant="danger">{error}</Alert>}
@@ -84,11 +87,8 @@ export default function LaserCutCurrentOrdersPage() {
         <CardBody>
           <div className="row g-2 mb-3">
             <div className="col-md-4">
-              <Form.Label htmlFor="laser-cut-order-filter">Order</Form.Label>
-              <Form.Select id="laser-cut-order-filter" value={orderFilter} onChange={(event) => setOrderFilter(event.target.value)}>
-                <option value="">All orders</option>
-                {orders.map((order) => <option key={order._id} value={order._id}>{order.orderName}</option>)}
-              </Form.Select>
+              <Form.Label htmlFor="laser-cut-search">Search</Form.Label>
+              <Form.Control id="laser-cut-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Order or client" />
             </div>
             <div className="col-md-4">
               <Form.Label htmlFor="laser-cut-client-filter">Client</Form.Label>
@@ -97,8 +97,15 @@ export default function LaserCutCurrentOrdersPage() {
                 {clientNames.map((clientName) => <option key={clientName} value={clientName}>{clientName}</option>)}
               </Form.Select>
             </div>
+            <div className="col-md-2">
+              <Form.Label htmlFor="laser-cut-status-filter">Status</Form.Label>
+              <Form.Select id="laser-cut-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="">All statuses</option>
+                {['PENDING', 'PARTIAL', 'COMPLETE'].map((status) => <option key={status} value={status}>{status}</option>)}
+              </Form.Select>
+            </div>
             <div className="col-md-2 d-flex align-items-end">
-              <Button className="w-100" variant="outline-secondary" onClick={() => { setOrderFilter(''); setClientFilter('') }}>
+              <Button className="w-100" variant="outline-secondary" onClick={() => { setSearch(''); setClientFilter(''); setStatusFilter('') }}>
                 Clear filters
               </Button>
             </div>
