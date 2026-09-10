@@ -9,6 +9,7 @@ const CreateUser = lazy(() => import('@/app/(admin)/users/create/page'))
 const EditUser = lazy(() => import('@/app/(admin)/users/[userId]/edit/page'))
 const LoginHistory = lazy(() => import('@/app/(admin)/users/login-history/page'))
 const PasswordReset = lazy(() => import('@/app/(admin)/users/password-reset/page'))
+const PasswordApprovals = lazy(() => import('@/app/(admin)/users/password-approvals/page'))
 const HealthStatus = lazy(() => import('@/app/(admin)/health/status/page'))
 const Employees = lazy(() => import('@/app/(admin)/hr/employees/page'))
 const EmployeeDetail = lazy(() => import('@/app/(admin)/hr/employees/[employeeId]/page'))
@@ -278,6 +279,12 @@ const generalRoutes: RoutesProps[] = [
     path: '/users/password-reset',
     name: 'Password Reset',
     element: <PasswordReset />,
+  },
+  {
+    path: '/users/password-approvals',
+    name: 'Password Approvals',
+    element: <PasswordApprovals />,
+    roles: ['superadmin', 'admin'],
   },
   {
     path: '/health/status',

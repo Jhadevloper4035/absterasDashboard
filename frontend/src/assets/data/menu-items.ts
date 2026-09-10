@@ -739,6 +739,14 @@ export const MENU_ITEMS: MenuItemType[] = [
         url: '/users/password-reset',
         parentKey: 'user-management',
       },
+      {
+        key: 'users-password-approvals',
+        icon: 'bx:check-shield',
+        label: 'Password Approvals',
+        url: '/users/password-approvals',
+        parentKey: 'user-management',
+        roles: ['superadmin', 'admin'],
+      },
     ],
   },
 ]
