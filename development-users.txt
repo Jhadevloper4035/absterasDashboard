@@ -5,6 +5,45 @@ Snapshot: 2026-09-10
 This report contains 9 user accounts. Passwords, password-reset data, sessions,
 authentication tokens, and document storage keys are excluded.
 
+LOGIN CREDENTIALS — DEVELOPMENT ONLY
+Use the development CRM sign-in page and the temporary password provided separately by the administrator.
+
+1. Navroj kumar jha
+   Email ID: navrojjha21@gmail.com
+   Password: Provided separately
+
+2. Abhay
+   Email ID: raj.abhay6860@gmail.com
+   Password: Provided separately
+
+3. Harpreet
+   Email ID: mrharpreet6@gmail.com
+   Password: Provided separately
+
+4. Shailender
+   Email ID: shailendrakumardpmt@gmail.com
+   Password: Provided separately
+
+5. Ritu
+   Email ID: absteras.ritu@gmail.com
+   Password: Provided separately
+
+6. Manish
+   Email ID: absteras.manishsangwan@gmail.com
+   Password: Provided separately
+
+7. Lalit
+   Email ID: absteras.lalitverma@gmail.com
+   Password: Provided separately
+
+8. Saurav
+   Email ID: absteras.sauravpanday@gmail.com
+   Password: Provided separately
+
+9. Absteras admin
+   Email ID: absterasdigital@gmail.com
+   Password: Provided separately
+
 1. Navroj kumar jha
    Account: navrojjha21@gmail.com | phone 8448520798 | role superadmin | work profile superadmin | active
    Access: full administrative access

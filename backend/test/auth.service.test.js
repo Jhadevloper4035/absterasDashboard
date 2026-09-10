@@ -148,11 +148,20 @@ test('notifications require an explicit module permission', () => {
   assert.equal(allowed, undefined);
 });
 
-test('employee profiles require assigned HR access', () => {
-  let denied;
+test('employee profiles have self-service HR access without HR management access', async () => {
+  let selfServiceError;
   const user = { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'none' }] };
-  authorizeAppModule('hr')({ method: 'GET', user }, {}, (error) => { denied = error; });
-  assert.equal(denied.statusCode, 403);
+  authorizeAppModule('hr')({ method: 'GET', user }, {}, (error) => { selfServiceError = error; });
+  assert.equal(selfServiceError, undefined);
+
+  const selfServiceRequest = { method: 'POST', user };
+  await authorizeHrModule('leave', 'view')(selfServiceRequest, {}, (error) => { selfServiceError = error; });
+  assert.equal(selfServiceError, undefined);
+  assert.equal(selfServiceRequest.hrAccess, 'view');
+
+  let managementError;
+  await authorizeHrModule('leave', 'manage')({ method: 'POST', user }, {}, (error) => { managementError = error; });
+  assert.equal(managementError.statusCode, 403);
   assert.equal(appAccessLevel(user, 'hr'), 0);
 });
 

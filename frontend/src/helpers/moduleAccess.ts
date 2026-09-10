@@ -22,7 +22,7 @@ export const moduleLabel = (module: AppModule) => ({
 }[module])
 export const hasFullAppAccess = (user?: UserType) => [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || []), user?.workProfile]
   .some((role) => role === 'superadmin' || role === 'admin')
-export const canAccessModule = (user: UserType | undefined, module?: AppModule, required: RequiredModuleAccess = 'view') => !module || hasFullAppAccess(user) || Boolean(user?.modulePermissions?.some((permission) => permission.module === module && (required === 'view' ? permission.access !== 'none' : permission.access === 'manage')))
+export const canAccessModule = (user: UserType | undefined, module?: AppModule, required: RequiredModuleAccess = 'view') => !module || hasFullAppAccess(user) || (module === 'hr' && required === 'view' && user?.workProfile === 'employee') || Boolean(user?.modulePermissions?.some((permission) => permission.module === module && (required === 'view' ? permission.access !== 'none' : permission.access === 'manage')))
 export const canManageModule = (user: UserType | undefined, module: AppModule) => hasFullAppAccess(user) || Boolean(user?.modulePermissions?.some((permission) => permission.module === module && permission.access === 'manage'))
 
 export const moduleForPath = (path: string) => {
