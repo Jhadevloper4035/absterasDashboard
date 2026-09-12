@@ -227,6 +227,19 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
+    key: 'designer',
+    icon: 'iconamoon:pen-duotone',
+    label: 'Designer',
+    children: [
+      { key: 'designer-boq', label: 'BOQ', url: '/designer/boq', parentKey: 'designer' },
+      { key: 'designer-boq-approvals', label: 'BOQ Approvals', url: '/designer/boq/approvals', parentKey: 'designer', directorOnly: true },
+      { key: 'designer-site-measurements', label: 'Site Measurements', url: '/designer/site-measurements', parentKey: 'designer' },
+      { key: 'designer-drawings', label: 'Drawings', url: '/designer/drawings', parentKey: 'designer' },
+      { key: 'designer-drawing-approvals', label: 'Drawing Approvals', url: '/designer/drawings/approvals', parentKey: 'designer', directorOnly: true },
+      { key: 'designer-production-data', label: 'Production Data', url: '/designer/production-data', parentKey: 'designer' },
+    ],
+  },
+  {
     key: 'pages',
     label: 'Pages',
     isTitle: false,

@@ -53,6 +53,15 @@ const TYPES = [
     matches: (buffer) => buffer.subarray(0, 5).toString('ascii') === '%PDF-',
   },
   {
+    key: 'xlsx',
+    kind: 'document',
+    extensions: ['.xlsx'],
+    mimes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    outputExtension: 'xlsx',
+    matches: (buffer) => buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) && buffer.includes(Buffer.from('[Content_Types].xml')) && buffer.includes(Buffer.from('xl/workbook.xml')),
+  },
+  {
     key: 'csv',
     kind: 'text',
     extensions: ['.csv'],

@@ -78,6 +78,14 @@ const PowderCoatingOrderDispatch = lazy(() => import('@/app/(admin)/powder-coati
 const CreatePowderCoatingOrder = lazy(() => import('@/app/(admin)/powder-coating-management/challans/create/page'))
 const PowderCoatingMoveOut = lazy(() => import('@/app/(admin)/powder-coating-management/move-out/page'))
 const PowderCoatingVendors = lazy(() => import('@/app/(admin)/powder-coating-management/vendors/page'))
+const Boq = lazy(() => import('@/app/(admin)/designer/boq/page'))
+const BoqApprovals = lazy(() => import('@/app/(admin)/designer/approvals/page'))
+const BoqDetail = lazy(() => import('@/app/(admin)/designer/boq/[boqId]/page'))
+const Drawings = lazy(() => import('@/app/(admin)/designer/drawings/page'))
+const DrawingApprovals = lazy(() => import('@/app/(admin)/designer/drawings/approvals/page'))
+const DrawingDetail = lazy(() => import('@/app/(admin)/designer/drawings/[boqId]/page'))
+const SiteMeasurements = lazy(() => import('@/app/(admin)/designer/site-measurements/page'))
+const ProductionData = lazy(() => import('@/app/(admin)/designer/production-data/page'))
 const Chat = lazy(() => import('@/app/(admin)/apps/chat/page'))
 const Email = lazy(() => import('@/app/(admin)/apps/email/page'))
 const Schedule = lazy(() => import('@/app/(admin)/calendar/schedule/page'))
@@ -455,6 +463,14 @@ const appsRoutes: RoutesProps[] = [
   { name: 'Move Inventory In to Powder Coating', path: '/powder-coating-management/challans/create', element: <CreatePowderCoatingOrder />, moduleAccess: 'manage' },
   { name: 'Move Powder-Coated Products Out', path: '/powder-coating-management/move-out', element: <PowderCoatingMoveOut />, moduleAccess: 'manage' },
   { name: 'Powder Coating Vendors', path: '/powder-coating-management/vendors', element: <PowderCoatingVendors /> },
+  { name: 'BOQ', path: '/designer/boq', element: <Boq /> },
+  { name: 'BOQ Approvals', path: '/designer/boq/approvals', element: <BoqApprovals />, roles: ['director'], strictRoles: true },
+  { name: 'BOQ Details', path: '/designer/boq/:documentId', element: <BoqDetail /> },
+  { name: 'Site Measurements', path: '/designer/site-measurements', element: <SiteMeasurements /> },
+  { name: 'Production Data', path: '/designer/production-data', element: <ProductionData /> },
+  { name: 'Drawings', path: '/designer/drawings', element: <Drawings /> },
+  { name: 'Drawing Approvals', path: '/designer/drawings/approvals', element: <DrawingApprovals />, roles: ['director'], strictRoles: true },
+  { name: 'Drawing Details', path: '/designer/drawings/:documentId', element: <DrawingDetail /> },
   {
     name: 'Products',
     path: '/ecommerce/products',

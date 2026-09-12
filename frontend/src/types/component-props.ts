@@ -73,6 +73,8 @@ export type DropzoneFormInputProps = {
   iconProps?: IconProps
   text?: string
   textClassName?: string
+  accept?: Record<string, string[]>
+  maxFiles?: number
   onFileUpload?: (files: UploadFileType[]) => void
 }
 

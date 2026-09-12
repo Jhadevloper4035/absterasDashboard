@@ -14,6 +14,8 @@ export type MenuItemType = {
   target?: HTMLAttributeAnchorTarget
   isDisabled?: boolean
   roles?: string[]
+  adminOnly?: boolean
+  directorOnly?: boolean
   requiresManage?: boolean
   children?: MenuItemType[]
 }

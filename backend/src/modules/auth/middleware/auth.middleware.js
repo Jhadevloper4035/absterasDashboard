@@ -53,6 +53,13 @@ export const appAccessLevel = (user, module) => {
   return { none: 0, view: 1, manage: 2 }[access] || 0;
 };
 
+export const hasDesignerReviewAccess = (user) => user?.workProfile === 'director' && (user.modulePermissions || []).some((permission) => permission.module === 'designer' && permission.access !== 'none');
+
+export function authorizeDesignerDirector(req, res, next) {
+  if (!hasDesignerReviewAccess(req.user)) return next(authError(403, 'Director Designer access is required'));
+  return next();
+}
+
 export function authorizeAppModule(module, minAccess = 'view') {
   const required = { none: 0, view: 1, manage: 2 }[minAccess];
   if (!APP_MODULES.includes(module) || !APP_ACCESS_LEVELS.includes(minAccess)) throw new Error('Invalid application module permission');

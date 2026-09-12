@@ -14,6 +14,8 @@ const DropzoneFormInput = ({
   showPreview,
   text,
   textClassName,
+  accept,
+  maxFiles,
   onFileUpload,
 }: DropzoneFormInputProps) => {
   const { selectedFiles, handleAcceptedFiles, removeFile } = useFileUploader(showPreview)
@@ -21,7 +23,7 @@ const DropzoneFormInput = ({
     <>
       {label && <FormLabel className={labelClassName}>{label}</FormLabel>}
 
-      <Dropzone onDrop={(acceptedFiles) => handleAcceptedFiles(acceptedFiles, onFileUpload)} maxFiles={5}>
+      <Dropzone onDrop={(acceptedFiles) => handleAcceptedFiles(acceptedFiles, onFileUpload)} accept={accept} maxFiles={maxFiles ?? 5}>
         {({ getRootProps, getInputProps }) => (
           <div className="dropzone dropzone-custom">
             <div className="dz-message" {...getRootProps()}>

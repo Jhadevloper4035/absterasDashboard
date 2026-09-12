@@ -35,6 +35,7 @@ const workspaceModules: Record<AppModule, WorkspaceModule> = {
   'laser-cut': { module: 'laser-cut', href: '/laser-cut-management', endpoint: '/laser-cut-management/orders', icon: 'bx:cut', recordLabel: 'orders' },
   'powder-coating': { module: 'powder-coating', href: '/powder-coating-management', endpoint: '/powder-coating-management/orders', icon: 'bx:palette', recordLabel: 'orders' },
   returns: { module: 'returns', href: '/returns', endpoint: '/returns?limit=5', icon: 'iconamoon:refresh-duotone', recordLabel: 'returns' },
+  designer: { module: 'designer', href: '/designer/boq', endpoint: '/designer/boqs', icon: 'iconamoon:pen-duotone', recordLabel: 'BOQs' },
 }
 
 const recordName = (record?: unknown) => {
