@@ -8,6 +8,7 @@ import * as controller from './designer.controller.js';
 import * as drawing from './drawing.controller.js';
 import * as productionData from './production-data.controller.js';
 import * as siteMeasurement from './site-measurement.controller.js';
+import * as siteExpense from './site-expense.controller.js';
 
 export const designerRouter = Router();
 designerRouter.use(asyncHandler(authenticate), authorizeAppModule('designer'));
@@ -28,3 +29,13 @@ designerRouter.post('/drawings/:id/resubmit', authorizeAppModule('designer', 'ma
 designerRouter.post('/drawings/:id/review', authorizeDesignerDirector, asyncHandler(drawing.reviewDrawing));
 designerRouter.post('/site-measurements', authorizeAppModule('designer', 'manage'), asyncHandler(siteMeasurement.createSiteMeasurement));
 designerRouter.post('/production-data', authorizeAppModule('designer', 'manage'), asyncHandler(productionData.createProductionData));
+
+export const siteExpenseRouter = Router();
+siteExpenseRouter.use(asyncHandler(authenticate), authorizeAppModule('site-expenses'));
+siteExpenseRouter.get('/client-sites', asyncHandler(controller.listClientSites));
+siteExpenseRouter.get('/categories', asyncHandler(siteExpense.listSiteExpenseCategories));
+siteExpenseRouter.get('/', asyncHandler(siteExpense.listSiteExpenses));
+siteExpenseRouter.post('/categories', authorizeAppModule('site-expenses', 'manage'), asyncHandler(siteExpense.createSiteExpenseCategory));
+siteExpenseRouter.post('/uploads', authorizeAppModule('site-expenses', 'manage'), asyncHandler(rateLimit({ scope: 'site-expense-upload', limit: 10, windowMs: 15 * 60 * 1000 })), multipartUpload, asyncHandler(uploadFiles));
+siteExpenseRouter.post('/', authorizeAppModule('site-expenses', 'manage'), asyncHandler(siteExpense.createSiteExpense));
+siteExpenseRouter.patch('/:id', authorizeAppModule('site-expenses', 'manage'), asyncHandler(siteExpense.updateSiteExpense));

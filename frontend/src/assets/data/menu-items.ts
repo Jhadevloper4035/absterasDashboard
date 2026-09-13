@@ -240,6 +240,16 @@ export const MENU_ITEMS: MenuItemType[] = [
     ],
   },
   {
+    key: 'miscellaneous-expenses',
+    icon: 'iconamoon:cheque-duotone',
+    label: 'Miscellaneous Expenses',
+    children: [
+      { key: 'miscellaneous-expense-list', label: 'List Expenses', url: '/designer/site-expenses', parentKey: 'miscellaneous-expenses' },
+      { key: 'miscellaneous-expense-categories', label: 'Expense Categories', url: '/designer/site-expenses/categories', parentKey: 'miscellaneous-expenses' },
+      { key: 'miscellaneous-expense-add', label: 'Add Expense', url: '/designer/site-expenses/add', parentKey: 'miscellaneous-expenses', requiresManage: true },
+    ],
+  },
+  {
     key: 'pages',
     label: 'Pages',
     isTitle: false,

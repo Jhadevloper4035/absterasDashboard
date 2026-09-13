@@ -1,6 +1,6 @@
 import type { UserType } from '@/types/auth'
 
-export const APP_MODULES = ['todo', 'notifications', 'leads', 'tasks', 'hr', 'clients', 'invoices', 'challans', 'inventory', 'laser-cut', 'powder-coating', 'returns', 'designer'] as const
+export const APP_MODULES = ['todo', 'notifications', 'leads', 'tasks', 'hr', 'clients', 'invoices', 'challans', 'inventory', 'laser-cut', 'powder-coating', 'returns', 'designer', 'site-expenses'] as const
 export type AppModule = (typeof APP_MODULES)[number]
 export type ModulePermission = { module: AppModule; access: 'none' | 'view' | 'manage' }
 type RequiredModuleAccess = Exclude<ModulePermission['access'], 'none'>
@@ -20,6 +20,7 @@ export const moduleLabel = (module: AppModule) => ({
   'powder-coating': 'Powder Coating',
   returns: 'Return Management',
   designer: 'Designer',
+  'site-expenses': 'Miscellaneous Expenses',
 }[module])
 export const hasFullAppAccess = (user?: UserType) => [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || []), user?.workProfile]
   .some((role) => role === 'superadmin' || role === 'admin')
@@ -40,6 +41,7 @@ export const moduleForPath = (path: string) => {
   if (path.startsWith('/laser-cut-management')) return 'laser-cut'
   if (path.startsWith('/powder-coating-management')) return 'powder-coating'
   if (path.startsWith('/returns')) return 'returns'
+  if (path.startsWith('/designer/site-expenses')) return 'site-expenses'
   if (path.startsWith('/designer')) return 'designer'
   return undefined
 }

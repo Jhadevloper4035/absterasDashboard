@@ -85,6 +85,8 @@ const Drawings = lazy(() => import('@/app/(admin)/designer/drawings/page'))
 const DrawingApprovals = lazy(() => import('@/app/(admin)/designer/drawings/approvals/page'))
 const DrawingDetail = lazy(() => import('@/app/(admin)/designer/drawings/[boqId]/page'))
 const SiteMeasurements = lazy(() => import('@/app/(admin)/designer/site-measurements/page'))
+const SiteExpenses = lazy(() => import('@/app/(admin)/designer/site-expenses/page'))
+const SiteExpenseCategories = lazy(() => import('@/app/(admin)/designer/site-expenses/categories/page'))
 const ProductionData = lazy(() => import('@/app/(admin)/designer/production-data/page'))
 const Chat = lazy(() => import('@/app/(admin)/apps/chat/page'))
 const Email = lazy(() => import('@/app/(admin)/apps/email/page'))
@@ -235,12 +237,9 @@ const initialRoutes: RoutesProps[] = [
     name: 'access-denied',
     element: <AccessDenied />,
   },
-  {
-    path: '*',
-    name: 'not-found',
-    element: <NotFound />,
-  },
 ]
+
+const notFoundRoute: RoutesProps = { path: '*', name: 'not-found', element: <NotFound /> }
 
 const generalRoutes: RoutesProps[] = [
   {
@@ -467,6 +466,9 @@ const appsRoutes: RoutesProps[] = [
   { name: 'BOQ Approvals', path: '/designer/boq/approvals', element: <BoqApprovals />, roles: ['director'], strictRoles: true },
   { name: 'BOQ Details', path: '/designer/boq/:documentId', element: <BoqDetail /> },
   { name: 'Site Measurements', path: '/designer/site-measurements', element: <SiteMeasurements /> },
+  { name: 'Miscellaneous Expenses', path: '/designer/site-expenses', element: <SiteExpenses /> },
+  { name: 'Expense Categories', path: '/designer/site-expenses/categories', element: <SiteExpenseCategories /> },
+  { name: 'Add Expense', path: '/designer/site-expenses/add', element: <SiteExpenses createOnly />, moduleAccess: 'manage' },
   { name: 'Production Data', path: '/designer/production-data', element: <ProductionData /> },
   { name: 'Drawings', path: '/designer/drawings', element: <Drawings /> },
   { name: 'Drawing Approvals', path: '/designer/drawings/approvals', element: <DrawingApprovals />, roles: ['director'], strictRoles: true },
@@ -1073,4 +1075,5 @@ export const appRoutes = [
   ...superadminOnly(formsRoutes),
   ...superadminOnly(tableRoutes),
   ...superadminOnly(iconRoutes),
+  notFoundRoute,
 ]

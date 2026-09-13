@@ -99,6 +99,7 @@ test('module permissions determine app access for non-privileged profiles', () =
   assert.equal(appAccessLevel({ workProfile: 'client', modulePermissions: [{ module: 'leads', access: 'view' }] }, 'leads'), 1);
   assert.equal(appAccessLevel({ workProfile: 'employee', modulePermissions: [{ module: 'inventory', access: 'view' }] }, 'inventory'), 1);
   assert.equal(appAccessLevel({ workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] }, 'hr'), 2);
+  assert.equal(appAccessLevel({ workProfile: 'employee', modulePermissions: [{ module: 'site-expenses', access: 'manage' }] }, 'site-expenses'), 2);
 });
 
 test('HR module management applies regardless of account profile', async () => {
