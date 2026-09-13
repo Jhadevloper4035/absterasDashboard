@@ -1,4 +1,5 @@
 import PageMetaData from '@/components/PageTitle'
+import TransportationCostFields from '@/components/TransportationCostFields'
 import { apiFetch } from '@/helpers/api'
 import { generatedChallanNumber } from '@/helpers/documentNumber'
 import { FormEvent, useEffect, useState } from 'react'
@@ -19,6 +20,7 @@ type Challan = {
   transportType?: string
   vehicleNumber?: string
   eWayBillNumber?: string
+  transportationCost?: number
   lineItems: { inventoryItem?: string; description: string; hsnCode?: string; quantity: number; unit?: string }[]
 }
 const blank = (): Line => ({ description: '', hsnCode: '', quantity: '1', unit: 'NOS' })
@@ -40,6 +42,7 @@ const ChallanFormPage = () => {
   const [transportType, setTransportType] = useState('')
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [eWayBillNumber, setEWayBillNumber] = useState('')
+  const [transportationCost, setTransportationCost] = useState('')
   const [lines, setLines] = useState<Line[]>([blank()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -65,6 +68,7 @@ const ChallanFormPage = () => {
           setTransportType(data.transportType || '')
           setVehicleNumber(data.vehicleNumber || '')
           setEWayBillNumber(data.eWayBillNumber || '')
+          setTransportationCost(data.transportationCost ? String(data.transportationCost) : '')
           setLines(
             data.lineItems.map((line) => ({
               description: line.description,
@@ -119,6 +123,7 @@ const ChallanFormPage = () => {
         transportType,
         vehicleNumber,
         eWayBillNumber,
+        transportationCost,
         hardwareOnly,
         ...(challanId ? {} : { lineItems: lines.map((line) => ({
           ...line,
@@ -211,6 +216,7 @@ const ChallanFormPage = () => {
                 <Form.Label>E-way bill number</Form.Label>
                 <Form.Control value={eWayBillNumber} onChange={(event) => setEWayBillNumber(event.target.value)} />
               </div>
+              <TransportationCostFields cost={transportationCost} onCostChange={setTransportationCost} />
             </div>
             <div className="d-flex justify-content-between align-items-center mt-4 mb-2">
               <div>

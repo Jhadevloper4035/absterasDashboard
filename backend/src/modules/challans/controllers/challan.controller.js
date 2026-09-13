@@ -8,8 +8,11 @@ import { StockTransaction } from '../../inventory/models/transaction.model.js';
 import { ReturnProduct } from '../../returns/models/return-product.model.js';
 import { LaserCutChallan } from '../../lasercut/models.js';
 import { PowderCoatChallan } from '../../powdercoating/models.js';
+import { transportationCostFrom } from '../../../helpers/transportation-cost.js';
+import { paymentScreenshot } from '../../../helpers/process-attachments.js';
+import { signAttachmentUrls } from '../../../services/upload.service.js';
 
-const FIELDS = ['client', 'site', 'supplier', 'challanDate', 'pickupAddress', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'lineItems', 'linkedInvoice', 'pdfFileUrl'];
+const FIELDS = ['client', 'site', 'supplier', 'challanDate', 'pickupAddress', 'transportType', 'vehicleNumber', 'eWayBillNumber', 'transportationCost', 'lineItems', 'linkedInvoice', 'pdfFileUrl'];
 const payload = (body) => FIELDS.reduce((result, field) => (body?.[field] !== undefined ? { ...result, [field]: body[field] } : result), {});
 const required = (body) => ['client', 'challanDate'].every((field) => body?.[field] !== undefined && String(body[field]).trim() !== '');
 const challanNumber = () => `DC-${randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
@@ -22,6 +25,7 @@ const centralChallan = (challan) => ({
   transferType: challan.transferType, process: challan.transferType === 'return_transfer' ? 'Return Management' : 'Inventory Delivery',
   client: challan.client ? { _id: String(challan.client._id), name: challan.client.name } : undefined,
   siteName: challan.site?.siteName || challan.site?.name, counterpartyName: challan.supplier?.name,
+  ...transportationCostFrom(challan),
   itemCount: challan.lineItems?.length || challan.returnProducts?.length || 0, workflowLink: `/challans/${challan._id}`, pdfPath: `/challans/${challan._id}/pdf`, isCentralChallan: true,
 });
 const laserCutChallan = (challan) => ({
@@ -29,6 +33,7 @@ const laserCutChallan = (challan) => ({
   createdAt: challan.createdAt,
   transferType: challan.type === 'OUT' ? 'inventory_to_laser_cut' : 'laser_cut_return', process: 'Laser Cut',
   client: clientSnapshot(challan.clientRef, challan.clientName), siteName: challan.clientSiteName, counterpartyName: challan.vendorName,
+  ...transportationCostFrom(challan),
   itemCount: challan.items?.length || 0, workflowLink: challan.orderRef ? `/laser-cut-management/orders/${challan.orderRef}` : '/laser-cut-management/orders', pdfPath: `/challans/laser-cut/${challan._id}/pdf`, isCentralChallan: false,
 });
 const powderCoatingChallan = (challan) => ({
@@ -36,6 +41,7 @@ const powderCoatingChallan = (challan) => ({
   createdAt: challan.createdAt,
   transferType: challan.type === 'SITE_OUT' ? 'powder_coating_to_client' : challan.type === 'OUT' && challan.items?.some((item) => item.source === 'LASER_CUT') ? 'laser_cut_to_powder_coating' : challan.type === 'OUT' ? 'inventory_to_powder_coating' : 'powder_coating_return', process: 'Powder Coating',
   client: clientSnapshot(challan.clientRef, challan.clientName), siteName: challan.clientSiteName, counterpartyName: challan.vendorName,
+  ...transportationCostFrom(challan),
   itemCount: challan.items?.length || 0, workflowLink: challan.orderRef ? `/powder-coating-management/orders/${challan.orderRef}` : '/powder-coating-management/orders', pdfPath: `/challans/powder-coating/${challan._id}/pdf`, isCentralChallan: false,
 });
 
@@ -50,6 +56,7 @@ export function processChallanForPdf(challan) {
     transportType: challan.transportType,
     vehicleNumber: challan.vehicleNumber,
     eWayBillNumber: challan.eWayBillNumber,
+    ...transportationCostFrom(challan),
     lineItems: (challan.items || []).map((item) => ({ description: item.itemName, hsnCode: item.hsnCode, quantity: item.quantity, unit: item.unit })),
   };
 }
@@ -74,7 +81,7 @@ async function inventoryLines(lines, hardwareOnly = false) {
 
 export async function createChallan(req, res) {
   if (!required(req.body)) return res.status(400).json({ error: { message: 'Client and date are required' } });
-  let challan; const values = payload(req.body); const requestedNumber = requestedChallanNumber(req.body?.challanNumber);
+  let challan; const values = { ...payload(req.body), ...transportationCostFrom(req.body) }; const requestedNumber = requestedChallanNumber(req.body?.challanNumber);
   values.lineItems = await inventoryLines(values.lineItems, req.body?.hardwareOnly === true);
   if (values.site && !await Client.exists({ _id: values.site, parentClient: values.client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -132,7 +139,25 @@ export async function listChallans(req, res) {
 export async function getChallan(req, res) {
   const challan = await Challan.findById(req.params.id).populate('client', 'name gstin phone billingAddress shippingAddress state stateCode').populate('site', 'name siteName siteAddress shippingAddress state stateCode').populate('supplier', 'name address');
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
-  return res.json({ data: challan });
+  const data = challan.toObject();
+  data.transportationPaymentScreenshot = (await signAttachmentUrls(data.transportationPaymentScreenshot ? [data.transportationPaymentScreenshot] : []))[0];
+  return res.json({ data });
+}
+
+export async function updateTransportationPayment(req, res) {
+  const challan = await Challan.findById(req.params.id);
+  if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
+  const screenshot = req.body?.transportationPaymentScreenshot ? paymentScreenshot(req.body.transportationPaymentScreenshot) : challan.transportationPaymentScreenshot;
+  if (!screenshot) return res.status(400).json({ error: { message: 'Upload a payment screenshot before saving transportation cost' } });
+  const { transportationCost } = transportationCostFrom(req.body);
+  if (transportationCost <= 0) return res.status(400).json({ error: { message: 'Transportation payment amount must be greater than zero' } });
+  challan.transportationCost = transportationCost;
+  challan.transportationPaymentScreenshot = screenshot;
+  await challan.save();
+  await auditEvent(req, { action: 'challan.transportation-payment.update', entity: 'challan', entityId: challan._id });
+  const data = challan.toObject();
+  data.transportationPaymentScreenshot = (await signAttachmentUrls([data.transportationPaymentScreenshot]))[0];
+  return res.json({ data });
 }
 
 export async function downloadChallanPdf(req, res) {
@@ -160,6 +185,7 @@ export async function updateChallan(req, res) {
   if (!challan) return res.status(404).json({ error: { message: 'Challan not found' } });
   if (challan.transferType === 'return_transfer') return res.status(409).json({ error: { message: 'Return transfer challans cannot be edited because their quantities are linked to return storage' } });
   const values = payload(req.body);
+  if (values.transportationCost !== undefined) Object.assign(values, transportationCostFrom({ transportationCost: values.transportationCost }));
   if (values.lineItems !== undefined) return res.status(409).json({ error: { message: 'Challan items cannot be changed after inventory stock is transferred' } });
   const client = values.client || challan.client;
   if (values.site && !await Client.exists({ _id: values.site, parentClient: client })) return res.status(400).json({ error: { message: 'Select a site belonging to the selected client' } });

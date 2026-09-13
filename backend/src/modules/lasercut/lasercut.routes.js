@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
+import { uploadFiles } from '../../controllers/upload.controller.js';
+import { multipartUpload } from '../../middleware/upload.middleware.js';
+import { rateLimit } from '../../middleware/rate-limit.middleware.js';
 import { authenticate, authorizeAppModule } from '../auth/middleware/auth.middleware.js';
 import * as controller from './lasercut.controller.js';
 
 export const laserCutRouter = Router();
 laserCutRouter.use(asyncHandler(authenticate), authorizeAppModule('laser-cut'));
 laserCutRouter.get('/summary', asyncHandler(controller.summary));
+laserCutRouter.post('/uploads', authorizeAppModule('laser-cut', 'manage'), asyncHandler(rateLimit({ scope: 'laser-cut-upload', limit: 10, windowMs: 15 * 60 * 1000 })), multipartUpload, asyncHandler(uploadFiles));
 laserCutRouter.get('/vendors', asyncHandler(controller.listVendors));
 laserCutRouter.post('/vendors', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.createVendor));
 laserCutRouter.patch('/vendors/:id', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.updateVendor));
@@ -19,6 +23,7 @@ laserCutRouter.get('/challans', asyncHandler(controller.listChallans));
 laserCutRouter.post('/challans', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.createChallan));
 laserCutRouter.post('/challans/:id/dispatch', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.dispatchChallan));
 laserCutRouter.post('/challans/:id/receive', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.receiveChallan));
+laserCutRouter.patch('/challans/:id/transportation-payment', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.updateTransportationPayment));
 laserCutRouter.get('/stock', asyncHandler(controller.listStock));
 laserCutRouter.post('/usage-entries', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.createUsage));
 laserCutRouter.post('/orders/:id/ready-batches', authorizeAppModule('laser-cut', 'manage'), asyncHandler(controller.recordReadyBatch));

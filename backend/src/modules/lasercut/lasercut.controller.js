@@ -4,6 +4,9 @@ import { Client } from '../clients/models/client.model.js';
 import { Supplier } from '../inventory/models/supplier.model.js';
 import { StockTransaction } from '../inventory/models/transaction.model.js';
 import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage, LaserCutVendor } from './models.js';
+import { transportationCostFrom } from '../../helpers/transportation-cost.js';
+import { paymentScreenshot, referenceAttachments } from '../../helpers/process-attachments.js';
+import { signAttachmentUrls } from '../../services/upload.service.js';
 
 const badRequest = (message) => Object.assign(new Error(message), { statusCode: 400 });
 const conflict = (message) => Object.assign(new Error(message), { statusCode: 409 });
@@ -162,7 +165,7 @@ export async function createOrder(req, res) {
   if (Object.values(expected).some((value) => !Number.isFinite(value) || value < 0)) throw badRequest('Expected quantities must be zero or greater');
   const panelSpec = req.body?.panelSpec?.panelAreaSqFt === undefined ? undefined : { count: number(req.body.panelSpec.count || 0), panelAreaSqFt: number(req.body.panelSpec.panelAreaSqFt) };
   if (panelSpec && (!Number.isFinite(panelSpec.count) || panelSpec.count < 0 || !Number.isFinite(panelSpec.panelAreaSqFt) || panelSpec.panelAreaSqFt <= 0)) throw badRequest('Panel specification must be valid');
-  const order = new LaserCutOrder({ customerRef: String(req.body?.customerRef || '').trim() || undefined, expected, panelSpec });
+  const order = new LaserCutOrder({ customerRef: String(req.body?.customerRef || '').trim() || undefined, expected, panelSpec, referenceAttachments: referenceAttachments(req.body?.referenceAttachments) });
   order.orderName = name || String(order._id);
   order.status = orderStatus(order).status; await order.save();
   await writeAudit({ entityType: 'ORDER', entityId: order._id, action: 'CREATE', performedBy: req.user._id, after: plain(order) });
@@ -234,7 +237,8 @@ export async function getOrder(req, res) {
   ]);
   const outputs = productionOutputs(challans, usages);
   const productionOrder = outputs.length ? { ...order, planned: productionTotals(outputs, 'plannedQuantity'), ready: productionTotals(outputs, 'readyQuantity') } : order;
-  return res.json({ data: { ...orderView(productionOrder), clientName: client?.name || '—', client: client || undefined, challans, production: { outputs, batches: usages.filter((usage) => usage.outputs?.length || usage.outputStockRef).map((usage) => ({ batchNo: usage.batchNo, reportedAt: usage.reportedAt, materialType: usage.materialType, panelsProduced: usage.panelsProduced })) } } });
+  const signedChallans = await Promise.all(challans.map(async (challan) => ({ ...challan, transportationPaymentScreenshot: (await signAttachmentUrls(challan.transportationPaymentScreenshot ? [challan.transportationPaymentScreenshot] : []))[0] })));
+  return res.json({ data: { ...orderView(productionOrder), clientName: client?.name || '—', client: client || undefined, referenceAttachments: await signAttachmentUrls(order.referenceAttachments || []), challans: signedChallans, production: { outputs, batches: usages.filter((usage) => usage.outputs?.length || usage.outputStockRef).map((usage) => ({ batchNo: usage.batchNo, reportedAt: usage.reportedAt, materialType: usage.materialType, panelsProduced: usage.panelsProduced })) } } });
 }
 
 export async function listChallans(req, res) {
@@ -262,6 +266,24 @@ export async function createChallan(req, res) {
   const challan = await LaserCutChallan.create({ challanNo: `LC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, type, challanDate: req.body.challanDate || undefined, clientRef: client?._id, clientName: client?.name, clientSiteRef: clientSite?._id, clientSiteName: clientSite?.siteName || clientSite?.name, clientSiteAddressSnapshot: clientSite?.siteAddress || clientSite?.shippingAddress || clientSite?.billingAddress, deliveryAddress: vendorAddress, vendorRef: vendor._id, vendorName: vendor.name, vendorAddressSnapshot: vendorAddress, transportType: String(req.body.transportType || '').trim() || undefined, vehicleNumber: String(req.body.vehicleNumber || '').trim() || undefined, eWayBillNumber: String(req.body.eWayBillNumber || '').trim() || undefined, orderRef: order?._id, items, createdBy: req.user._id });
   await writeAudit({ entityType: 'CHALLAN', entityId: challan._id, action: 'CREATE', performedBy: req.user._id, after: plain(challan), metadata: { challanNo: challan.challanNo, vendorName: vendor.name } });
   return res.status(201).json({ data: challan });
+}
+
+export async function updateTransportationPayment(req, res) {
+  if (!validId(req.params.id)) throw badRequest('Invalid challan id');
+  const challan = await LaserCutChallan.findById(req.params.id);
+  if (!challan) throw missing('Challan not found');
+  const before = plain(challan);
+  const screenshot = req.body?.transportationPaymentScreenshot ? paymentScreenshot(req.body.transportationPaymentScreenshot) : challan.transportationPaymentScreenshot;
+  if (!screenshot) throw badRequest('Upload a payment screenshot before saving transportation cost');
+  const { transportationCost } = transportationCostFrom(req.body);
+  if (transportationCost <= 0) throw badRequest('Transportation cost must be greater than zero');
+  challan.transportationCost = transportationCost;
+  challan.transportationPaymentScreenshot = screenshot;
+  await challan.save();
+  await writeAudit({ entityType: 'CHALLAN', entityId: challan._id, action: 'TRANSPORTATION_PAYMENT_UPDATE', performedBy: req.user._id, before, after: plain(challan) });
+  const data = plain(challan);
+  data.transportationPaymentScreenshot = (await signAttachmentUrls([data.transportationPaymentScreenshot]))[0];
+  return res.json({ data });
 }
 
 export async function dispatchChallan(req, res) {

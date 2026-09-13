@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const db = mongoose.connection;
 const { ObjectId, Mixed } = mongoose.Schema.Types;
+const attachment = new mongoose.Schema({ key: String, contentType: String, originalName: String, size: Number, checksum: String, attachmentToken: String }, { _id: false });
 const dimensions = new mongoose.Schema({ heightFt: { type: Number, min: 0 }, widthFt: { type: Number, min: 0 }, lengthFt: { type: Number, min: 0 } }, { _id: false });
 const quantities = new mongoose.Schema({ sheets: { type: Number, min: 0, default: 0 }, tubes: { type: Number, min: 0, default: 0 } }, { _id: false });
 const vendorSchema = new mongoose.Schema({ name: { type: String, required: true, trim: true }, contactPerson: { type: String, trim: true }, phone: { type: String, trim: true }, email: { type: String, trim: true, lowercase: true }, address: { type: String, trim: true }, notes: { type: String, trim: true }, status: { type: String, enum: ['active', 'inactive'], default: 'active' } }, { timestamps: true });
@@ -12,6 +13,7 @@ const orderSchema = new mongoose.Schema({
   expected: { type: quantities, default: () => ({}) }, sent: { type: quantities, default: () => ({}) },
   planned: { type: quantities, default: () => ({}) }, ready: { type: quantities, default: () => ({}) },
   panelSpec: { count: { type: Number, min: 0 }, panelAreaSqFt: { type: Number, min: 0 } },
+  referenceAttachments: { type: [attachment], default: [] },
   status: { type: String, enum: ['PENDING', 'PARTIAL', 'COMPLETE'], default: 'PENDING' },
 }, { timestamps: true });
 orderSchema.index({ status: 1, createdAt: -1 });
@@ -29,6 +31,8 @@ const challanSchema = new mongoose.Schema({
   challanDate: { type: Date, required: true, default: Date.now }, clientRef: { type: ObjectId }, clientName: { type: String, trim: true }, clientSiteRef: { type: ObjectId }, clientSiteName: { type: String, trim: true }, clientSiteAddressSnapshot: { type: String, trim: true }, deliveryAddress: { type: String, trim: true },
   vendorRef: { type: ObjectId, required: true }, vendorName: { type: String, required: true }, vendorAddressSnapshot: { type: String, trim: true },
   transportType: { type: String, trim: true }, vehicleNumber: { type: String, trim: true, uppercase: true }, eWayBillNumber: { type: String, trim: true },
+  transportationCost: { type: Number, min: 0, default: 0 },
+  transportationPaymentScreenshot: attachment,
   orderRef: { type: ObjectId }, items: { type: [lineSchema], validate: [(items) => items.length > 0, 'At least one item is required'] },
   status: { type: String, enum: ['DRAFT', 'DISPATCHED', 'RECEIVED'], default: 'DRAFT' }, dispatchedAt: Date, receivedAt: Date, createdBy: { type: ObjectId, required: true },
 }, { timestamps: true });

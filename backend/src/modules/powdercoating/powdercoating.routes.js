@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
+import { uploadFiles } from '../../controllers/upload.controller.js';
+import { multipartUpload } from '../../middleware/upload.middleware.js';
+import { rateLimit } from '../../middleware/rate-limit.middleware.js';
 import { authenticate, authorizeAppModule } from '../auth/middleware/auth.middleware.js';
 import * as controller from './powdercoating.controller.js';
 
 export const powderCoatingRouter = Router();
 powderCoatingRouter.use(asyncHandler(authenticate), authorizeAppModule('powder-coating'));
 powderCoatingRouter.get('/summary', asyncHandler(controller.summary));
+powderCoatingRouter.post('/uploads', authorizeAppModule('powder-coating', 'manage'), asyncHandler(rateLimit({ scope: 'powder-coating-upload', limit: 10, windowMs: 15 * 60 * 1000 })), multipartUpload, asyncHandler(uploadFiles));
 powderCoatingRouter.get('/vendors', asyncHandler(controller.listVendors));
 powderCoatingRouter.post('/vendors', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.createVendor));
 powderCoatingRouter.patch('/vendors/:id', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.updateVendor));
@@ -18,3 +22,4 @@ powderCoatingRouter.post('/orders/:id/ready-batches', authorizeAppModule('powder
 powderCoatingRouter.post('/orders/:id/receive', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.receiveOrder));
 powderCoatingRouter.post('/orders/:id/dispatch-to-site', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.dispatchToSite));
 powderCoatingRouter.get('/challans', asyncHandler(controller.listChallans));
+powderCoatingRouter.patch('/challans/:id/transportation-payment', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.updateTransportationPayment));

@@ -5,6 +5,9 @@ import { Supplier } from '../inventory/models/supplier.model.js';
 import { StockTransaction } from '../inventory/models/transaction.model.js';
 import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage, LaserCutVendor } from '../lasercut/models.js';
 import { PowderCoatChallan, PowderCoatOrder, PowderCoatVendor } from './models.js';
+import { transportationCostFrom } from '../../helpers/transportation-cost.js';
+import { paymentScreenshot, referenceAttachments } from '../../helpers/process-attachments.js';
+import { signAttachmentUrls } from '../../services/upload.service.js';
 
 const badRequest = (message) => Object.assign(new Error(message), { statusCode: 400 });
 const conflict = (message) => Object.assign(new Error(message), { statusCode: 409 });
@@ -222,6 +225,8 @@ async function orderContext(body, items) {
     transportType: String(body.transportType || '').trim() || undefined,
     vehicleNumber: String(body.vehicleNumber || '').trim() || undefined,
     eWayBillNumber: String(body.eWayBillNumber || '').trim() || undefined,
+    ...transportationCostFrom(body),
+    referenceAttachments: referenceAttachments(body.referenceAttachments),
     challanDate: body.challanDate || undefined,
     laserCutOrderRef: laserCutOrder?._id,
     laserCutOrderName: laserCutOrder?.orderName,
@@ -332,6 +337,7 @@ export async function dispatchToSite(req, res) {
     clientRef: order.clientRef, clientName: order.clientName, clientSiteRef: order.clientSiteRef, clientSiteName: order.clientSiteName, clientSiteAddressSnapshot: order.clientSiteAddressSnapshot,
     vendorRef: order.vendorRef, vendorName: order.vendorName, vendorAddressSnapshot: order.vendorAddressSnapshot,
     transportType: String(req.body.transportType || '').trim() || undefined, vehicleNumber: String(req.body.vehicleNumber || '').trim() || undefined, eWayBillNumber: String(req.body.eWayBillNumber || '').trim() || undefined,
+    ...transportationCostFrom(req.body),
     items, createdBy: req.user._id,
   }]);
   const created = { challan, order: orderView(order, [...previous, challan]) };
@@ -374,7 +380,24 @@ export async function getOrder(req, res) {
   const order = await PowderCoatOrder.findById(req.params.id).lean();
   if (!order) throw missing('Powder-coating order not found');
   const challans = await PowderCoatChallan.find({ orderRef: order._id }).sort({ createdAt: -1 }).lean();
-  return res.json({ data: { ...orderView(order, challans), challans } });
+  const signedChallans = await Promise.all(challans.map(async (challan) => ({ ...challan, transportationPaymentScreenshot: (await signAttachmentUrls(challan.transportationPaymentScreenshot ? [challan.transportationPaymentScreenshot] : []))[0] })));
+  return res.json({ data: { ...orderView(order, challans), referenceAttachments: await signAttachmentUrls(order.referenceAttachments || []), challans: signedChallans } });
+}
+
+export async function updateTransportationPayment(req, res) {
+  if (!validId(req.params.id)) throw badRequest('Invalid powder-coating challan');
+  const challan = await PowderCoatChallan.findById(req.params.id);
+  if (!challan) throw missing('Challan not found');
+  const screenshot = req.body?.transportationPaymentScreenshot ? paymentScreenshot(req.body.transportationPaymentScreenshot) : challan.transportationPaymentScreenshot;
+  if (!screenshot) throw badRequest('Upload a payment screenshot before saving transportation cost');
+  const { transportationCost } = transportationCostFrom(req.body);
+  if (transportationCost <= 0) throw badRequest('Transportation cost must be greater than zero');
+  challan.transportationCost = transportationCost;
+  challan.transportationPaymentScreenshot = screenshot;
+  await challan.save();
+  const data = challan.toObject();
+  data.transportationPaymentScreenshot = (await signAttachmentUrls([data.transportationPaymentScreenshot]))[0];
+  return res.json({ data });
 }
 
 export async function listChallans(_req, res) {

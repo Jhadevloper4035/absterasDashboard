@@ -1,5 +1,7 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
+import { uploadMultipartFiles } from '@/helpers/upload'
+import { useAuthStore } from '@/store/authStore'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Col, Form, Row, Spinner, Table } from 'react-bootstrap'
 import { Link, useNavigate } from 'react-router-dom'
@@ -18,6 +20,7 @@ type Material = {
 }
 type Dimensions = { heightFt?: number; widthFt?: number; lengthFt?: number }
 type Supplier = { _id: string; name: string; address?: string }
+type Attachment = { key: string; contentType?: string; originalName?: string; size?: number; checksum?: string; attachmentToken?: string }
 type Client = { _id: string; name: string; siteName?: string; siteAddress?: string; parentClient?: string | { _id: string }; shippingAddress?: string; billingAddress?: string }
 type Order = { _id: string; orderName: string; status: 'PENDING' | 'PARTIAL' | 'COMPLETE' }
 type CutOutput = { quantity: string; dimensions: Dimensions }
@@ -37,6 +40,7 @@ const materialSize = (material: Material | undefined) => material?.materialType 
 
 export default function CreateLaserCutChallanPage() {
   const navigate = useNavigate()
+  const token = useAuthStore((state) => state.token)
   const [materials, setMaterials] = useState<Material[]>([])
   const [vendors, setVendors] = useState<Supplier[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -52,6 +56,7 @@ export default function CreateLaserCutChallanPage() {
   const [transportType, setTransportType] = useState('')
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [eWayBillNumber, setEWayBillNumber] = useState('')
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([])
   const [lines, setLines] = useState<Line[]>([blankLine()])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -125,11 +130,15 @@ export default function CreateLaserCutChallanPage() {
     setSaving(true)
     setError('')
     try {
+      if (referenceFiles.length && !token) {
+        throw new Error('Please sign in again before uploading reference files')
+      }
+
       const selectedOrder =
         orderRef === 'new'
           ? await apiFetch<{ data: { _id: string } }>('/laser-cut-management/orders', {
-              method: 'POST',
-              body: JSON.stringify({ customerRef: clientRef, expected: { sheets: number(expectedSheets), tubes: number(expectedTubes) } }),
+            method: 'POST',
+              body: JSON.stringify({ customerRef: clientRef, expected: { sheets: number(expectedSheets), tubes: number(expectedTubes) }, referenceAttachments: referenceFiles.length ? await uploadMultipartFiles<Attachment>(referenceFiles, token!, undefined, '/laser-cut-management/uploads') : [] }),
             })
           : { data: { _id: orderRef } }
       const created = await apiFetch<{ data: { _id: string } }>('/laser-cut-management/challans', {
@@ -276,6 +285,12 @@ export default function CreateLaserCutChallanPage() {
                       value={expectedTubes}
                       onChange={(event) => setExpectedTubes(event.target.value)}
                     />
+                  </Col>
+                  <Col md={6}>
+                    <Form.Label>Drawings and reference files</Form.Label>
+                    <Form.Control type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setReferenceFiles(Array.from((event.target as HTMLInputElement).files || []).slice(0, 5))} />
+                    <Form.Text>Up to 5 drawing images, PDF, or XLSX files (10 MB each).</Form.Text>
+                    {!!referenceFiles.length && <div className="small text-muted mt-1">{referenceFiles.map((file) => file.name).join(', ')}</div>}
                   </Col>
               </>}
             </Row>

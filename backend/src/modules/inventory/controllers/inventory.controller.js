@@ -67,6 +67,22 @@ export async function lowStockReport(req, res) {
   const data = await InventoryItem.find({ status: 'active', $expr: { $lte: ['$quantityInStock', '$minStockLevel'] } }).sort({ quantityInStock: 1, name: 1 }).lean();
   return res.json({ data });
 }
+export async function inventoryDashboard(req, res) {
+  const items = await InventoryItem.find({ status: 'active' }).populate('supplier', 'name').sort({ name: 1 }).lean();
+  const lowStock = items.filter((item) => Number(item.quantityInStock) <= Number(item.minStockLevel));
+  const countBy = (field, fallback) => Object.entries(items.reduce((result, item) => {
+    const key = String(item[field] || fallback);
+    result[key] = (result[key] || 0) + 1;
+    return result;
+  }, {})).map(([label, count]) => ({ label, count })).sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+  return res.json({ data: {
+    totals: { materials: items.length, lowStock: lowStock.length, outOfStock: items.filter((item) => Number(item.quantityInStock) === 0).length, suppliers: new Set(items.map((item) => String(item.supplier?._id || '')).filter(Boolean)).size },
+    categories: countBy('category', 'Uncategorized'),
+    locations: countBy('location', 'No location'),
+    lowStock: lowStock.slice(0, 10),
+    items: items.slice(0, 100),
+  } });
+}
 export async function getItem(req, res) {
   if (invalid(res, req.params.id)) return;
   const item = await InventoryItem.findById(req.params.id).populate('supplier', 'name contactPerson phone email address').lean();

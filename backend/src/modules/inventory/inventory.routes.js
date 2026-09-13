@@ -12,6 +12,7 @@ inventoryRouter.post('/categories', authorizeInventoryModule('categories', 'mana
 inventoryRouter.patch('/categories/:id', authorizeInventoryModule('categories', 'manage'), asyncHandler(controller.updateCategory));
 inventoryRouter.delete('/categories/:id', authorizeInventoryModule('categories', 'manage'), asyncHandler(controller.deleteCategory));
 inventoryRouter.get('/reports/low-stock', authorizeInventoryModule('reports'), asyncHandler(controller.lowStockReport));
+inventoryRouter.get('/dashboard', authorizeInventoryModule('items'), asyncHandler(controller.inventoryDashboard));
 inventoryRouter.get('/purchases', authorizeInventoryModule('transactions'), asyncHandler(controller.listPurchases));
 inventoryRouter.get('/item-categories', authorizeInventoryModule('items'), asyncHandler(controller.listCategories));
 inventoryRouter.get('/suppliers', authorizeInventoryModule('items'), asyncHandler(controller.listSuppliers));

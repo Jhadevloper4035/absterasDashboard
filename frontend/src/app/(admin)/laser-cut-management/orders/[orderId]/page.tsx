@@ -1,5 +1,8 @@
 import PageMetaData from '@/components/PageTitle'
+import TransportationPaymentForm from '@/components/TransportationPaymentForm'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
+import { useAuthStore } from '@/store/authStore'
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Alert, Badge, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
@@ -7,18 +10,19 @@ import { Alert, Badge, Button, Card, CardBody, Form, Spinner, Table } from 'reac
 type Client = { name?: string; gstin?: string; billingAddress?: string; shippingAddress?: string; state?: string; stateCode?: string; phone?: string; email?: string }
 type Dimensions = { heightFt?: number; widthFt?: number; lengthFt?: number }
 type Item = { itemName: string; hsnCode?: string; materialType: string; unit?: string; quantity: number; dimensions?: Dimensions; pickupSupplierName?: string; pickupAddressSnapshot?: string }
+type Attachment = { key: string; url?: string; originalName?: string; contentType?: string }
 type Challan = {
   _id: string; challanNo: string; type: 'OUT' | 'IN'; challanDate: string; createdAt: string; dispatchedAt?: string; receivedAt?: string
   clientName?: string; clientSiteName?: string; clientSiteAddressSnapshot?: string; deliveryAddress?: string
   vendorRef: string; vendorName: string; vendorAddressSnapshot?: string; transportType?: string; vehicleNumber?: string; eWayBillNumber?: string
-  status: 'DRAFT' | 'DISPATCHED' | 'RECEIVED'; items: Item[]
+  status: 'DRAFT' | 'DISPATCHED' | 'RECEIVED'; transportationCost?: number; transportationPaymentScreenshot?: Attachment; items: Item[]
 }
 type ProductionOutput = { challanRef: string; lineIndex: number; outputIndex: number; challanNo: string; itemName: string; materialType: 'SHEET' | 'TUBE'; dimensions: Dimensions; plannedQuantity: number; readyQuantity: number; remainingQuantity: number }
 type ProductionBatch = { batchNo?: string; reportedAt?: string; materialType: 'SHEET' | 'TUBE'; panelsProduced: number }
 type Order = {
   _id: string; orderName: string; createdAt: string; clientName?: string; client?: Client
   expected: { sheets: number; tubes: number }; sent: { sheets: number; tubes: number }; planned: { sheets: number; tubes: number }; ready: { sheets: number; tubes: number }; remainingSheets: number; remainingTubes: number; status: 'PENDING' | 'PARTIAL' | 'COMPLETE'; challans: Challan[]
-  production: { outputs: ProductionOutput[]; batches: ProductionBatch[] }
+  referenceAttachments?: Attachment[]; production: { outputs: ProductionOutput[]; batches: ProductionBatch[] }
 }
 
 function Detail({ label, children }: { label: string; children?: ReactNode }) {
@@ -38,6 +42,8 @@ const outputSize = (output: ProductionOutput) => output.materialType === 'SHEET'
 
 export default function LaserCutOrderDetailPage() {
   const { orderId } = useParams()
+  const user = useAuthStore((state) => state.user)
+  const canManage = canManageModule(user, 'laser-cut')
   const [order, setOrder] = useState<Order>()
   const [error, setError] = useState('')
   const [batchQuantities, setBatchQuantities] = useState<Record<string, string>>({})
@@ -109,6 +115,8 @@ export default function LaserCutOrderDetailPage() {
           </CardBody>
         </Card>
 
+        {!!order.referenceAttachments?.length && <Card className="mb-3"><CardBody><h5 className="mb-2">Drawings and reference files</h5><div className="d-flex flex-wrap gap-2">{order.referenceAttachments.map((file) => <a key={file.key} className="btn btn-sm btn-outline-secondary" href={file.url} target="_blank" rel="noreferrer">{file.originalName || 'Reference file'}</a>)}</div></CardBody></Card>}
+
         <Card className="mb-3">
           <CardBody>
             <h5 className="mb-1">Record ready batch</h5>
@@ -171,6 +179,7 @@ export default function LaserCutOrderDetailPage() {
                 <div className="col-md-3"><Detail label="Transport type">{challan.transportType}</Detail></div>
                 <div className="col-md-3"><Detail label="Vehicle number">{challan.vehicleNumber}</Detail></div>
                 <div className="col-md-3"><Detail label="E-way bill number">{challan.eWayBillNumber}</Detail></div>
+                <div className="col-md-3"><Detail label="Transportation cost">{Number(challan.transportationCost) > 0 ? `₹${Number(challan.transportationCost).toFixed(2)}` : '—'}</Detail></div>
                 <div className="col-md-6"><Detail label="Drop location">{challan.deliveryAddress || challan.vendorAddressSnapshot}</Detail></div>
               </div>
               <div className="table-responsive">
@@ -180,6 +189,7 @@ export default function LaserCutOrderDetailPage() {
                 </Table>
               </div>
               <div className="text-end fw-semibold mt-3">Total sheet area: {sqFt(challan.items.reduce((total, item) => total + (sheetSqFt(item) || 0), 0))}</div>
+              {canManage && <TransportationPaymentForm key={challan._id} cost={challan.transportationCost} screenshot={challan.transportationPaymentScreenshot} uploadPath="/laser-cut-management/uploads" updatePath={`/laser-cut-management/challans/${challan._id}/transportation-payment`} onSaved={() => void load()} />}
                 </div>
               </details>
             </CardBody>

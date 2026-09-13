@@ -17,6 +17,8 @@ const order = new mongoose.Schema({
   orderNo: { type: String, required: true, unique: true }, clientRef: ObjectId, clientName: { type: String, trim: true }, clientSiteRef: ObjectId, clientSiteName: { type: String, trim: true }, clientSiteAddressSnapshot: { type: String, trim: true },
   laserCutOrderRef: ObjectId, laserCutOrderName: { type: String, trim: true },
   vendorRef: { type: ObjectId, required: true }, vendorName: { type: String, required: true, trim: true }, vendorAddressSnapshot: { type: String, trim: true },
+  transportationCost: { type: Number, min: 0, default: 0 },
+  referenceAttachments: { type: [attachment], default: [] },
   items: { type: [line], validate: [(items) => items.length > 0, 'At least one product is required'] }, coatingBatches: { type: [coatingBatch], default: [] }, status: { type: String, enum: ['OUT', 'RETURNED'], default: 'OUT' }, outwardChallanRef: ObjectId, inwardChallanRef: ObjectId, createdBy: { type: ObjectId, required: true },
 }, { timestamps: true });
 order.index({ status: 1, createdAt: -1 });
@@ -25,6 +27,8 @@ const challan = new mongoose.Schema({
   challanNo: { type: String, required: true, unique: true }, type: { type: String, enum: ['OUT', 'IN', 'SITE_OUT'], required: true }, challanDate: { type: Date, default: Date.now }, orderRef: { type: ObjectId, required: true },
   clientRef: ObjectId, clientName: { type: String, trim: true }, clientSiteRef: ObjectId, clientSiteName: { type: String, trim: true }, clientSiteAddressSnapshot: { type: String, trim: true },
   vendorRef: { type: ObjectId, required: true }, vendorName: { type: String, required: true, trim: true }, vendorAddressSnapshot: { type: String, trim: true }, transportType: { type: String, trim: true }, vehicleNumber: { type: String, trim: true, uppercase: true }, eWayBillNumber: { type: String, trim: true },
+  transportationCost: { type: Number, min: 0, default: 0 },
+  transportationPaymentScreenshot: attachment,
   items: { type: [line], validate: [(items) => items.length > 0, 'At least one product is required'] }, createdBy: { type: ObjectId, required: true },
 }, { timestamps: true });
 challan.index({ orderRef: 1, createdAt: -1 });

@@ -1,6 +1,8 @@
 import PageMetaData from '@/components/PageTitle'
 import PdfActionButton from '@/components/PdfActionButton'
+import TransportationPaymentForm from '@/components/TransportationPaymentForm'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { downloadPdf, printPdf } from '@/helpers/pdf'
 import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
@@ -14,6 +16,8 @@ type Challan = {
   transportType?: string
   vehicleNumber?: string
   eWayBillNumber?: string
+  transportationCost?: number
+  transportationPaymentScreenshot?: { key: string; url?: string; originalName?: string; contentType?: string }
   transferType?: 'delivery' | 'return_transfer'
   lineItems: { description: string; hsnCode?: string; quantity: number; unit?: string }[]
   client: { name: string; siteName?: string; siteAddress?: string; gstin?: string; phone?: string; shippingAddress?: string; billingAddress?: string; state?: string; stateCode?: string }
@@ -25,12 +29,17 @@ const ChallanDetailPage = () => {
   const [challan, setChallan] = useState<Challan>()
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
+  const canManage = canManageModule(user, 'challans')
+  const load = () => {
+    if (!challanId) return
+    apiFetch<{ data: Challan }>(`/challans/${challanId}`)
+      .then(({ data }) => setChallan(data))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load challan'))
+  }
   useEffect(() => {
-    if (challanId)
-      apiFetch<{ data: Challan }>(`/challans/${challanId}`)
-        .then(({ data }) => setChallan(data))
-        .catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load challan'))
+    load()
   }, [challanId])
   const download = () => downloadPdf(`/challans/${challanId}/pdf`, `challan-${challan?.challanNumber}.pdf`, token)
   const receiver = challan?.site || challan?.client
@@ -98,6 +107,7 @@ const ChallanDetailPage = () => {
                 VEHICLE NO.: {challan.vehicleNumber || '-'}
                 <br />
                 E-WAY BILL NO.: {challan.eWayBillNumber || '-'}
+                {Number(challan.transportationCost) > 0 && <><br /><strong>TRANSPORTATION COST: ₹{Number(challan.transportationCost).toFixed(2)}</strong></>}
               </div>
             </div>
             <Table bordered responsive className="mt-3">
@@ -131,6 +141,7 @@ const ChallanDetailPage = () => {
                 </tr>
               </tfoot>
             </Table>
+            {canManage && <TransportationPaymentForm cost={challan.transportationCost} screenshot={challan.transportationPaymentScreenshot} uploadPath="/challans/uploads" updatePath={`/challans/${challanId}/transportation-payment`} onSaved={load} />}
             <div className="border p-3 mt-3">
               <strong>TERMS AND CONDITIONS</strong>
               <br />

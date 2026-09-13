@@ -176,6 +176,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     icon: 'iconamoon:shopping-bag-duotone',
     label: 'Inventory Management',
     children: [
+      { key: 'inventory-dashboard', label: 'Dashboard', url: '/inventory/dashboard', parentKey: 'inventory-management' },
       {
         key: 'inventory-items',
         label: 'Materials',
@@ -224,6 +225,7 @@ export const MENU_ITEMS: MenuItemType[] = [
     children: [
       { key: 'return-products', label: 'Return Products', url: '/returns', parentKey: 'return-management' },
       { key: 'return-create', label: 'Record Return', url: '/returns/create', parentKey: 'return-management', requiresManage: true },
+      { key: 'return-site-transfer', label: 'Site Transfer', url: '/returns/transfers/create', parentKey: 'return-management', requiresManage: true },
     ],
   },
   {

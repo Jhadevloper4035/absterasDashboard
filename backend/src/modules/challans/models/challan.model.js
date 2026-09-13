@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const { ObjectId } = mongoose.Schema.Types;
 const lineItemSchema = new mongoose.Schema({ inventoryItem: { type: ObjectId, ref: 'InventoryItem' }, description: { type: String, required: true, trim: true }, hsnCode: { type: String, trim: true }, quantity: { type: Number, required: true, min: 0 }, unit: { type: String, trim: true } }, { _id: false });
 const returnProductLineSchema = new mongoose.Schema({ product: { type: ObjectId, ref: 'ReturnProduct', required: true }, quantity: { type: Number, required: true, min: 0 } }, { _id: false });
+const attachmentSchema = new mongoose.Schema({ key: String, contentType: String, originalName: String, size: Number, checksum: String, attachmentToken: String }, { _id: false });
 
 const challanSchema = new mongoose.Schema({
   challanNumber: { type: String, required: true, trim: true, unique: true },
@@ -18,6 +19,8 @@ const challanSchema = new mongoose.Schema({
   transportType: { type: String, trim: true },
   vehicleNumber: { type: String, trim: true, uppercase: true },
   eWayBillNumber: { type: String, trim: true },
+  transportationCost: { type: Number, min: 0, default: 0 },
+  transportationPaymentScreenshot: attachmentSchema,
   lineItems: { type: [lineItemSchema], default: [] },
   linkedInvoice: { type: ObjectId, ref: 'Invoice' },
   pdfFileUrl: { type: String, trim: true },

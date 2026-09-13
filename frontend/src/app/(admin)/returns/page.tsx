@@ -42,8 +42,8 @@ export default function ReturnsPage() {
     <>
       <PageMetaData title="Return Management" />
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div><h4 className="mb-1">Return Management</h4><p className="text-muted mb-0">Track site transfers and material currently held in return storage.</p></div>
-        {canManage && <div className="d-flex flex-wrap gap-2"><Link className="btn btn-outline-primary" to="/returns/transfers/create">Create transfer challan</Link><Link className="btn btn-primary" to="/returns/create">Record return</Link></div>}
+        <div><h4 className="mb-1">Return Management</h4><p className="text-muted mb-0">Track extra material collected from client sites and site-to-site transfers. This stock is separate from purchased inventory.</p></div>
+        {canManage && <Link className="btn btn-primary" to="/returns/create">Record return</Link>}
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -79,7 +79,7 @@ export default function ReturnsPage() {
         <Card>
           <CardBody>
             <h5 className="mb-1">Materials currently in return storage</h5>
-            <p className="text-muted mb-3">These materials are stored separately and are not part of normal inventory.</p>
+            <p className="text-muted mb-3">These are extra materials collected from client sites. They remain separate from purchased Inventory Management stock.</p>
             <div className="table-responsive"><Table hover className="align-middle mb-0"><thead><tr><th>Material</th><th>Return</th><th>Client / pickup site</th><th>Quantity</th><th>Storage location</th></tr></thead><tbody>
               {storedProducts.map((product) => <tr key={product._id}>
                 <td className="fw-medium">{product.name}</td>

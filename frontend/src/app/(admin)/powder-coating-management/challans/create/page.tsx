@@ -1,11 +1,14 @@
 import PageMetaData from '@/components/PageTitle'
 import { apiFetch } from '@/helpers/api'
+import { uploadMultipartFiles } from '@/helpers/upload'
+import { useAuthStore } from '@/store/authStore'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Col, Form, Row, Spinner, Table } from 'react-bootstrap'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
 type Supplier = { _id: string; name: string; address?: string }
+type Attachment = { key: string; contentType?: string; originalName?: string; size?: number; checksum?: string; attachmentToken?: string }
 type Product = { _id: string; name: string; sku: string; category?: string; hsnCode?: string; unit: string; quantityInStock: number; shadeName?: string; shadeCode?: string; shadeImage?: { url?: string; originalName?: string }; supplier?: Supplier }
 type Client = { _id: string; name: string; parentClient?: string | { _id: string }; siteName?: string; siteAddress?: string; shippingAddress?: string; billingAddress?: string }
 type LaserCutStock = { _id: string; inventoryItemRef: string; itemName: string; vendorRef: string; vendorName: string; quantityAvailable: number; unit?: string; dimensions?: { heightFt?: number; widthFt?: number; lengthFt?: number } }
@@ -19,6 +22,7 @@ const materialSize = (dimensions?: LaserCutStock['dimensions']) => dimensions?.h
 
 export default function CreatePowderCoatingOrderPage({ laserCutOrderId: providedLaserCutOrderId, cancelTo = '/powder-coating-management' }: CreatePowderCoatingOrderProps = {}) {
   const navigate = useNavigate()
+  const token = useAuthStore((state) => state.token)
   const [searchParams] = useSearchParams()
   const laserCutOrderId = providedLaserCutOrderId || searchParams.get('laserCutOrderId') || ''
   const [products, setProducts] = useState<Product[]>([])
@@ -35,6 +39,7 @@ export default function CreatePowderCoatingOrderPage({ laserCutOrderId: provided
   const [transportType, setTransportType] = useState('')
   const [vehicleNumber, setVehicleNumber] = useState('')
   const [eWayBillNumber, setEWayBillNumber] = useState('')
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -131,7 +136,12 @@ export default function CreatePowderCoatingOrderPage({ laserCutOrderId: provided
     setSaving(true)
     setError('')
     try {
-      await apiFetch('/powder-coating-management/orders', { method: 'POST', body: JSON.stringify({ clientRef, clientSiteRef: clientSiteRef || undefined, vendorRef, challanDate, transportType, vehicleNumber, eWayBillNumber, laserCutOrderRef: laserCutOrder?._id, items: lines }) })
+      if (referenceFiles.length && !token) {
+        throw new Error('Please sign in again before uploading reference files')
+      }
+
+      const referenceAttachments = referenceFiles.length ? await uploadMultipartFiles<Attachment>(referenceFiles, token!, undefined, '/powder-coating-management/uploads') : []
+      await apiFetch('/powder-coating-management/orders', { method: 'POST', body: JSON.stringify({ clientRef, clientSiteRef: clientSiteRef || undefined, vendorRef, challanDate, transportType, vehicleNumber, eWayBillNumber, referenceAttachments, laserCutOrderRef: laserCutOrder?._id, items: lines }) })
       toast.success('Powder-coating order and outward challan created')
       navigate('/powder-coating-management')
     } catch (reason) {
@@ -157,6 +167,7 @@ export default function CreatePowderCoatingOrderPage({ laserCutOrderId: provided
             <Col md={4}><Form.Label>Transport type</Form.Label><Form.Control value={transportType} onChange={(event) => setTransportType(event.target.value)} /></Col>
             <Col md={4}><Form.Label>Vehicle number</Form.Label><Form.Control value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)} /></Col>
             <Col md={4}><Form.Label>E-way bill number</Form.Label><Form.Control value={eWayBillNumber} onChange={(event) => setEWayBillNumber(event.target.value)} /></Col>
+            <Col md={12}><Form.Label>Drawings and reference files</Form.Label><Form.Control type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setReferenceFiles(Array.from((event.target as HTMLInputElement).files || []).slice(0, 5))} /><Form.Text>Up to 5 drawing images, PDF, or XLSX files (10 MB each).</Form.Text>{!!referenceFiles.length && <div className="small text-muted mt-1">{referenceFiles.map((file) => file.name).join(', ')}</div>}</Col>
           </Row>
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4 mb-2"><div><h5 className="mb-0">{laserCutOrder ? 'Laser-cut stock' : 'Inventory products'}</h5><small className="text-muted">Hardware is excluded. For Laser Cut transfers, enter the updated shade name and shade code before creating the Powder Coating order.</small></div><div className="d-flex gap-2"><Button type="button" size="sm" variant="outline-primary" disabled={Boolean(laserCutOrder && !laserCutStock.length)} onClick={addAllProducts}>Add all products</Button><Button type="button" size="sm" variant="outline-primary" disabled={Boolean(laserCutOrder && !laserCutStock.length)} onClick={() => setLines((current) => [...current, { ...blankLine(), source: laserCutOrder ? 'LASER_CUT' : 'INVENTORY' }])}>Add product</Button></div></div>
           {laserCutOrder && !laserCutStock.length ? <Alert variant="success">All available products from this Laser Cut order have been moved to Powder Coating.</Alert> : <Table responsive className="align-middle" style={{ minWidth: laserCutOrder ? 1300 : 1450 }}><thead><tr><th>Product</th>{laserCutOrder && <th>Smaller material size</th>}{!laserCutOrder && <><th>Pickup supplier</th><th>Pickup address</th></>}<th>Available</th><th>HSN</th><th>Shade name</th><th>Shade code</th><th>Shade image</th><th>Quantity</th><th>Unit</th><th /></tr></thead><tbody>{lines.map((line, index) => {

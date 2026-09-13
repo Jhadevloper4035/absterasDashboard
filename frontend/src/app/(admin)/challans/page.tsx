@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom'
 import { Alert, Badge, Button, Card, CardBody, Form, Spinner, Table } from 'react-bootstrap'
 
 type Client = { _id: string; name: string }
-type Challan = { _id: string; challanNumber: string; challanDate: string; transferType: string; process: string; client?: Client; siteName?: string; counterpartyName?: string; itemCount: number; workflowLink: string; isCentralChallan: boolean; pdfPath: string }
+type Challan = { _id: string; challanNumber: string; challanDate: string; transferType: string; process: string; client?: Client; siteName?: string; counterpartyName?: string; itemCount: number; transportationCost?: number; workflowLink: string; isCentralChallan: boolean; pdfPath: string }
 const typeLabel = (type: string) => ({ delivery: 'Delivery', return_transfer: 'Return transfer', inventory_to_laser_cut: 'Inventory to Laser Cut', laser_cut_return: 'Laser Cut return', inventory_to_powder_coating: 'Inventory to Powder Coating', laser_cut_to_powder_coating: 'Laser Cut to Powder Coating', powder_coating_to_client: 'Powder Coating to Client', powder_coating_return: 'Powder Coating return' }[type] || type)
 const ChallansPage = () => {
   const [clients, setClients] = useState<Client[]>([])
@@ -87,13 +87,14 @@ const ChallansPage = () => {
               </Form.Select>
             </div>
           </div>
-          <Table responsive hover className="mb-0" style={{ minWidth: 1260 }}>
+          <Table responsive hover className="mb-0" style={{ minWidth: 1360 }}>
             <thead>
               <tr>
                 <th>Challan</th>
                 <th>Movement</th>
                 <th>Client / Site</th>
                 <th>Counterparty</th>
+                <th>Transportation cost</th>
                 <th>Date</th>
                 <th style={{ minWidth: 290 }} />
               </tr>
@@ -105,6 +106,7 @@ const ChallansPage = () => {
                   <td><Badge bg={challan.process === 'Powder Coating' ? 'warning' : challan.process === 'Laser Cut' ? 'primary' : 'secondary'}>{typeLabel(challan.transferType)}</Badge><small className="text-muted d-block mt-1">{challan.process}</small></td>
                   <td><div>{challan.client?.name || '-'}</div>{challan.siteName && <small className="text-muted">{challan.siteName}</small>}</td>
                   <td>{challan.counterpartyName || '-'}</td>
+                  <td>{Number(challan.transportationCost) > 0 ? Number(challan.transportationCost).toLocaleString('en-IN', { style: 'currency', currency: 'INR' }) : '—'}</td>
                   <td>{new Date(challan.challanDate).toLocaleDateString()}</td>
                   <td className="text-end">
                     <div className="d-inline-flex align-items-center gap-2 flex-nowrap">
@@ -134,7 +136,7 @@ const ChallansPage = () => {
               ))}
               {!challans.length && (
                 <tr>
-                    <td colSpan={6} className="text-center text-muted py-4">
+                    <td colSpan={7} className="text-center text-muted py-4">
                     No delivery challans found.
                   </td>
                 </tr>

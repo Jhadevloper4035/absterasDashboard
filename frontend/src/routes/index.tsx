@@ -58,6 +58,7 @@ const EcommerceOrders = lazy(() => import('@/app/(admin)/ecommerce/orders/page')
 const EcommerceOrderDetails = lazy(() => import('@/app/(admin)/ecommerce/orders/[orderId]/page'))
 const EcommerceInventory = lazy(() => import('@/app/(admin)/ecommerce/inventory/page'))
 const Inventory = lazy(() => import('@/app/(admin)/inventory/page'))
+const InventoryDashboard = lazy(() => import('@/app/(admin)/inventory/dashboard/page'))
 const AddInventoryItem = lazy(() => import('@/app/(admin)/inventory/add/page'))
 const InventorySuppliers = lazy(() => import('@/app/(admin)/inventory/suppliers/page'))
 const InventoryMaterialDetail = lazy(() => import('@/app/(admin)/inventory/[itemId]/page'))
@@ -439,6 +440,7 @@ const generalRoutes: RoutesProps[] = [
 ]
 
 const appsRoutes: RoutesProps[] = [
+  { name: 'Inventory Dashboard', path: '/inventory/dashboard', element: <InventoryDashboard /> },
   { name: 'Inventory Management', path: '/inventory', element: <Inventory /> },
   { name: 'Add Material', path: '/inventory/add', element: <AddInventoryItem />, moduleAccess: 'manage' },
   { name: 'Update Material', path: '/inventory/:itemId/edit', element: <AddInventoryItem />, moduleAccess: 'manage' },

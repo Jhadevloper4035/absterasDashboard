@@ -1,12 +1,12 @@
 import { buildApiUrl } from './apiUrl'
 
-export function uploadMultipartFiles<T>(files: File[], token: string, onProgress?: (progress: number) => void) {
+export function uploadMultipartFiles<T>(files: File[], token: string, onProgress?: (progress: number) => void, path = '/uploads/multipart') {
   return new Promise<T[]>((resolve, reject) => {
     const body = new FormData()
     files.forEach((file) => body.append('files', file))
 
     const request = new XMLHttpRequest()
-    request.open('POST', buildApiUrl('/uploads/multipart'))
+    request.open('POST', buildApiUrl(path))
     request.withCredentials = true
     request.setRequestHeader('Authorization', `Bearer ${token}`)
     request.upload.onprogress = (event) => {

@@ -104,7 +104,7 @@ export default function CreateReturnTransferPage() {
     <>
       <PageMetaData title="Create Return Transfer" />
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-        <div><h4 className="mb-1">Create return transfer challan</h4><p className="text-muted mb-0">Select materials from return storage. Quantities are deducted only after this challan is created.</p></div>
+        <div><h4 className="mb-1">Create return transfer challan</h4><p className="text-muted mb-0">Select extra material from site-return storage. Quantities are deducted only after this challan is created and never affect purchased inventory.</p></div>
         <Link className="btn btn-outline-secondary" to="/returns">Back to returns</Link>
       </div>
 
@@ -113,10 +113,6 @@ export default function CreateReturnTransferPage() {
       <Card>
         <CardBody>
           <Form onSubmit={submit}>
-            <div className="d-flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Challan type">
-              <Link className="btn btn-outline-primary" role="tab" to="/challans/create">Inventory challan</Link>
-              <Button type="button" variant="primary" role="tab" aria-selected>Return challan</Button>
-            </div>
             <Row className="g-3 mb-4">
               <Col md={3}>
                 <Form.Label>Source client</Form.Label>
