@@ -1,163 +1,125 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Badge, Card, CardBody, Col, Row, Table } from 'react-bootstrap'
+import { useEffect, useState } from 'react'
+import { Alert, Badge, Card, CardBody, Col, Row, Table } from 'react-bootstrap'
 import { Link } from 'react-router-dom'
 
 import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
-import { moduleLabel, type AppModule } from '@/helpers/moduleAccess'
+import { canAccessModule } from '@/helpers/moduleAccess'
 import { useAuthStore } from '@/store/authStore'
 
-type AccessLevel = 'view' | 'manage'
-type ApiList = { data?: unknown[]; meta?: { total?: number } }
-type WorkspaceModule = { module: AppModule; href: string; endpoint: string; icon: string; recordLabel: string }
-type ModuleSnapshot = WorkspaceModule & { access: AccessLevel; total: number | null; latest: string; error?: string }
-type Todo = { _id: string; title: string; dueDate?: string; priority?: string }
-type Task = { _id: string; title: string; dueDate?: string; priority?: string; status: string }
-type Lead = { _id: string; name: string; company?: string; nextMeeting?: { startsAt?: string; meetingType?: string } }
-type Invoice = { _id: string; invoiceNumber: string; invoiceDate?: string; createdAt?: string; grandTotal?: number; client?: { name?: string } }
-type Holiday = { _id: string; name: string; date: string; type: string }
-type DashboardSummary = { todayMeetings: Lead[]; priorityTasks: Task[] }
-type DashboardActivity = { todos: Todo[]; summary?: DashboardSummary; upcomingLeads: Lead[]; overdueTasks: Task[]; invoices: Invoice[]; holidays: Holiday[] }
-type WorkRow = { id: string; type: string; item: string; detail: string; when: string; status: string; variant: string; href?: string }
-
-const workspaceModules: Record<AppModule, WorkspaceModule> = {
-  todo: { module: 'todo', href: '/apps/todo', endpoint: '/todos?limit=5', icon: 'iconamoon:check-circle-1-duotone', recordLabel: 'to-dos' },
-  notifications: { module: 'notifications', href: '/notifications', endpoint: '/notifications/unread', icon: 'iconamoon:notification-duotone', recordLabel: 'unread notifications' },
-  leads: { module: 'leads', href: '/leads', endpoint: '/leads?limit=5', icon: 'iconamoon:send-duotone', recordLabel: 'leads' },
-  tasks: { module: 'tasks', href: '/tasks/assigned-to-me', endpoint: '/tasks?limit=5', icon: 'iconamoon:calendar-1-duotone', recordLabel: 'tasks' },
-  hr: { module: 'hr', href: '/hr', endpoint: '/hr/leave/requests', icon: 'iconamoon:profile-circle-duotone', recordLabel: 'leave requests' },
-  clients: { module: 'clients', href: '/clients', endpoint: '/clients?limit=5', icon: 'iconamoon:profile-duotone', recordLabel: 'clients' },
-  invoices: { module: 'invoices', href: '/invoices', endpoint: '/invoices?limit=5', icon: 'iconamoon:cheque-duotone', recordLabel: 'invoices' },
-  challans: { module: 'challans', href: '/challans', endpoint: '/challans?limit=5', icon: 'iconamoon:box-duotone', recordLabel: 'challans' },
-  inventory: { module: 'inventory', href: '/inventory', endpoint: '/inventory/items?limit=5', icon: 'iconamoon:box-duotone', recordLabel: 'items' },
-  'laser-cut': { module: 'laser-cut', href: '/laser-cut-management', endpoint: '/laser-cut-management/orders', icon: 'bx:cut', recordLabel: 'orders' },
-  'powder-coating': { module: 'powder-coating', href: '/powder-coating-management', endpoint: '/powder-coating-management/orders', icon: 'bx:palette', recordLabel: 'orders' },
-  returns: { module: 'returns', href: '/returns', endpoint: '/returns?limit=5', icon: 'iconamoon:refresh-duotone', recordLabel: 'returns' },
-  designer: { module: 'designer', href: '/designer/boq', endpoint: '/designer/boqs', icon: 'iconamoon:pen-duotone', recordLabel: 'BOQs' },
-  'site-expenses': { module: 'site-expenses', href: '/designer/site-expenses', endpoint: '/designer/site-expenses', icon: 'iconamoon:wallet-duotone', recordLabel: 'miscellaneous expenses' },
+type EmployeeOverview = {
+  attendance: { summary: Record<string, number> }
+  leaves: { _id: string; leaveType?: { name?: string }; days: number; status: string }[]
 }
 
-const recordName = (record?: unknown) => {
-  if (!record || typeof record !== 'object') return 'No recent record'
-  const item = record as Record<string, unknown>
-  const value = ['name', 'title', 'orderName', 'invoiceNumber', 'challanNo', 'returnNumber', 'itemName']
-    .map((key) => item[key])
-    .find((entry) => typeof entry === 'string' && entry.trim())
-  return typeof value === 'string' ? value : 'Recent record available'
-}
+type Todo = { _id: string; title: string; dueDate?: string; priority?: string; status: string }
+type Task = Todo
+type Attendance = { _id: string; date: string; status: string; checkIn?: string; checkOut?: string; correctionRequest?: { status: string } }
+type LeaveRequest = { _id: string; leaveType?: { name?: string }; fromDate: string; toDate: string; days: number; status: string }
 
-const loadSnapshot = async (item: WorkspaceModule, access: AccessLevel): Promise<ModuleSnapshot> => {
-  try {
-    const response = await apiFetch<ApiList>(item.endpoint)
-    const records = Array.isArray(response.data) ? response.data : []
-    return { ...item, access, total: typeof response.meta?.total === 'number' ? response.meta.total : records.length, latest: recordName(records[0]) }
-  } catch (error) {
-    return { ...item, access, total: null, latest: 'Data could not be loaded', error: error instanceof Error ? error.message : 'Request failed' }
-  }
-}
-
-const emptyActivity: DashboardActivity = { todos: [], upcomingLeads: [], overdueTasks: [], invoices: [], holidays: [] }
-const dateOnly = (value: string | Date = new Date()) => new Date(value).toISOString().slice(0, 10)
-const dateText = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)) : 'No date'
-const dateTimeText = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) : 'Not scheduled'
-const currency = (value?: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value || 0)
-
-const loadActivity = async (modules: AppModule[]): Promise<DashboardActivity> => {
-  const canAccess = (module: AppModule) => modules.includes(module)
-  const requestList = <T,>(allowed: boolean, endpoint: string) => allowed ? apiFetch<{ data: T[] }>(endpoint).then((response) => response.data).catch(() => []) : Promise.resolve<T[]>([])
-  const today = dateOnly()
-  const [todos, summary, upcomingLeads, overdueTasks, invoices, holidays] = await Promise.all([
-    requestList<Todo>(canAccess('todo'), `/todos?limit=5&fromDate=${today}&toDate=${today}`),
-    canAccess('leads') || canAccess('tasks') ? apiFetch<{ data: DashboardSummary }>('/dashboard/summary').then((response) => response.data).catch(() => undefined) : Promise.resolve(undefined),
-    requestList<Lead>(canAccess('leads'), '/leads?upcomingMeeting=true&limit=5'),
-    requestList<Task>(canAccess('tasks'), '/tasks?deadline=exceeded&limit=5'),
-    requestList<Invoice>(canAccess('invoices'), '/invoices?limit=5&sort=createdAt'),
-    requestList<Holiday>(canAccess('hr'), '/hr/holidays'),
-  ])
-  return { todos, summary, upcomingLeads, overdueTasks, invoices, holidays: holidays.filter((holiday) => dateOnly(holiday.date) >= today).slice(0, 5) }
-}
-
-const ModuleTable = ({ title, description, href, emptyText, rows }: { title: string; description: string; href: string; emptyText: string; rows: WorkRow[] }) => <Card className="h-100"><CardBody className="p-4"><div className="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3"><div><h4 className="card-title mb-1">{title}</h4><p className="text-muted mb-0">{description}</p></div><Link to={href} className="btn btn-sm btn-outline-primary text-nowrap">View all</Link></div>{!rows.length ? <div className="text-muted text-center py-4">{emptyText}</div> : <Table responsive hover className="align-middle mb-0"><thead><tr><th>Item</th><th>Details</th><th>When</th><th>Status</th><th className="text-end">Open</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td className="fw-semibold">{row.item}</td><td className="text-muted">{row.detail}</td><td>{row.when}</td><td><Badge bg={row.variant} text={row.variant === 'warning' || row.variant === 'info' ? 'dark' : undefined}>{row.status}</Badge></td><td className="text-end">{row.href ? <Link to={row.href} className="btn btn-sm btn-outline-primary">Open</Link> : <span className="text-muted">—</span>}</td></tr>)}</tbody></Table>}</CardBody></Card>
+const currentMonth = () => new Date().toISOString().slice(0, 7)
+const dateText = (value?: string) => value ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)) : 'No deadline'
+const statusVariant = (status: string) => ['completed', 'done', 'approved', 'present'].includes(status.toLowerCase()) ? 'success' : ['rejected', 'absent', 'blocked'].includes(status.toLowerCase()) ? 'danger' : ['pending', 'late', 'in progress', 'review'].includes(status.toLowerCase()) ? 'warning' : 'primary'
+const priorityVariant = (priority?: string) => priority === 'Critical' || priority === 'High' ? 'danger' : priority === 'Medium' ? 'warning' : 'secondary'
 
 const MyDashboardPage = () => {
-  const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
-  const [snapshots, setSnapshots] = useState<ModuleSnapshot[]>([])
-  const [activity, setActivity] = useState<DashboardActivity>(emptyActivity)
+  const canViewTodos = canAccessModule(user, 'todo')
+  const canViewTasks = canAccessModule(user, 'tasks')
+  const [overview, setOverview] = useState<EmployeeOverview>()
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [attendanceRecords, setAttendanceRecords] = useState<Attendance[]>([])
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([])
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const access = useMemo(() => (user?.modulePermissions || [])
-    .filter((permission): permission is { module: AppModule; access: AccessLevel } => permission.access === 'view' || permission.access === 'manage')
-    .map((permission) => ({ ...workspaceModules[permission.module], access: permission.access })), [user?.modulePermissions])
-  const accessKey = access.map((item) => `${item.module}:${item.access}`).join('|')
 
   useEffect(() => {
     let active = true
-    if (!token || !access.length) {
-      setSnapshots([])
-      setActivity(emptyActivity)
-      setLoading(false)
-      return () => { active = false }
-    }
     setLoading(true)
+    setError('')
     Promise.all([
-      Promise.all(access.map((item) => loadSnapshot(item, item.access))),
-      loadActivity(access.map((item) => item.module)),
-    ]).then(([snapshotData, activityData]) => {
+      apiFetch<{ data: EmployeeOverview }>(`/hr/employee-overview?month=${currentMonth()}`),
+      canViewTodos ? apiFetch<{ data: Todo[] }>('/todos?limit=5') : Promise.resolve({ data: [] }),
+      canViewTasks ? apiFetch<{ data: Task[] }>('/tasks?assignedToMe=true&limit=6') : Promise.resolve({ data: [] }),
+      apiFetch<{ data: Attendance[] }>('/hr/attendance?limit=5'),
+      apiFetch<{ data: LeaveRequest[] }>('/hr/leave/requests?status=pending'),
+    ]).then(([employee, todoList, taskList, attendanceList, leaveList]) => {
       if (!active) return
-      setSnapshots(snapshotData)
-      setActivity(activityData)
+      setOverview(employee.data)
+      setTodos(todoList.data)
+      setTasks(taskList.data)
+      setAttendanceRecords(attendanceList.data)
+      setLeaveRequests(leaveList.data)
+    }).catch((reason) => {
+      if (active) setError(reason instanceof Error ? reason.message : 'Unable to load your dashboard')
     }).finally(() => {
       if (active) setLoading(false)
     })
     return () => { active = false }
-  }, [token, accessKey])
+  }, [canViewTasks, canViewTodos])
 
-  const hasAccess = (module: AppModule) => access.some((item) => item.module === module)
-  const visibleSnapshots = snapshots.filter((item) => item.module !== 'notifications' && hasAccess(item.module))
-  const moduleTotal = (module: AppModule) => snapshots.find((item) => item.module === module)?.total ?? 0
-  const focusModules: AppModule[] = ['todo', 'leads', 'tasks', 'hr', 'clients', 'invoices']
-  const countCards = [
-    hasAccess('todo') && { label: 'Due today', value: activity.todos.length, note: 'Todo items scheduled for today', color: 'primary', icon: 'iconamoon:check-circle-1-duotone' },
-    hasAccess('leads') && { label: 'Meetings today', value: activity.summary?.todayMeetings.length || 0, note: 'Lead meetings on today’s calendar', color: 'info', icon: 'iconamoon:calendar-1-duotone' },
-    hasAccess('tasks') && { label: 'Pending tasks', value: activity.summary?.priorityTasks.length || 0, note: 'Open work requiring attention', color: 'warning', icon: 'iconamoon:clock-duotone' },
-    hasAccess('tasks') && { label: 'Past deadline', value: activity.overdueTasks.length, note: 'Open tasks that are overdue', color: 'danger', icon: 'iconamoon:danger-triangle-duotone' },
-    hasAccess('clients') && { label: 'Total clients', value: moduleTotal('clients'), note: 'Client records you can access', color: 'success', icon: 'iconamoon:profile-duotone' },
-    hasAccess('invoices') && { label: 'Recent invoices', value: activity.invoices.length, note: 'Newest invoices', color: 'secondary', icon: 'iconamoon:receipt-duotone' },
-    hasAccess('hr') && { label: 'Upcoming holidays', value: activity.holidays.length, note: 'The next holidays on the calendar', color: 'info', icon: 'iconamoon:calendar-duotone' },
-    ...snapshots.filter((item) => !focusModules.includes(item.module)).map((item) => ({ label: moduleLabel(item.module), value: item.total ?? '—', note: item.recordLabel, color: 'primary', icon: item.icon })),
-  ].filter(Boolean) as { label: string; value: string | number; note: string; color: string; icon: string }[]
-  const workRows: WorkRow[] = [
-    ...activity.todos.map((todo) => ({ id: `todo-${todo._id}`, type: 'Today’s todo', item: todo.title, detail: `${todo.priority || 'Medium'} priority`, when: dateText(todo.dueDate), status: 'Due today', variant: 'primary', href: '/apps/todo' })),
-    ...(activity.summary?.todayMeetings || []).map((lead) => ({ id: `meeting-${lead._id}`, type: 'Today’s meeting', item: lead.name, detail: lead.nextMeeting?.meetingType || 'Lead meeting', when: dateTimeText(lead.nextMeeting?.startsAt), status: 'Today', variant: 'info', href: `/leads/${lead._id}` })),
-    ...(activity.summary?.priorityTasks || []).map((task) => ({ id: `task-${task._id}`, type: 'Pending task', item: task.title, detail: `${task.priority || 'Medium'} priority`, when: dateText(task.dueDate), status: task.status, variant: 'warning', href: `/tasks/${task._id}` })),
-    ...activity.overdueTasks.map((task) => ({ id: `overdue-${task._id}`, type: 'Past deadline', item: task.title, detail: `${task.priority || 'Medium'} priority`, when: dateText(task.dueDate), status: 'Overdue', variant: 'danger', href: `/tasks/${task._id}` })),
-    ...activity.upcomingLeads.map((lead) => ({ id: `upcoming-${lead._id}`, type: 'Upcoming meeting', item: lead.name, detail: lead.company || lead.nextMeeting?.meetingType || 'Lead meeting', when: dateTimeText(lead.nextMeeting?.startsAt), status: 'Scheduled', variant: 'info', href: `/leads/${lead._id}` })),
-    ...activity.invoices.map((invoice) => ({ id: `invoice-${invoice._id}`, type: 'Recent invoice', item: invoice.invoiceNumber, detail: `${invoice.client?.name || 'Client'} · ${currency(invoice.grandTotal)}`, when: dateText(invoice.createdAt), status: 'Created', variant: 'secondary', href: `/invoices/${invoice._id}` })),
-    ...activity.holidays.map((holiday) => ({ id: `holiday-${holiday._id}`, type: 'Upcoming holiday', item: holiday.name, detail: holiday.type, when: dateText(holiday.date), status: 'Holiday', variant: 'info' })),
+  const attendance = overview?.attendance.summary || {}
+  const pendingLeaves = overview?.leaves.filter((leave) => leave.status === 'pending').length || 0
+  const cards = [
+    { label: 'Present days', value: attendance.present || 0, icon: 'iconamoon:check-circle-1-duotone', color: 'success' },
+    { label: 'Late arrivals', value: attendance.late || 0, icon: 'iconamoon:clock-duotone', color: 'warning' },
+    { label: 'Leave requests', value: overview?.leaves.length || 0, icon: 'iconamoon:calendar-1-duotone', color: 'primary' },
+    { label: 'Pending leave', value: pendingLeaves, icon: 'iconamoon:time-duotone', color: 'info' },
+  ]
+  const selfService = [
+    { label: 'My profile', description: 'Personal details and employment documents.', href: '/hr/my-profile' },
+    { label: 'My attendance', description: 'Attendance records and correction requests.', href: '/hr/my-attendance' },
+    { label: 'Leave requests', description: 'Apply for leave and follow approval status.', href: '/hr/leave' },
+    { label: 'Salary slips', description: 'View and download your payslips.', href: '/hr/my-payslips' },
   ]
 
   return <>
     <PageMetaData title="My Dashboard" />
-    <Card className="border-0 bg-body-tertiary mb-4"><CardBody className="p-4 p-lg-5"><Row className="align-items-center g-3"><Col lg={8}><div className="text-primary text-uppercase fw-semibold fs-13 mb-2">My dashboard</div><h2 className="mb-2">Welcome back, {user?.name || 'there'}.</h2><p className="text-muted mb-0">A live view of the records available through your assigned access.</p></Col><Col lg={4} className="text-lg-end"><Badge bg="primary" className="fs-6">{access.length} active modules</Badge></Col></Row></CardBody></Card>
-
-    {!access.length ? <Card><CardBody className="py-5 text-center text-muted">No business modules are assigned yet.</CardBody></Card> : <>
-      <Row className="g-3 mb-4">{countCards.map((item) => <Col sm={6} xl={3} key={item.label}><Card className="h-100 border-start border-3" style={{ borderLeftColor: `var(--bs-${item.color})` }}><CardBody className="p-3 p-lg-4"><div className="d-flex justify-content-between align-items-start gap-2"><div><div className="text-muted fs-13">{item.label}</div><h2 className={`mb-1 mt-1 text-${item.color}`}>{loading ? '—' : item.value}</h2><div className="text-muted fs-13">{item.note}</div></div><IconifyIcon icon={item.icon} className={`fs-3 text-${item.color}`} aria-hidden="true" /></div></CardBody></Card></Col>)}</Row>
-
-      {loading ? <div className="text-center py-5"><Spinner className="spinner-border-sm me-2" tag="span" /><span className="text-muted">Loading your dashboard...</span></div> : <>
-        <Card className="mb-4"><CardBody className="p-4"><div className="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3"><div><div className="text-primary text-uppercase fw-semibold fs-13 mb-1">Available tools</div><h4 className="card-title mb-1">Your accessible modules</h4><p className="text-muted mb-0">Open a module, see its current record count, and review its latest item.</p></div><Badge bg="light" text="dark">{visibleSnapshots.length} available</Badge></div><Table responsive hover className="align-middle mb-0"><thead><tr><th>Module</th><th>Records</th><th>Latest record</th><th>Access</th><th className="text-end">Open</th></tr></thead><tbody>{visibleSnapshots.map((item) => <tr key={item.module}><td><div className="d-flex align-items-center gap-2"><span className="d-inline-flex align-items-center justify-content-center rounded bg-primary-subtle text-primary p-2"><IconifyIcon icon={item.icon} className="fs-5" aria-hidden="true" /></span><span className="fw-semibold">{moduleLabel(item.module)}</span></div></td><td>{item.total === null ? <span className="text-danger">Unavailable</span> : <><span className="fw-semibold">{item.total}</span> <span className="text-muted fs-13">{item.recordLabel}</span></>}</td><td className="text-muted">{item.latest}{item.error ? <div className="fs-13 text-danger">{item.error}</div> : null}</td><td><Badge bg={item.access === 'manage' ? 'success' : 'info'} text={item.access === 'view' ? 'dark' : undefined}>{item.access}</Badge></td><td className="text-end"><Link to={item.href} className="btn btn-sm btn-outline-primary">Open</Link></td></tr>)}</tbody></Table></CardBody></Card>
-
-        <Row className="g-4">
-          {hasAccess('todo') && <Col xl={6}><ModuleTable title="Today’s todos" description="Todo items due today." href="/apps/todo" emptyText="No todos are due today." rows={workRows.filter((row) => row.type === 'Today’s todo')} /></Col>}
-          {hasAccess('leads') && <Col xl={6}><ModuleTable title="Today’s lead meetings" description="Meetings scheduled for today." href="/leads/scheduled" emptyText="No meetings are scheduled today." rows={workRows.filter((row) => row.type === 'Today’s meeting')} /></Col>}
-          {hasAccess('tasks') && <Col xl={6}><ModuleTable title="Pending tasks" description="Open tasks that need attention." href="/tasks/assigned-to-me" emptyText="No pending tasks." rows={workRows.filter((row) => row.type === 'Pending task')} /></Col>}
-          {hasAccess('tasks') && <Col xl={6}><ModuleTable title="Tasks past deadline" description="Open tasks whose due date has passed." href="/tasks/assigned-to-me" emptyText="No tasks have crossed their deadline." rows={workRows.filter((row) => row.type === 'Past deadline')} /></Col>}
-          {hasAccess('leads') && <Col xl={6}><ModuleTable title="Upcoming lead meetings" description="Your next lead conversations." href="/leads/scheduled" emptyText="No upcoming lead meetings." rows={workRows.filter((row) => row.type === 'Upcoming meeting')} /></Col>}
-          {hasAccess('hr') && <Col xl={6}><ModuleTable title="Upcoming holidays" description="Company holidays scheduled ahead." href="/hr/upcoming-holidays" emptyText="No upcoming holidays have been scheduled." rows={workRows.filter((row) => row.type === 'Upcoming holiday')} /></Col>}
+    <Card className="border-0 bg-body-tertiary mb-4">
+      <CardBody className="p-4 p-lg-5">
+        <Row className="align-items-center g-3">
+          <Col lg={8}>
+            <div className="text-primary text-uppercase fw-semibold fs-13 mb-2">Employee dashboard</div>
+            <h2 className="mb-2">Welcome back, {user?.name || 'there'}.</h2>
+            <p className="text-muted mb-0">Your attendance, leave, payroll self-service, and assigned tasks in one place.</p>
+          </Col>
         </Row>
-      </>}
-    </>}
+      </CardBody>
+    </Card>
+
+    {error && <Alert variant="danger">{error}</Alert>}
+    <Row className="g-3 mb-4">
+      {cards.map((card) => <Col sm={6} xl={3} key={card.label}>
+        <Card className="h-100 border-start border-3" style={{ borderLeftColor: `var(--bs-${card.color})` }}>
+          <CardBody className="p-3 p-lg-4">
+            <div className="d-flex align-items-start justify-content-between gap-2">
+              <div><div className="text-muted fs-13">{card.label}</div><h2 className={`mb-0 mt-1 text-${card.color}`}>{loading ? '—' : card.value}</h2></div>
+              <IconifyIcon icon={card.icon} className={`fs-3 text-${card.color}`} aria-hidden="true" />
+            </div>
+          </CardBody>
+        </Card>
+      </Col>)}
+    </Row>
+
+    <Card className="mb-4">
+      <CardBody className="p-4">
+        <div className="mb-3"><div className="text-primary text-uppercase fw-semibold fs-13 mb-1">Employee self-service</div><h4 className="card-title mb-1">My work profile</h4><p className="text-muted mb-0">Review and manage your own employment information.</p></div>
+        <Table responsive hover className="align-middle mb-0">
+          <thead><tr><th>Service</th><th>What you can do</th><th className="text-end">Action</th></tr></thead>
+          <tbody>{selfService.map((service) => <tr key={service.href}><td className="fw-semibold">{service.label}</td><td className="text-muted">{service.description}</td><td className="text-end"><Link to={service.href} className="btn btn-sm btn-outline-primary">View</Link></td></tr>)}</tbody>
+        </Table>
+      </CardBody>
+    </Card>
+
+    {loading ? <div className="text-center py-4"><Spinner className="spinner-border-sm me-2" tag="span" /><span className="text-muted">Loading dashboard tables...</span></div> : <Row className="g-4">
+      {canViewTodos && <Col xl={6}><Card className="h-100"><CardBody className="p-4"><div className="d-flex justify-content-between gap-3 mb-3"><div><h4 className="card-title mb-1">My todos</h4><p className="text-muted mb-0">Personal work and due dates.</p></div><Link to="/apps/todo" className="btn btn-sm btn-outline-primary text-nowrap">View all</Link></div><Table responsive hover className="align-middle mb-0"><thead><tr><th>Todo</th><th>Due date</th><th>Priority</th><th>Status</th></tr></thead><tbody>{todos.map((todo) => <tr key={todo._id}><td className="fw-semibold">{todo.title}</td><td>{dateText(todo.dueDate)}</td><td><Badge bg={priorityVariant(todo.priority)} text={priorityVariant(todo.priority) === 'warning' ? 'dark' : undefined}>{todo.priority || 'Normal'}</Badge></td><td><Badge bg={statusVariant(todo.status)} text={statusVariant(todo.status) === 'warning' ? 'dark' : undefined}>{todo.status}</Badge></td></tr>)}{!todos.length && <tr><td colSpan={4} className="text-center text-muted py-4">No todos assigned to you.</td></tr>}</tbody></Table></CardBody></Card></Col>}
+      {canViewTasks && <Col xl={6}><Card className="h-100"><CardBody className="p-4"><div className="d-flex justify-content-between gap-3 mb-3"><div><div className="text-primary text-uppercase fw-semibold fs-13 mb-1">Task Management</div><h4 className="card-title mb-1">New tasks</h4><p className="text-muted mb-0">Tasks assigned to you, ordered by due date.</p></div><Link to="/tasks/assigned-to-me" className="btn btn-sm btn-outline-primary text-nowrap">View all</Link></div><Table responsive hover className="align-middle mb-0"><thead><tr><th>Task</th><th>Due date</th><th>Priority</th><th>Status</th></tr></thead><tbody>{tasks.map((task) => <tr key={task._id}><td className="fw-semibold"><Link to={`/tasks/${task._id}`} className="text-reset">{task.title}</Link></td><td>{dateText(task.dueDate)}</td><td><Badge bg={priorityVariant(task.priority)} text={priorityVariant(task.priority) === 'warning' ? 'dark' : undefined}>{task.priority || 'Normal'}</Badge></td><td><Badge bg={statusVariant(task.status)} text={statusVariant(task.status) === 'warning' ? 'dark' : undefined}>{task.status}</Badge></td></tr>)}{!tasks.length && <tr><td colSpan={4} className="text-center text-muted py-4">No tasks are assigned to you.</td></tr>}</tbody></Table></CardBody></Card></Col>}
+      <Col xl={6}><Card className="h-100"><CardBody className="p-4"><div className="d-flex justify-content-between gap-3 mb-3"><div><h4 className="card-title mb-1">Recent attendance</h4><p className="text-muted mb-0">Your latest attendance records and corrections.</p></div><Link to="/hr/my-attendance" className="btn btn-sm btn-outline-primary text-nowrap">View all</Link></div><Table responsive hover className="align-middle mb-0"><thead><tr><th>Date</th><th>Status</th><th>In</th><th>Out</th><th>Correction</th></tr></thead><tbody>{attendanceRecords.map((record) => <tr key={record._id}><td>{dateText(record.date)}</td><td><Badge bg={statusVariant(record.status)} text={statusVariant(record.status) === 'warning' ? 'dark' : undefined}>{record.status}</Badge></td><td>{record.checkIn || '—'}</td><td>{record.checkOut || '—'}</td><td>{record.correctionRequest ? <Badge bg={statusVariant(record.correctionRequest.status)} text={record.correctionRequest.status === 'pending' ? 'dark' : undefined}>{record.correctionRequest.status}</Badge> : '—'}</td></tr>)}{!attendanceRecords.length && <tr><td colSpan={5} className="text-center text-muted py-4">No attendance records yet.</td></tr>}</tbody></Table></CardBody></Card></Col>
+      <Col xl={6}><Card className="h-100"><CardBody className="p-4"><div className="d-flex justify-content-between gap-3 mb-3"><div><h4 className="card-title mb-1">Pending leave requests</h4><p className="text-muted mb-0">Requests awaiting HR approval.</p></div><Link to="/hr/leave" className="btn btn-sm btn-outline-primary text-nowrap">View all</Link></div><Table responsive hover className="align-middle mb-0"><thead><tr><th>Leave type</th><th>From</th><th>To</th><th>Days</th><th>Status</th></tr></thead><tbody>{leaveRequests.map((request) => <tr key={request._id}><td className="fw-semibold">{request.leaveType?.name || 'Leave'}</td><td>{dateText(request.fromDate)}</td><td>{dateText(request.toDate)}</td><td>{request.days}</td><td><Badge bg="warning" text="dark">{request.status}</Badge></td></tr>)}{!leaveRequests.length && <tr><td colSpan={5} className="text-center text-muted py-4">No leave requests are waiting for approval.</td></tr>}</tbody></Table></CardBody></Card></Col>
+    </Row>}
   </>
 }
 

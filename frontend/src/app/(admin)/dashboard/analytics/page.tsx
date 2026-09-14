@@ -12,6 +12,7 @@ import { hasFullAppAccess } from '@/helpers/moduleAccess'
 import { useAuthStore } from '@/store/authStore'
 import MyDashboard from '@/app/(admin)/hr/my-dashboard/page'
 import AdminDashboardPage from '@/app/(admin)/dashboard/admin/page'
+import Profile from '@/app/(admin)/pages/profile/page'
 import type { UserType } from '@/types/auth'
 import type { LeadOwner, LeadType } from '@/types/lead'
 
@@ -317,8 +318,9 @@ export const AdminDashboard = () => {
 const Analytics = () => {
   const user = useAuthStore((state) => state.user)
   const isAdmin = hasFullAppAccess(user)
+  const isEmployee = user?.workProfile === 'employee' || (!user?.workProfile && user?.accessTypes?.includes('employee'))
 
-  return isAdmin ? <AdminDashboardPage /> : <MyDashboard />
+  return isAdmin ? <AdminDashboardPage /> : isEmployee ? <MyDashboard /> : <Profile />
 }
 
 export default Analytics

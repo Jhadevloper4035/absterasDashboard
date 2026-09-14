@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { Client } from '../clients/models/client.model.js';
 import { auditEvent } from '../../services/audit.service.js';
 import { signAttachmentUrls, trustedAttachment } from '../../services/upload.service.js';
-import { userRoles } from '../auth/middleware/auth.middleware.js';
+import { hasDesignerReviewAccess, userRoles } from '../auth/middleware/auth.middleware.js';
 import { Boq } from './models/boq.model.js';
 import { Drawing } from './models/drawing.model.js';
 import { ProductionData } from './models/production-data.model.js';
@@ -10,6 +10,7 @@ import { SiteMeasurement } from './models/site-measurement.model.js';
 
 const validId = (value) => mongoose.isValidObjectId(value);
 const isAdmin = (user) => userRoles(user).some((role) => role === 'superadmin' || role === 'admin');
+export const canViewAllProductionData = (user) => isAdmin(user) || hasDesignerReviewAccess(user);
 const message = (statusCode, text) => Object.assign(new Error(text), { statusCode });
 const cleanText = (value, limit) => String(value || '').trim().slice(0, limit);
 
@@ -83,7 +84,7 @@ async function productionDataValue(productionData) {
 
 function productionDataQuery(req) {
   const query = {};
-  if (!isAdmin(req.user)) query.createdBy = req.user._id;
+  if (!canViewAllProductionData(req.user)) query.createdBy = req.user._id;
   if (validId(req.query.client)) query.client = req.query.client;
   if (validId(req.query.site)) query.clientSite = req.query.site;
   return query;
