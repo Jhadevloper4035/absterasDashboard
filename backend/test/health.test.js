@@ -48,6 +48,10 @@ function request(method, url) {
   });
 }
 
+test('exposes a deployment-friendly host default', () => {
+  assert.equal(env.host, '0.0.0.0');
+});
+
 test('health reports degraded before MongoDB connects', async () => {
   try {
     const response = await request('GET', '/health');

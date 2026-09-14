@@ -15,6 +15,8 @@ services:
       target: dev
     env_file:
       - ./.env.development
+    environment:
+      HOST: 0.0.0.0
     ports:
       - "4000:4000"
     dns:
@@ -48,7 +50,7 @@ services:
       dockerfile: Dockerfile
       target: dev
     environment:
-      VITE_API_BASE_URL: http://localhost:4000/api
+      VITE_API_BASE_URL: /api
     ports:
       - "5173:5173"
     volumes:
