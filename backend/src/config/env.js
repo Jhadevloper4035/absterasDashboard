@@ -28,6 +28,7 @@ export const env = {
   appName: process.env.APP_NAME || 'Absteras Company CRM API',
   authSecret: process.env.AUTH_SECRET || (isTestEnv ? 'test-secret-012345678901234567890123' : undefined),
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  host: process.env.HOST || '0.0.0.0',
   isProduction,
   mongoUri: process.env.MONGODB_URI || (isTestEnv ? 'mongodb://127.0.0.1:27017/absteras_test' : undefined),
   nodeEnv: process.env.NODE_ENV || 'development',
