@@ -291,6 +291,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                   showPreview={false}
                   uploading={uploading}
                   uploadProgress={uploadProgress}
+                  resetKey={form.attachments.length}
                   onFileUpload={uploadFiles}
                 />
                 {uploading && (

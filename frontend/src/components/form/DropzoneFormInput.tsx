@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Card, Col, FormLabel, FormText, ProgressBar } from 'react-bootstrap'
 
 import Dropzone from 'react-dropzone'
@@ -20,11 +20,16 @@ const DropzoneFormInput = ({
   disabled,
   uploading = false,
   uploadProgress = 0,
+  resetKey,
   onFileUpload,
 }: DropzoneFormInputProps) => {
-  const { selectedFiles, handleAcceptedFiles, removeFile } = useFileUploader(showPreview)
+  const { selectedFiles, handleAcceptedFiles, removeFile, clearFiles } = useFileUploader(showPreview)
   const [handlingFiles, setHandlingFiles] = useState(false)
   const isUploading = uploading || handlingFiles
+
+  useEffect(() => {
+    clearFiles()
+  }, [clearFiles, resetKey])
 
   const onDrop = async (files: UploadFileType[]) => {
     handleAcceptedFiles(files)

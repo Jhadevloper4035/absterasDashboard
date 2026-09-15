@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import type { UploadFileType } from '@/types/component-props'
 import { formatFileSize } from '@/utils/other'
@@ -24,9 +24,12 @@ export default function useFileUploader(showPreview: boolean = true) {
     setSelectedFiles(newFiles)
   }
 
+  const clearFiles = useCallback(() => setSelectedFiles([]), [])
+
   return {
     selectedFiles,
     handleAcceptedFiles,
     removeFile,
+    clearFiles,
   }
 }

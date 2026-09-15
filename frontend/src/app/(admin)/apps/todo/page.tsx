@@ -516,6 +516,7 @@ const TODO = () => {
                               showPreview={false}
                               uploading={uploading}
                               uploadProgress={uploadProgress}
+                              resetKey={form.attachments.length}
                               onFileUpload={uploadFiles}
                             />
                             {uploading && (

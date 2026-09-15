@@ -78,6 +78,7 @@ export type DropzoneFormInputProps = {
   disabled?: boolean
   uploading?: boolean
   uploadProgress?: number
+  resetKey?: string | number
   onFileUpload?: (files: UploadFileType[]) => void | Promise<void>
 }
 
