@@ -78,7 +78,7 @@ test('admin can add shared work types and everyone can list them', async () => {
 
   TaskWorkType.find = () => ({
     sort() {
-      return Promise.resolve([{ role: 'general', name: 'Site Visit Follow Up' }]);
+    return Promise.resolve([{ role: 'legacy-department-id', name: 'Site Visit Follow Up' }]);
     },
   });
 

@@ -47,6 +47,7 @@ const LeadDetail = lazy(() => import('@/app/(admin)/leads/[leadId]/page'))
 const CreateTask = lazy(() => import('@/app/(admin)/tasks/create/page'))
 const TaskDetail = lazy(() => import('@/app/(admin)/tasks/[taskId]/page'))
 const UpdateTask = lazy(() => import('@/app/(admin)/tasks/[taskId]/edit/page'))
+const TaskWorkTypes = lazy(() => import('@/app/(admin)/tasks/work-types/page'))
 
 // Apps Routes
 const EcommerceProducts = lazy(() => import('@/app/(admin)/ecommerce/products/page'))
@@ -546,6 +547,12 @@ const appsRoutes: RoutesProps[] = [
     path: '/tasks/create',
     element: <CreateTask />,
     moduleAccess: 'manage',
+  },
+  {
+    name: 'Task Work Types',
+    path: '/tasks/work-types',
+    element: <TaskWorkTypes />,
+    roles: adminRoles,
   },
   {
     name: 'Tasks Assigned By Me',

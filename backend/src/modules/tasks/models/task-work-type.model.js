@@ -3,8 +3,6 @@ export const DEFAULT_TASK_WORK_TYPES = {
   general: ['Coating', 'Procurement', 'Laser Cut', 'Drawing', '3D Design', 'Revision', 'Follow Up', 'Meeting', 'Quotation', 'Documentation', 'Approval', 'Coordination', 'Payment Reminder', 'Salary Slip', 'Ledger Update'],
 };
 
-export const TASK_WORK_TYPE_ROLES = ['general'];
-
 export function normalizeTaskWorkType(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
@@ -13,8 +11,8 @@ const taskWorkTypeSchema = new mongoose.Schema(
   {
     role: {
       type: String,
-      enum: TASK_WORK_TYPE_ROLES,
       required: true,
+      trim: true,
     },
     name: {
       type: String,

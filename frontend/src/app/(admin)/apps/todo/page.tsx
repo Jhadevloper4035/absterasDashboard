@@ -115,8 +115,7 @@ const TODO = () => {
     setUploadFailed(false)
     setUploadProgress(0)
   }
-  const selectedAssignee = users.find((person) => person._id === form.assignedTo)
-  const formWorkTypes = [...new Set([...(workTypesByRole[selectedAssignee?.role || user?.role || ''] || ['General']), form.projectEpic].filter(Boolean))]
+  const formWorkTypes = [...new Set([...(workTypesByRole.general || []), form.projectEpic].filter(Boolean))]
 
   const load = async () => {
     if (!token) return

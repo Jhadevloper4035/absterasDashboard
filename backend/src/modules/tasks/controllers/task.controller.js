@@ -152,12 +152,11 @@ export async function listTaskWorkTypes(req, res) {
 
   customWorkTypes.forEach((item) => {
     const normalizedName = item.normalizedName || item.name.toLowerCase();
-    const group = 'general';
     if (item.deleted) {
-      workTypes[group] = (workTypes[group] || []).filter((name) => name.toLowerCase() !== normalizedName);
+      workTypes.general = workTypes.general.filter((name) => name.toLowerCase() !== normalizedName);
       return;
     }
-    workTypes[group] = [...new Set([...(workTypes[group] || []), item.name])].sort();
+    workTypes.general = [...new Set([...workTypes.general, item.name])].sort();
   });
 
   return res.json({ data: workTypes });

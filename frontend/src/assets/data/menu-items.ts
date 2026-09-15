@@ -100,6 +100,14 @@ export const MENU_ITEMS: MenuItemType[] = [
         requiresManage: true,
       },
       {
+        key: 'tasks-work-types',
+        label: 'Work Types',
+        url: '/tasks/work-types',
+        parentKey: 'tasks',
+        roles: adminRoles,
+        adminOnly: true,
+      },
+      {
         key: 'tasks-assigned-by-me',
         label: 'Tasks Assigned By Me',
         url: '/tasks/assigned-by-me',

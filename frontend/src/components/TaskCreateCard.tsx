@@ -74,8 +74,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   const canEditTask = !taskId || taskCreatorId === String(user?._id || '')
   const uploading = pendingUploads > 0
   const selectedAssignee = users.find((person) => person._id === form.assignee)
-  const selectedDepartment = selectedAssignee?.department
-  const workTypes = [...new Set([...(selectedDepartment ? workTypesByRole[selectedDepartment._id] || workTypesByRole.general : workTypesByRole.general || ['General']), form.projectEpic].filter(Boolean))]
+  const workTypes = [...new Set([...(workTypesByRole.general || []), form.projectEpic].filter(Boolean))]
 
   const updatePendingUploads = (change: number) => {
     pendingUploadsRef.current = Math.max(0, pendingUploadsRef.current + change)
@@ -279,7 +278,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                     <option key={workType}>{workType}</option>
                   ))}
                 </Form.Select>
-                {selectedAssignee && <Form.Text className="text-muted">{selectedDepartment ? `Work types for ${selectedDepartment.name}` : 'Shared work types'}</Form.Text>}
+                  {selectedAssignee && <Form.Text className="text-muted">Shared work types</Form.Text>}
               </Form.Group>
 
               <Form.Group as={Col} xs={12}>
