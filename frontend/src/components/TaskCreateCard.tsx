@@ -120,7 +120,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
     setUploadFailed(false)
     setError('')
     try {
-      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setUploadProgress)
+      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setUploadProgress, '/tasks/uploads')
       setForm((value) => ({ ...value, attachments: [...value.attachments, ...attachments] }))
     } catch (e) {
       setUploadFailed(true)

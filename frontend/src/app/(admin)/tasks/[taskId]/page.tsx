@@ -161,7 +161,7 @@ const TaskDetail = () => {
     setUploadNoteFailed(false)
     setError('')
     try {
-      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setUploadNoteProgress)
+      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setUploadNoteProgress, '/tasks/uploads')
       setNote((value) => ({ ...value, attachments: [...value.attachments, ...attachments] }))
     } catch (e) {
       setUploadNoteFailed(true)
@@ -178,7 +178,7 @@ const TaskDetail = () => {
     setSubmissionUploadFailed(false)
     setError('')
     try {
-      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setSubmissionUploadProgress)
+      const attachments = await uploadMultipartFiles<TaskAttachment>(files, token, setSubmissionUploadProgress, '/tasks/uploads')
       setSubmissionAttachments((value) => [...value, ...attachments])
     } catch (e) {
       setSubmissionUploadFailed(true)
@@ -334,7 +334,7 @@ const TaskDetail = () => {
                         </div>
                       </div>
                     )}
-                    {!!submissionAttachments.length && <div className="mt-3"><AttachmentDownloadList attachments={submissionAttachments} /></div>}
+                    {!!submissionAttachments.length && <div className="mt-3"><div className="small text-success mb-2">Uploaded completion files</div><AttachmentDownloadList attachments={submissionAttachments} /></div>}
                     <Button className="mt-3" type="submit" variant="success" disabled={saving || uploadingSubmission}>
                       {uploadingSubmission ? 'Uploading...' : saving ? 'Submitting...' : 'Submit Task'}
                     </Button>
