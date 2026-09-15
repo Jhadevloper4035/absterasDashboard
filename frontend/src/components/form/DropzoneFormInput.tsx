@@ -1,9 +1,10 @@
-import { Button, Card, Col, FormLabel, FormText } from 'react-bootstrap'
+import { useState } from 'react'
+import { Button, Card, Col, FormLabel, FormText, ProgressBar } from 'react-bootstrap'
 
 import Dropzone from 'react-dropzone'
 
 import useFileUploader from '@/hooks/useFileUploader'
-import type { DropzoneFormInputProps } from '@/types/component-props'
+import type { DropzoneFormInputProps, UploadFileType } from '@/types/component-props'
 import IconifyIcon from '../wrappers/IconifyIcon'
 
 const DropzoneFormInput = ({
@@ -16,14 +17,31 @@ const DropzoneFormInput = ({
   textClassName,
   accept,
   maxFiles,
+  disabled,
+  uploading = false,
+  uploadProgress = 0,
   onFileUpload,
 }: DropzoneFormInputProps) => {
   const { selectedFiles, handleAcceptedFiles, removeFile } = useFileUploader(showPreview)
+  const [handlingFiles, setHandlingFiles] = useState(false)
+  const isUploading = uploading || handlingFiles
+
+  const onDrop = async (files: UploadFileType[]) => {
+    handleAcceptedFiles(files)
+    if (!onFileUpload) return
+    setHandlingFiles(true)
+    try {
+      await onFileUpload(files)
+    } finally {
+      setHandlingFiles(false)
+    }
+  }
+
   return (
     <>
       {label && <FormLabel className={labelClassName}>{label}</FormLabel>}
 
-      <Dropzone onDrop={(acceptedFiles) => handleAcceptedFiles(acceptedFiles, onFileUpload)} accept={accept} maxFiles={maxFiles ?? 5}>
+      <Dropzone onDrop={onDrop} accept={accept} maxFiles={maxFiles ?? 5} disabled={disabled || isUploading}>
         {({ getRootProps, getInputProps }) => (
           <div className="dropzone dropzone-custom">
             <div className="dz-message" {...getRootProps()}>
@@ -32,6 +50,15 @@ const DropzoneFormInput = ({
               <h3 className={textClassName}>{text}</h3>
               {helpText && typeof helpText === 'string' ? <FormText>{helpText}</FormText> : helpText}
             </div>
+            {selectedFiles.length > 0 && (
+              <div className="mt-2 small">
+                <div className={isUploading ? 'text-primary' : 'text-muted'}>
+                  {isUploading ? `Uploading ${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'}…` : `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} selected`}
+                </div>
+                {isUploading && <ProgressBar className="mt-1" now={uploadProgress} label={`${uploadProgress}%`} style={{ height: 8 }} />}
+                {!isUploading && <div className="text-muted">{selectedFiles.map((file) => file.name).join(', ')}</div>}
+              </div>
+            )}
             {showPreview && selectedFiles.length > 0 && (
               <div className="dz-preview row g-4">
                 {(selectedFiles || []).map((file) => (

@@ -1,9 +1,10 @@
 import PageMetaData from '@/components/PageTitle'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { apiFetch } from '@/helpers/api'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { EmployeeType } from '@/types/hr'
-import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Form, Table } from 'react-bootstrap'
 
 type Receipt = { key: string; contentType: string; originalName?: string; url?: string; size: number; checksum: string; attachmentToken: string }
@@ -16,7 +17,6 @@ const amountText = (amount: number) => Number(amount || 0).toLocaleString(undefi
 const ExpensesPage = () => {
   const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
-  const fileInput = useRef<HTMLInputElement>(null)
   const [claims, setClaims] = useState<Claim[]>([])
   const [employees, setEmployees] = useState<EmployeeType[]>([])
   const [paidBy, setPaidBy] = useState('')
@@ -28,6 +28,7 @@ const ExpensesPage = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   const isEmployee = user?.workProfile === 'employee' || (!user?.workProfile && user?.accessTypes?.includes('employee'))
   const canChooseEmployee = !isEmployee && employees.length > 0
@@ -41,10 +42,10 @@ const ExpensesPage = () => {
       .catch(() => {})
   }, [isEmployee])
 
-  const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/')).slice(0, 5)
+  const selectFiles = (selectedFiles: File[]) => {
+    const selected = selectedFiles.filter((file) => file.type.startsWith('image/')).slice(0, 5)
     setFiles(selected)
-    if (event.target.files?.length && !selected.length) setError('Choose JPEG, PNG, or WebP payment screenshots.')
+    if (selectedFiles.length && !selected.length) setError('Choose JPEG, PNG, or WebP payment screenshots.')
   }
 
   const submit = async (event: FormEvent) => {
@@ -58,13 +59,12 @@ const ExpensesPage = () => {
     setError('')
     setSuccess('')
     try {
-      const receipts = await uploadMultipartFiles<Receipt>(files, token)
+      const receipts = await uploadMultipartFiles<Receipt>(files, token, setUploadProgress)
       await apiFetch('/hr/expenses', { method: 'POST', body: JSON.stringify({ employee: paidBy || undefined, category, amount: Number(amount), note, receipts }) })
       setCategory('')
       setAmount('')
       setNote('')
       setFiles([])
-      if (fileInput.current) fileInput.current.value = ''
       setSuccess('Your reimbursement request was sent to HR.')
       await load()
     } catch (value) {
@@ -97,7 +97,7 @@ const ExpensesPage = () => {
           {!canChooseEmployee && <div className="col-md-6"><Form.Label>Submitted by</Form.Label><Form.Control value={user?.name || 'Current employee'} disabled /></div>}
           <div className="col-md-6"><Form.Label>Expense category</Form.Label><Form.Control required value={category} onChange={(event) => setCategory(event.target.value)} placeholder="For example: Local travel" /></div>
           <div className="col-md-4"><Form.Label>Amount paid</Form.Label><Form.Control required min="0.01" step="0.01" type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" /></div>
-          <div className="col-md-8"><Form.Label>Payment screenshot</Form.Label><Form.Control ref={fileInput} required multiple accept="image/jpeg,image/png,image/webp" type="file" onChange={selectFiles} /><Form.Text>{files.length ? `${files.length} screenshot${files.length === 1 ? '' : 's'} ready: ${files.map((file) => file.name).join(', ')}` : 'JPEG, PNG, or WebP. You can add up to five images.'}</Form.Text></div>
+          <div className="col-md-8"><DropzoneFormInput label="Payment screenshots" text="Drop payment screenshots here, or browse" showPreview={false} accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }} maxFiles={5} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={selectFiles} /><Form.Text>{files.length ? `${files.length} screenshot${files.length === 1 ? '' : 's'} ready: ${files.map((file) => file.name).join(', ')}` : 'JPEG, PNG, or WebP. You can add up to five images.'}</Form.Text></div>
           <div className="col-12"><Form.Label>What was this payment for?</Form.Label><Form.Control required as="textarea" rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Briefly explain the business purpose of this expense." /></div>
           <div className="col-12 d-flex justify-content-end"><Button type="submit" disabled={saving || !files.length}>{saving ? 'Submitting request…' : 'Submit reimbursement request'}</Button></div>
         </Form>

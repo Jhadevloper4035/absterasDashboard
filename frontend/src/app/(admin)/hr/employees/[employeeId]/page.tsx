@@ -1,11 +1,12 @@
 import PageMetaData from '@/components/PageTitle'
 import PdfActionButton from '@/components/PdfActionButton'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { apiFetch } from '@/helpers/api'
 import { downloadIdCardPdf } from '@/helpers/idCard'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { EmployeeType } from '@/types/hr'
-import { ChangeEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Badge, Card, CardBody, Form, Table } from 'react-bootstrap'
 import Swal from 'sweetalert2'
 import { useParams } from 'react-router-dom'
@@ -20,6 +21,7 @@ const EmployeeDetailPage = () => {
   const [documentType, setDocumentType] = useState(documentTypes[0])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const load = () =>
     apiFetch<{ data: EmployeeType }>(`/hr/employees/${employeeId}`)
       .then((response) => setEmployee(response.data))
@@ -59,28 +61,25 @@ const EmployeeDetailPage = () => {
       return
     await update({ status, ...(status === 'active' ? {} : { lastWorkingDate: new Date().toISOString().slice(0, 10) }) })
   }
-  const uploadPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+  const uploadPhoto = async (files: File[]) => {
+    const file = files[0]
     if (!file || !token) return
     setSaving(true)
     try {
-      const [photo] = await uploadMultipartFiles<Upload>([file], token)
+      const [photo] = await uploadMultipartFiles<Upload>([file], token, setUploadProgress)
       await update({ photo })
-      event.target.value = ''
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to upload photo')
     } finally {
       setSaving(false)
     }
   }
-  const uploadDocuments = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
+  const uploadDocuments = async (files: File[]) => {
     if (!files.length || !employee || !token) return
     setSaving(true)
     try {
-      const filesToAdd = await uploadMultipartFiles<Upload>(files, token)
+      const filesToAdd = await uploadMultipartFiles<Upload>(files, token, setUploadProgress)
       await update({ documents: [...employee.documents, ...filesToAdd.map((file) => ({ ...file, type: documentType }))] })
-      event.target.value = ''
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to upload documents')
     } finally {
@@ -129,7 +128,7 @@ const EmployeeDetailPage = () => {
               </Badge>
               <div className="border-top mt-4 pt-3 text-start">
                 <Form.Label>Profile photo</Form.Label>
-                <Form.Control disabled={saving} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadPhoto} />
+                <DropzoneFormInput text="Drop a profile photo here, or browse" showPreview={false} accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }} maxFiles={1} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={uploadPhoto} />
                 <Form.Text>Used on the ID card.</Form.Text>
               </div>
               <PdfActionButton className="mt-3" variant="outline-primary" action={() => downloadIdCardPdf(employee._id, token).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to download ID card'))}>
@@ -227,7 +226,7 @@ const EmployeeDetailPage = () => {
                 </div>
                 <div className="col-md-8">
                   <Form.Label>Select one or more files</Form.Label>
-                  <Form.Control disabled={saving} multiple type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={uploadDocuments} />
+                  <DropzoneFormInput text="Drop employee documents here, or browse" showPreview={false} accept={{ 'application/pdf': ['.pdf'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }} maxFiles={5} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={uploadDocuments} />
                   <Form.Text>PDF, JPG, PNG, or WebP; maximum 10 MB each.</Form.Text>
                 </div>
               </div>

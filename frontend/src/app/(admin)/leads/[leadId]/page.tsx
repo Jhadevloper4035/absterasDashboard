@@ -332,6 +332,8 @@ const LeadDetailPage = () => {
                   textClassName="fs-5"
                   helpText={<span className="text-muted fs-13">PDF, images, CSV, TXT. Up to 5 files.</span>}
                   showPreview={false}
+                  uploading={uploadingNote}
+                  uploadProgress={uploadNoteProgress}
                   onFileUpload={uploadNoteFiles}
                 />
                 {uploadingNote && (

@@ -7,20 +7,13 @@ export default function useFileUploader(showPreview: boolean = true) {
   const [selectedFiles, setSelectedFiles] = useState<UploadFileType[]>([])
 
   const handleAcceptedFiles = (files: UploadFileType[], callback?: (files: UploadFileType[]) => void) => {
-    let allFiles: UploadFileType[] = []
+    files = files.map((file) => ({
+      ...file,
+      preview: showPreview && file.type?.split('/')[0] === 'image' ? URL.createObjectURL(file) : undefined,
+      formattedSize: formatFileSize(file.size),
+    }))
 
-    if (showPreview) {
-      files = files.map((file) => {
-        return {
-          ...file,
-          preview: file['type']?.split('/')[0] === 'image' ? URL.createObjectURL(file) : undefined,
-          formattedSize: formatFileSize(file.size),
-        }
-      })
-
-      allFiles = [...selectedFiles, ...files]
-      setSelectedFiles(allFiles)
-    }
+    setSelectedFiles((current) => [...current, ...files])
 
     if (callback) callback(files)
   }

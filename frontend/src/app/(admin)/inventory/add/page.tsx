@@ -1,5 +1,8 @@
 import PageMetaData from '@/components/PageTitle'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { apiFetch } from '@/helpers/api'
+import { uploadMultipartFiles } from '@/helpers/upload'
+import { useAuthStore } from '@/store/authStore'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -52,12 +55,14 @@ const blank: MaterialForm = {
 export default function AddInventoryItemPage() {
   const navigate = useNavigate()
   const { itemId } = useParams()
+  const token = useAuthStore((state) => state.token)
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [form, setForm] = useState<MaterialForm>(blank)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<'productImage' | 'shadeImage'>()
+  const [uploadProgress, setUploadProgress] = useState(0)
   useEffect(() => {
     if (!itemId) return
     document.querySelectorAll<HTMLLabelElement>('label').forEach((label) => {
@@ -116,10 +121,8 @@ export default function AddInventoryItemPage() {
     setUploading(kind)
     setError('')
     try {
-      const body = new FormData()
-      body.append('files', file)
-      const response = await apiFetch<{ data: Attachment[] }>('/inventory/uploads', { method: 'POST', body })
-      setForm((current) => ({ ...current, [kind]: response.data[0] }))
+      const [attachment] = await uploadMultipartFiles<Attachment>([file], token || '', setUploadProgress, '/inventory/uploads')
+      setForm((current) => ({ ...current, [kind]: attachment }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to upload image')
     } finally {
@@ -178,11 +181,7 @@ export default function AddInventoryItemPage() {
         <Form.Label>
           {label} <small className="text-muted">(optional)</small>
         </Form.Label>
-        <Form.Control
-          accept="image/jpeg,image/png,image/webp"
-          type="file"
-          onChange={(event) => upload(kind, (event.currentTarget as HTMLInputElement).files?.[0])}
-        />
+        <DropzoneFormInput text={`Drop the ${label.toLowerCase()} here, or browse`} showPreview={false} accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }} maxFiles={1} disabled={Boolean(uploading)} uploading={uploading === kind} uploadProgress={uploadProgress} onFileUpload={(files) => upload(kind, files[0])} />
         <Form.Text>{uploading === kind ? 'Uploading…' : form[kind]?.originalName || 'JPG, PNG, or WebP; up to 10 MB.'}</Form.Text>
       </Col>
     </>

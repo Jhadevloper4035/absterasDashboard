@@ -2,7 +2,9 @@ import PageMetaData from '@/components/PageTitle'
 import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
+import { uploadMultipartFiles } from '@/helpers/upload'
 import { canManageModule, canReviewDesignerDocuments, hasFullAppAccess } from '@/helpers/moduleAccess'
+import { useAuthStore } from '@/store/authStore'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Col, Form, Row, Table } from 'react-bootstrap'
 import ReactQuill from 'react-quill-new'
@@ -40,6 +42,7 @@ const documentConfig = { boq: { singular: 'BOQ', plural: 'BOQs', path: 'boq', ap
 const BoqPage = ({ approvalOnly = false, document = 'boq' }: { approvalOnly?: boolean; document?: DesignerDocument }) => {
   const config = documentConfig[document]
   const { user } = useAuthContext()
+  const token = useAuthStore((state) => state.token)
   const admin = hasFullAppAccess(user)
   const canSeeAll = admin || canReviewDesignerDocuments(user)
   const canCreate = canManageModule(user, 'designer')
@@ -57,6 +60,7 @@ const BoqPage = ({ approvalOnly = false, document = 'boq' }: { approvalOnly?: bo
   const [file, setFile] = useState<File>()
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [showCreate, setShowCreate] = useState(false)
 
   const availableSites = useMemo(() => sites.filter((item) => item.parentClient === createClient), [sites, createClient])
@@ -86,10 +90,7 @@ const BoqPage = ({ approvalOnly = false, document = 'boq' }: { approvalOnly?: bo
 
   const upload = async (selected?: File) => {
     if (!selected) throw new Error('Choose a PDF file')
-    const body = new FormData()
-    body.append('files', selected)
-    const response = await apiFetch<{ data: Attachment[] }>('/designer/uploads', { method: 'POST', body })
-    return response.data[0]
+    return (await uploadMultipartFiles<Attachment>([selected], token || '', setUploadProgress, '/designer/uploads'))[0]
   }
 
   const submit = async (event: FormEvent) => {
@@ -137,7 +138,7 @@ const BoqPage = ({ approvalOnly = false, document = 'boq' }: { approvalOnly?: bo
               <Col md={6}><Form.Label htmlFor="boq-client">Client</Form.Label><Form.Select id="boq-client" required value={createClient} onChange={(event) => { setCreateClient(event.target.value); setCreateSite('') }}><option value="">Select client</option>{clients.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</Form.Select></Col>
               <Col md={6}><Form.Label htmlFor="boq-site">Client address</Form.Label><Form.Select id="boq-site" required disabled={!createClient} value={createSite} onChange={(event) => setCreateSite(event.target.value)}><option value="">Select address</option>{availableSites.map((item) => <option key={item._id} value={item._id}>{item.siteName || item.name} — {item.siteAddress}</option>)}</Form.Select></Col>
               <Col xs={12}><Form.Label>Description</Form.Label><ReactQuill className="boq-description-editor" theme="snow" value={description} onChange={setDescription} modules={descriptionModules} placeholder={`Add ${config.singular.toLowerCase()} scope, notes, or revision details`} /><Form.Text>Use the toolbar for headings, lists, emphasis, and links.</Form.Text></Col>
-              <Col xs={12}><DropzoneFormInput label={`${config.singular} PDF`} iconProps={{ icon: 'bx:cloud-upload', height: 34, width: 34 }} text={`Drag & drop the ${config.singular.toLowerCase()} PDF here, or browse`} helpText="One PDF, up to 10 MB." showPreview={false} accept={{ 'application/pdf': ['.pdf'] }} maxFiles={1} onFileUpload={(files) => setFile(files[0])} />{file && <div className="small text-muted mt-2">Selected: {file.name}</div>}</Col>
+              <Col xs={12}><DropzoneFormInput label={`${config.singular} PDF`} iconProps={{ icon: 'bx:cloud-upload', height: 34, width: 34 }} text={`Drag & drop the ${config.singular.toLowerCase()} PDF here, or browse`} helpText="One PDF, up to 10 MB." showPreview={false} accept={{ 'application/pdf': ['.pdf'] }} maxFiles={1} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={(files) => setFile(files[0])} /></Col>
               <Col xs={12}><Button type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Submit for review'}</Button></Col>
             </Row>
           </Form>

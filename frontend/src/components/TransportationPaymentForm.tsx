@@ -1,6 +1,7 @@
 import { apiFetch } from '@/helpers/api'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, Form } from 'react-bootstrap'
 
@@ -12,6 +13,7 @@ export default function TransportationPaymentForm({ cost, screenshot, updatePath
   const [amount, setAmount] = useState(cost ? String(cost) : '')
   const [file, setFile] = useState<File>()
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
   useEffect(() => setAmount(cost ? String(cost) : ''), [cost])
 
@@ -22,7 +24,7 @@ export default function TransportationPaymentForm({ cost, screenshot, updatePath
     if (!file && !screenshot) return setError('Upload the payment screenshot')
     setSaving(true); setError('')
     try {
-      const uploaded = file ? (await uploadMultipartFiles<Attachment>([file], token, undefined, uploadPath))[0] : undefined
+      const uploaded = file ? (await uploadMultipartFiles<Attachment>([file], token, setUploadProgress, uploadPath))[0] : undefined
       await apiFetch(updatePath, { method: 'PATCH', body: JSON.stringify({ transportationCost: Number(amount), ...(uploaded ? { transportationPaymentScreenshot: uploaded } : {}) }) })
       setFile(undefined)
       onSaved()
@@ -33,7 +35,7 @@ export default function TransportationPaymentForm({ cost, screenshot, updatePath
     <div className="fw-semibold mb-2">Transportation payment</div>
     <div className="row g-2 align-items-end">
       <div className="col-md-4"><Form.Label>Paid amount</Form.Label><Form.Control required type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></div>
-      <div className="col-md-5"><Form.Label>Payment screenshot</Form.Label><Form.Control type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile((event.target as HTMLInputElement).files?.[0])} /><Form.Text>{screenshot?.url ? <a href={screenshot.url} target="_blank" rel="noreferrer">View current proof</a> : 'PNG, JPG, or WEBP'}</Form.Text></div>
+      <div className="col-md-5"><DropzoneFormInput label="Payment screenshot" text="Drop the payment screenshot here, or browse" showPreview={false} accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }} maxFiles={1} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={(files) => setFile(files[0])} /><Form.Text>{screenshot?.url ? <a href={screenshot.url} target="_blank" rel="noreferrer">View current proof</a> : 'PNG, JPG, or WEBP'}</Form.Text></div>
       <div className="col-md-3"><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save payment'}</Button></div>
     </div>
     {error && <Alert className="mt-2 mb-0" variant="danger">{error}</Alert>}

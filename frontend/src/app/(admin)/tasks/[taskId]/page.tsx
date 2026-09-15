@@ -319,6 +319,8 @@ const TaskDetail = () => {
                       textClassName="fs-5"
                       helpText={<span className="text-muted fs-13">Images, PDF, CSV, TXT. Up to 5 files.</span>}
                       showPreview={false}
+                      uploading={uploadingSubmission}
+                      uploadProgress={submissionUploadProgress}
                       onFileUpload={uploadSubmissionFiles}
                     />
                     {uploadingSubmission && (
@@ -360,6 +362,8 @@ const TaskDetail = () => {
                         textClassName="fs-5"
                         helpText={<span className="text-muted fs-13">Images, PDF, CSV, TXT. Up to 5 files.</span>}
                         showPreview={false}
+                        uploading={uploadingNote}
+                        uploadProgress={uploadNoteProgress}
                         onFileUpload={uploadNoteFiles}
                       />
                       {uploadingNote && (

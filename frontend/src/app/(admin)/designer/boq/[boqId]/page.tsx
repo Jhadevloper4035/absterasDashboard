@@ -1,7 +1,10 @@
 import PageMetaData from '@/components/PageTitle'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { useAuthContext } from '@/context/useAuthContext'
 import { apiFetch } from '@/helpers/api'
+import { uploadMultipartFiles } from '@/helpers/upload'
 import { canManageModule, canReviewDesignerDocuments } from '@/helpers/moduleAccess'
+import { useAuthStore } from '@/store/authStore'
 import { useEffect, useState } from 'react'
 import { Alert, Badge, Button, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
 import { Link, useParams } from 'react-router-dom'
@@ -32,6 +35,7 @@ const BoqDetailPage = ({ document = 'boq' }: { document?: DesignerDocument }) =>
   const config = documentConfig[document]
   const { documentId } = useParams()
   const { user } = useAuthContext()
+  const token = useAuthStore((state) => state.token)
   const canReview = canReviewDesignerDocuments(user)
   const canManage = canManageModule(user, 'designer')
   const [boq, setBoq] = useState<Boq>()
@@ -39,6 +43,7 @@ const BoqDetailPage = ({ document = 'boq' }: { document?: DesignerDocument }) =>
   const [reviewFile, setReviewFile] = useState<File>()
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
   const currentVersion = boq && boq.versions[boq.versions.length - 1]
 
@@ -57,10 +62,7 @@ const BoqDetailPage = ({ document = 'boq' }: { document?: DesignerDocument }) =>
 
   const upload = async (selected?: File) => {
     if (!selected) throw new Error('Choose a file')
-    const body = new FormData()
-    body.append('files', selected)
-    const response = await apiFetch<{ data: Attachment[] }>('/designer/uploads', { method: 'POST', body })
-    return response.data[0]
+    return (await uploadMultipartFiles<Attachment>([selected], token || '', setUploadProgress, '/designer/uploads'))[0]
   }
 
   const resubmit = async () => {
@@ -118,7 +120,7 @@ const BoqDetailPage = ({ document = 'boq' }: { document?: DesignerDocument }) =>
             </Row>
           </CardBody>
         </Card>
-        {canReview && boq.status === 'PENDING_REVIEW' && <Card className="mb-3"><CardBody><div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3"><div><h5 className="mb-1">Review {config.singular}</h5><p className="text-muted mb-0">Choose an outcome and leave clear instructions for the designer.</p></div><Badge bg="warning" text="dark">Waiting for your decision</Badge></div><Form><Row className="g-3"><Col xs={12}><div className="border rounded p-3 d-flex justify-content-between align-items-center flex-wrap gap-3"><div><small className="text-muted d-block">Designer is requesting approval for</small><div className="fw-semibold">{config.singular} v{currentVersion?.number || 1} — {currentVersion?.attachment.originalName || 'Submitted PDF'}</div><small className="text-muted">Uploaded by {currentVersion?.uploadedBy.name || boq.createdBy.name} on {currentVersion?.uploadedAt ? new Date(currentVersion.uploadedAt).toLocaleString() : '-'}</small></div>{currentVersion?.attachment.url && <a href={currentVersion.attachment.url} target="_blank" rel="noreferrer"><Button type="button" size="sm" variant="outline-primary">View PDF for approval</Button></a>}</div></Col><Col md={8}><Form.Label htmlFor="boq-review-comment">Review note</Form.Label><Form.Control as="textarea" rows={4} id="boq-review-comment" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Example: Please update the hardware quantities on page 3." /><Form.Text>Required when requesting changes or rejecting.</Form.Text></Col><Col md={4}><Form.Label htmlFor="boq-review-attachment">Approval attachment</Form.Label><Form.Control id="boq-review-attachment" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setReviewFile((event.target as HTMLInputElement).files?.[0])} /><Form.Text>Optional PDF or image, up to 10 MB.</Form.Text>{reviewFile && <div className="small text-muted mt-2">Selected: {reviewFile.name}</div>}</Col><Col xs={12}><div className="d-flex flex-wrap gap-2"><Button type="button" variant="success" disabled={saving} onClick={() => review('APPROVE')}>Approve {config.singular}</Button><Button type="button" variant="outline-primary" disabled={saving} onClick={() => review('REQUEST_REVISION')}>Request changes</Button><Button type="button" variant="outline-danger" disabled={saving} onClick={() => review('REJECT')}>Reject {config.singular}</Button></div></Col></Row></Form></CardBody></Card>}
+        {canReview && boq.status === 'PENDING_REVIEW' && <Card className="mb-3"><CardBody><div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3"><div><h5 className="mb-1">Review {config.singular}</h5><p className="text-muted mb-0">Choose an outcome and leave clear instructions for the designer.</p></div><Badge bg="warning" text="dark">Waiting for your decision</Badge></div><Form><Row className="g-3"><Col xs={12}><div className="border rounded p-3 d-flex justify-content-between align-items-center flex-wrap gap-3"><div><small className="text-muted d-block">Designer is requesting approval for</small><div className="fw-semibold">{config.singular} v{currentVersion?.number || 1} — {currentVersion?.attachment.originalName || 'Submitted PDF'}</div><small className="text-muted">Uploaded by {currentVersion?.uploadedBy.name || boq.createdBy.name} on {currentVersion?.uploadedAt ? new Date(currentVersion.uploadedAt).toLocaleString() : '-'}</small></div>{currentVersion?.attachment.url && <a href={currentVersion.attachment.url} target="_blank" rel="noreferrer"><Button type="button" size="sm" variant="outline-primary">View PDF for approval</Button></a>}</div></Col><Col md={8}><Form.Label htmlFor="boq-review-comment">Review note</Form.Label><Form.Control as="textarea" rows={4} id="boq-review-comment" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Example: Please update the hardware quantities on page 3." /><Form.Text>Required when requesting changes or rejecting.</Form.Text></Col><Col md={4}><DropzoneFormInput label="Approval attachment" text="Drop a PDF or image here, or browse" showPreview={false} accept={{ 'application/pdf': ['.pdf'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'] }} maxFiles={1} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={(files) => setReviewFile(files[0])} /><Form.Text>Optional PDF or image, up to 10 MB.</Form.Text></Col><Col xs={12}><div className="d-flex flex-wrap gap-2"><Button type="button" variant="success" disabled={saving} onClick={() => review('APPROVE')}>Approve {config.singular}</Button><Button type="button" variant="outline-primary" disabled={saving} onClick={() => review('REQUEST_REVISION')}>Request changes</Button><Button type="button" variant="outline-danger" disabled={saving} onClick={() => review('REJECT')}>Reject {config.singular}</Button></div></Col></Row></Form></CardBody></Card>}
         <Row className="g-3">
           <Col lg={8}>
             <Card>
@@ -137,7 +139,7 @@ const BoqDetailPage = ({ document = 'boq' }: { document?: DesignerDocument }) =>
             <Card className="mb-3"><CardBody><h5 className="mb-2">Description</h5><div>{descriptionText(boq.description) || 'No description provided.'}</div></CardBody></Card>
             <Card className="mb-3"><CardBody><h5 className="mb-2">PDF versions</h5>{boq.versions.map((version) => <div className="mb-2" key={version._id}><a href={version.attachment.url} target="_blank" rel="noreferrer">v{version.number}: {version.attachment.originalName || `${config.singular} PDF`}</a><small className="d-block text-muted">Uploaded by {version.uploadedBy.name} · {new Date(version.uploadedAt).toLocaleString()}</small></div>)}</CardBody></Card>
             {boq.status === 'REVISION_REQUESTED' && <Alert variant="info"><strong>Changes requested.</strong> Use the reviewer note in the timeline, upload a corrected PDF, and submit it again.</Alert>}
-            {canManage && boq.status === 'REVISION_REQUESTED' && <Card className="mb-3"><CardBody><h5 className="mb-2">Upload corrected {config.singular}</h5><Form.Label className="visually-hidden" htmlFor="boq-revision-file">Corrected {config.singular} PDF</Form.Label><Form.Control id="boq-revision-file" type="file" accept="application/pdf" onChange={(event) => setFile((event.target as HTMLInputElement).files?.[0])} /><Button className="mt-2" size="sm" disabled={saving} onClick={resubmit}>Submit for approval again</Button></CardBody></Card>}
+            {canManage && boq.status === 'REVISION_REQUESTED' && <Card className="mb-3"><CardBody><h5 className="mb-2">Upload corrected {config.singular}</h5><DropzoneFormInput text={`Drop the corrected ${config.singular} PDF here, or browse`} showPreview={false} accept={{ 'application/pdf': ['.pdf'] }} maxFiles={1} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={(files) => setFile(files[0])} /><Button className="mt-2" size="sm" disabled={saving} onClick={resubmit}>Submit for approval again</Button></CardBody></Card>}
           </Col>
         </Row>
       </>}

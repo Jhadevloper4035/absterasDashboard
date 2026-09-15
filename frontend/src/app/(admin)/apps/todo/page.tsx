@@ -514,6 +514,8 @@ const TODO = () => {
                               text="Drag & drop files here, or browse"
                               helpText={<span className="text-muted fs-13">PDF, CSV, TXT, JPG, PNG, WebP. Up to 5 files.</span>}
                               showPreview={false}
+                              uploading={uploading}
+                              uploadProgress={uploadProgress}
                               onFileUpload={uploadFiles}
                             />
                             {uploading && (

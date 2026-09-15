@@ -75,7 +75,10 @@ export type DropzoneFormInputProps = {
   textClassName?: string
   accept?: Record<string, string[]>
   maxFiles?: number
-  onFileUpload?: (files: UploadFileType[]) => void
+  disabled?: boolean
+  uploading?: boolean
+  uploadProgress?: number
+  onFileUpload?: (files: UploadFileType[]) => void | Promise<void>
 }
 
 export type CalendarFormType = {

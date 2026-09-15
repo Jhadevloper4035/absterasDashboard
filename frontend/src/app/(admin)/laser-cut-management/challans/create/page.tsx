@@ -1,4 +1,5 @@
 import PageMetaData from '@/components/PageTitle'
+import DropzoneFormInput from '@/components/form/DropzoneFormInput'
 import { apiFetch } from '@/helpers/api'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
@@ -61,6 +62,7 @@ export default function CreateLaserCutChallanPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   useEffect(() => {
     Promise.all([
@@ -138,7 +140,7 @@ export default function CreateLaserCutChallanPage() {
         orderRef === 'new'
           ? await apiFetch<{ data: { _id: string } }>('/laser-cut-management/orders', {
             method: 'POST',
-              body: JSON.stringify({ customerRef: clientRef, expected: { sheets: number(expectedSheets), tubes: number(expectedTubes) }, referenceAttachments: referenceFiles.length ? await uploadMultipartFiles<Attachment>(referenceFiles, token!, undefined, '/laser-cut-management/uploads') : [] }),
+              body: JSON.stringify({ customerRef: clientRef, expected: { sheets: number(expectedSheets), tubes: number(expectedTubes) }, referenceAttachments: referenceFiles.length ? await uploadMultipartFiles<Attachment>(referenceFiles, token!, setUploadProgress, '/laser-cut-management/uploads') : [] }),
             })
           : { data: { _id: orderRef } }
       const created = await apiFetch<{ data: { _id: string } }>('/laser-cut-management/challans', {
@@ -287,8 +289,7 @@ export default function CreateLaserCutChallanPage() {
                     />
                   </Col>
                   <Col md={6}>
-                    <Form.Label>Drawings and reference files</Form.Label>
-                    <Form.Control type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setReferenceFiles(Array.from((event.target as HTMLInputElement).files || []).slice(0, 5))} />
+                    <DropzoneFormInput label="Drawings and reference files" text="Drop drawings and reference files here, or browse" showPreview={false} accept={{ 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/webp': ['.webp'], 'application/pdf': ['.pdf'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }} maxFiles={5} disabled={saving} uploading={saving} uploadProgress={uploadProgress} onFileUpload={setReferenceFiles} />
                     <Form.Text>Up to 5 drawing images, PDF, or XLSX files (10 MB each).</Form.Text>
                     {!!referenceFiles.length && <div className="small text-muted mt-1">{referenceFiles.map((file) => file.name).join(', ')}</div>}
                   </Col>

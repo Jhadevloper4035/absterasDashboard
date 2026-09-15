@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore'
 import type { UploadFileType } from '@/types/component-props'
 import type { LeadAttachment } from '@/types/lead'
 import type { UserType } from '@/types/auth'
-import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Alert, Button, ButtonGroup, Card, CardBody, Col, Form, Row } from 'react-bootstrap'
 import { toast } from 'react-toastify'
 
@@ -252,7 +252,7 @@ const CreateLeadPage = () => {
     }
   }
 
-  const selectCsv = (event: ChangeEvent<HTMLInputElement>) => setCsvFile(event.target.files?.[0])
+  const selectCsv = (files: File[]) => setCsvFile(files[0])
   const loadDummy = () => (isArchitect ? setArchitectForm(dummyArchitectForm) : setLeadForm(dummyLeadForm))
 
   if (!canCreate) {
@@ -322,8 +322,7 @@ const CreateLeadPage = () => {
                 <Col xs={12}>
                   <h5 className="mb-1">Import {isArchitect ? 'architect contacts' : 'leads'}</h5>
                   <p className="text-muted mb-3">Download the sample first, fill in your details, then upload the CSV file.</p>
-                  <Form.Label>CSV file</Form.Label>
-                  <Form.Control required type="file" accept=".csv,text/csv" onChange={selectCsv} />
+                  <DropzoneFormInput label="CSV file" text="Drop the completed CSV here, or browse" showPreview={false} accept={{ 'text/csv': ['.csv'] }} maxFiles={1} disabled={saving} uploading={saving} onFileUpload={selectCsv} />
                   <div className="d-flex gap-2 flex-wrap mt-3">
                     <Button
                       as="a"
