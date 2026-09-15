@@ -130,8 +130,15 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
     }
   }
 
-  const removeAttachment = (key: string) => {
-    setForm((value) => ({ ...value, attachments: value.attachments.filter((file) => file.key !== key) }))
+  const removeAttachment = async (file: TaskAttachment) => {
+    if (!token) return
+    setError('')
+    try {
+      await apiFetch('/tasks/uploads', { method: 'DELETE', token, body: JSON.stringify(file) })
+      setForm((value) => ({ ...value, attachments: value.attachments.filter((item) => item.key !== file.key) }))
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to remove attachment')
+    }
   }
 
   const saveTask = async (event: FormEvent) => {
@@ -322,7 +329,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                             <IconifyIcon icon="bx:download" />
                           </a>
                         )}
-                        <Button variant="link" className="attachment-remove" onClick={() => removeAttachment(file.key)} aria-label={`Remove ${attachmentName(file)}`}>
+                        <Button variant="link" className="attachment-remove" onClick={() => removeAttachment(file)} aria-label={`Remove ${attachmentName(file)}`}>
                           <IconifyIcon icon="bx:x" />
                         </Button>
                       </div>

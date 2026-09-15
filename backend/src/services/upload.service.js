@@ -1,7 +1,7 @@
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import sharp from 'sharp';
 import { env } from '../config/env.js';
@@ -10,10 +10,16 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_FILES = 5;
 
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
-const s3Client = new S3Client({
+let s3Client = new S3Client({
   region: env.s3.region,
   ...(env.s3.endpoint ? { endpoint: env.s3.endpoint, forcePathStyle: env.s3.forcePathStyle } : {}),
 });
+
+export function setS3ClientForTest(client) {
+  const previous = s3Client;
+  s3Client = client;
+  return previous;
+}
 
 const TYPES = [
   {
@@ -131,6 +137,17 @@ export function trustedAttachment(file) {
   };
 
   return isTrustedUploadKey(attachment.key) && file?.attachmentToken === createAttachmentToken(attachment) ? attachment : null;
+}
+
+export async function deleteUploadedAttachment(file, user) {
+  assertS3Configured();
+  const attachment = trustedAttachment(file);
+  if (!attachment) throw uploadError(400, 'Invalid attachment');
+
+  const object = await s3Client.send(new HeadObjectCommand({ Bucket: env.s3.bucket, Key: attachment.key }));
+  if (object.Metadata?.uploadedby !== String(user._id)) throw uploadError(403, 'You can only remove files you uploaded');
+
+  await s3Client.send(new DeleteObjectCommand({ Bucket: env.s3.bucket, Key: attachment.key }));
 }
 
 export function detectUploadType({ originalname, mimetype, buffer, size = buffer?.length || 0 }) {
