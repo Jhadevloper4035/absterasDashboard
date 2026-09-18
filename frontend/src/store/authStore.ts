@@ -32,6 +32,14 @@ const emptyAuth = {
 }
 
 let refreshPromise: Promise<AuthSessionType> | undefined
+const refreshChannel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('sales_crm-auth-refresh')
+
+class RefreshSessionExpiredError extends Error {}
+
+function sessionFromState(state: Pick<AuthStore, 'user' | 'token'>, previousToken: string | undefined): AuthSessionType | undefined {
+  if (!state.user || !state.token || state.token === previousToken) return undefined
+  return { token: state.token, accessToken: state.token, user: state.user }
+}
 
 export const useAuthStore = create<AuthStore>()(
   devtools(
@@ -61,21 +69,37 @@ export const useAuthStore = create<AuthStore>()(
       refresh: async () => {
         if (refreshPromise) return refreshPromise
         set({ loading: true, error: undefined }, false, 'auth/refresh:start')
+        const previousToken = get().token
         refreshPromise = (async () => {
           try {
-            const response = await fetch(buildApiUrl('/auth/refresh'), {
-              method: 'POST',
-              credentials: 'include',
-            })
-            const res = await response.json().catch(() => ({}))
+            const requestRefresh = async () => {
+              const sharedSession = sessionFromState(get(), previousToken)
+              if (sharedSession) return sharedSession
 
-            if (!response.ok) throw new Error(res.error?.message || 'Please sign in again')
+              const response = await fetch(buildApiUrl('/auth/refresh'), {
+                method: 'POST',
+                credentials: 'include',
+              })
+              const res = await response.json().catch(() => ({}))
 
-            get().setSession(res.data)
-            return res.data
+              if (!response.ok) {
+                if (response.status === 401) throw new RefreshSessionExpiredError(res.error?.message || 'Please sign in again')
+                throw new Error(res.error?.message || 'Unable to refresh your session')
+              }
+
+              get().setSession(res.data)
+              refreshChannel?.postMessage(res.data)
+              return res.data as AuthSessionType
+            }
+
+            if (typeof navigator !== 'undefined' && navigator.locks) {
+              return await navigator.locks.request('sales_crm-auth-refresh', { mode: 'exclusive' }, requestRefresh)
+            }
+
+            return await requestRefresh()
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Please sign in again'
-            set(get().token ? { ...emptyAuth, error: message } : emptyAuth, false, 'auth/refresh:error')
+            set(e instanceof RefreshSessionExpiredError ? { ...emptyAuth, error: message } : { loading: false, error: message }, false, 'auth/refresh:error')
             throw e
           }
         })()
@@ -121,3 +145,7 @@ export const useAuthStore = create<AuthStore>()(
     { name: 'AuthStore' },
   ),
 )
+
+refreshChannel?.addEventListener('message', (event: MessageEvent<AuthSessionType>) => {
+  if (event.data?.user && event.data?.token) useAuthStore.getState().setSession(event.data)
+})
