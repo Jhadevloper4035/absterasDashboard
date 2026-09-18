@@ -181,7 +181,7 @@ export default function CreateLaserCutChallanPage() {
               <h4 className="card-title mb-1">Send inventory to laser cut</h4>
               <p className="text-muted mb-0">Dispatch inventory products to a vendor. Stock moves only after this form is submitted.</p>
             </div>
-            <div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/laser-cut-management/vendors">Manage vendors</Link><Link to="/laser-cut-management"><Button variant="outline-secondary">Cancel</Button></Link></div>
+            <div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/vendor-management">Manage vendors</Link><Link to="/laser-cut-management"><Button variant="outline-secondary">Cancel</Button></Link></div>
           </div>
           {error && <Alert variant="danger">{error}</Alert>}
           <Form onSubmit={submit}>

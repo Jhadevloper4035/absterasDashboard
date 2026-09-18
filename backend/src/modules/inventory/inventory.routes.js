@@ -18,6 +18,7 @@ inventoryRouter.get('/item-categories', authorizeInventoryModule('items'), async
 inventoryRouter.get('/suppliers', authorizeInventoryModule('items'), asyncHandler(controller.listSuppliers));
 inventoryRouter.post('/suppliers', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.createSupplier));
 inventoryRouter.patch('/suppliers/:id', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.updateSupplier));
+inventoryRouter.delete('/suppliers/:id', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.deleteSupplier));
 inventoryRouter.post('/uploads', authorizeInventoryModule('items', 'manage'), asyncHandler(rateLimit({ scope: 'inventory-upload', limit: 10, windowMs: 15 * 60 * 1000 })), multipartUpload, asyncHandler(uploadFiles));
 inventoryRouter.get('/items', authorizeInventoryModule('items'), asyncHandler(controller.listItems));
 inventoryRouter.post('/items', authorizeInventoryModule('items', 'manage'), asyncHandler(controller.createItem));

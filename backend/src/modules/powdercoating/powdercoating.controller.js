@@ -3,8 +3,8 @@ import { DEFAULT_HSN_CODE, InventoryItem } from '../inventory/models/item.model.
 import { Client } from '../clients/models/client.model.js';
 import { Supplier } from '../inventory/models/supplier.model.js';
 import { StockTransaction } from '../inventory/models/transaction.model.js';
-import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage, LaserCutVendor } from '../lasercut/models.js';
-import { PowderCoatChallan, PowderCoatOrder, PowderCoatVendor } from './models.js';
+import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage } from '../lasercut/models.js';
+import { PowderCoatChallan, PowderCoatOrder } from './models.js';
 import { transportationCostFrom } from '../../helpers/transportation-cost.js';
 import { paymentScreenshot, referenceAttachments } from '../../helpers/process-attachments.js';
 import { signAttachmentUrls } from '../../services/upload.service.js';
@@ -16,8 +16,6 @@ const validId = (value) => mongoose.isObjectIdOrHexString(value);
 const quantity = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 const orderNumber = () => `PC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const challanNumber = () => `PC-C-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-const vendorFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'notes', 'status'];
-const vendorPayload = (body) => Object.fromEntries(vendorFields.filter((field) => body?.[field] !== undefined).map((field) => [field, body[field]]));
 const transferKey = (vendorRef, inventoryItemRef) => `${String(vendorRef)}:${String(inventoryItemRef)}`;
 const orderItemKey = (item) => item.laserCutStockRef ? `stock:${String(item.laserCutStockRef)}` : `product:${String(item.inventoryItemRef)}`;
 const usageOutputs = (usage) => usage.outputs?.length ? usage.outputs : usage.outputStockRef ? [{ outputStockRef: usage.outputStockRef, quantity: usage.panelsProduced }] : [];
@@ -154,7 +152,7 @@ export async function normalizedItems(items) {
   const laserCutStock = laserCutStockIds.length ? await LaserCutStock.find({ _id: { $in: laserCutStockIds } }).lean() : [];
   const supplierIds = materials.map((material) => material.supplier).filter(validId);
   const suppliers = await Supplier.find({ _id: { $in: supplierIds }, status: 'active' }).lean();
-  const laserCutVendors = laserCutStock.length ? await LaserCutVendor.find({ _id: { $in: laserCutStock.map((stock) => stock.vendorRef) }, status: 'active' }).lean() : [];
+  const laserCutVendors = laserCutStock.length ? await Supplier.find({ _id: { $in: laserCutStock.map((stock) => stock.vendorRef) }, serviceTypes: 'laser_cut', status: 'active' }).lean() : [];
   const productById = new Map(materials.map((material) => [String(material._id), material]));
   const supplierById = new Map(suppliers.map((supplier) => [String(supplier._id), supplier]));
   const laserCutVendorById = new Map(laserCutVendors.map((vendor) => [String(vendor._id), vendor]));
@@ -196,7 +194,7 @@ async function orderContext(body, items) {
   if (body.clientSiteRef && !validId(body.clientSiteRef)) throw badRequest('Invalid child client site');
   const [client, vendor, site] = await Promise.all([
     Client.findOne({ _id: body.clientRef, parentClient: null }).lean(),
-    PowderCoatVendor.findOne({ _id: body.vendorRef, status: 'active' }).lean(),
+    Supplier.findOne({ _id: body.vendorRef, serviceTypes: 'powder_coating', status: 'active' }).lean(),
     body.clientSiteRef ? Client.findOne({ _id: body.clientSiteRef, parentClient: body.clientRef }).lean() : null,
   ]);
   if (!client) throw missing('Parent client not found');
@@ -234,10 +232,7 @@ async function orderContext(body, items) {
   };
 }
 
-export async function listVendors(req, res) { return res.json({ data: await PowderCoatVendor.find(req.query.status ? { status: req.query.status } : {}).sort({ name: 1 }).lean() }); }
-export async function createVendor(req, res) { const vendor = await PowderCoatVendor.create(vendorPayload(req.body)); return res.status(201).json({ data: vendor }); }
-export async function updateVendor(req, res) { if (!validId(req.params.id)) throw badRequest('Invalid powder-coating vendor'); const vendor = await PowderCoatVendor.findByIdAndUpdate(req.params.id, vendorPayload(req.body), { new: true, runValidators: true }); if (!vendor) throw missing('Powder-coating vendor not found'); return res.json({ data: vendor }); }
-export async function deleteVendor(req, res) { if (!validId(req.params.id)) throw badRequest('Invalid powder-coating vendor'); const vendor = await PowderCoatVendor.findByIdAndUpdate(req.params.id, { status: 'inactive' }, { new: true, runValidators: true }); if (!vendor) throw missing('Powder-coating vendor not found'); return res.json({ data: vendor }); }
+export async function listVendors(req, res) { return res.json({ data: await Supplier.find({ serviceTypes: 'powder_coating', ...(req.query.status ? { status: req.query.status } : {}) }).sort({ name: 1 }).lean() }); }
 
 export async function createOrder(req, res) {
   const items = await normalizedItems(req.body?.items);

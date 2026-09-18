@@ -64,6 +64,7 @@ const Inventory = lazy(() => import('@/app/(admin)/inventory/page'))
 const InventoryDashboard = lazy(() => import('@/app/(admin)/inventory/dashboard/page'))
 const AddInventoryItem = lazy(() => import('@/app/(admin)/inventory/add/page'))
 const InventorySuppliers = lazy(() => import('@/app/(admin)/inventory/suppliers/page'))
+const CreateVendor = lazy(() => import('@/app/(admin)/vendor-management/create/page'))
 const InventoryMaterialDetail = lazy(() => import('@/app/(admin)/inventory/[itemId]/page'))
 const InventoryPurchases = lazy(() => import('@/app/(admin)/inventory/purchases/page'))
 const Returns = lazy(() => import('@/app/(admin)/returns/page'))
@@ -74,14 +75,12 @@ const LaserCutCurrentOrders = lazy(() => import('@/app/(admin)/laser-cut-managem
 const LaserCutOrderDetail = lazy(() => import('@/app/(admin)/laser-cut-management/orders/[orderId]/page'))
 const CreateLaserCutChallan = lazy(() => import('@/app/(admin)/laser-cut-management/challans/create/page'))
 const LaserCutMoveOut = lazy(() => import('@/app/(admin)/laser-cut-management/move-out/page'))
-const LaserCutVendors = lazy(() => import('@/app/(admin)/laser-cut-management/vendors/page'))
 const PowderCoatingManagement = lazy(() => import('@/app/(admin)/powder-coating-management/page'))
 const PowderCoatingOrders = lazy(() => import('@/app/(admin)/powder-coating-management/orders/page'))
 const PowderCoatingOrderDetail = lazy(() => import('@/app/(admin)/powder-coating-management/orders/[orderId]/detail/page'))
 const PowderCoatingOrderDispatch = lazy(() => import('@/app/(admin)/powder-coating-management/orders/[orderId]/page'))
 const CreatePowderCoatingOrder = lazy(() => import('@/app/(admin)/powder-coating-management/challans/create/page'))
 const PowderCoatingMoveOut = lazy(() => import('@/app/(admin)/powder-coating-management/move-out/page'))
-const PowderCoatingVendors = lazy(() => import('@/app/(admin)/powder-coating-management/vendors/page'))
 const Boq = lazy(() => import('@/app/(admin)/designer/boq/page'))
 const BoqApprovals = lazy(() => import('@/app/(admin)/designer/approvals/page'))
 const BoqDetail = lazy(() => import('@/app/(admin)/designer/boq/[boqId]/page'))
@@ -452,7 +451,9 @@ const appsRoutes: RoutesProps[] = [
   { name: 'Update Material', path: '/inventory/:itemId/edit', element: <AddInventoryItem />, moduleAccess: 'manage' },
   { name: 'Material Details', path: '/inventory/:itemId', element: <InventoryMaterialDetail /> },
   { name: 'Purchase History', path: '/inventory/purchases', element: <InventoryPurchases /> },
-  { name: 'Suppliers', path: '/inventory/suppliers', element: <InventorySuppliers /> },
+  { name: 'Vendor Management', path: '/vendor-management', element: <InventorySuppliers /> },
+  { name: 'Create Vendor', path: '/vendor-management/create', element: <CreateVendor />, moduleAccess: 'manage' },
+  { name: 'Suppliers', path: '/inventory/suppliers', element: <Navigate to="/vendor-management" replace /> },
   { name: 'Return Management', path: '/returns', element: <Returns /> },
   { name: 'Record Return', path: '/returns/create', element: <CreateReturn />, moduleAccess: 'manage' },
   { name: 'Create Return Transfer', path: '/returns/transfers/create', element: <CreateReturnTransfer />, moduleAccess: 'manage' },
@@ -461,7 +462,7 @@ const appsRoutes: RoutesProps[] = [
   { name: 'Laser Cut Order Details', path: '/laser-cut-management/orders/:orderId', element: <LaserCutOrderDetail /> },
   { name: 'Move Inventory In to Laser Cut', path: '/laser-cut-management/challans/create', element: <CreateLaserCutChallan />, moduleAccess: 'manage' },
   { name: 'Move Laser Cut Products Out', path: '/laser-cut-management/move-out', element: <LaserCutMoveOut />, moduleAccess: 'manage' },
-  { name: 'Laser Cut Vendors', path: '/laser-cut-management/vendors', element: <LaserCutVendors /> },
+  { name: 'Laser Cut Vendors', path: '/laser-cut-management/vendors', element: <Navigate to="/vendor-management" replace /> },
   { name: 'Laser Cut Management unavailable', path: '/laser-cut-management/*', element: <Navigate to="/dashboard/analytics" replace /> },
   { name: 'Powder Coating', path: '/powder-coating-management', element: <PowderCoatingManagement /> },
   { name: 'Powder Coating Orders', path: '/powder-coating-management/orders', element: <PowderCoatingOrders /> },
@@ -469,7 +470,7 @@ const appsRoutes: RoutesProps[] = [
   { name: 'Send Powder Coating Order to Site', path: '/powder-coating-management/orders/:orderId/dispatch', element: <PowderCoatingOrderDispatch />, moduleAccess: 'manage' },
   { name: 'Move Inventory In to Powder Coating', path: '/powder-coating-management/challans/create', element: <CreatePowderCoatingOrder />, moduleAccess: 'manage' },
   { name: 'Move Powder-Coated Products Out', path: '/powder-coating-management/move-out', element: <PowderCoatingMoveOut />, moduleAccess: 'manage' },
-  { name: 'Powder Coating Vendors', path: '/powder-coating-management/vendors', element: <PowderCoatingVendors /> },
+  { name: 'Powder Coating Vendors', path: '/powder-coating-management/vendors', element: <Navigate to="/vendor-management" replace /> },
   { name: 'BOQ', path: '/designer/boq', element: <Boq /> },
   { name: 'BOQ Approvals', path: '/designer/boq/approvals', element: <BoqApprovals />, roles: ['director'], strictRoles: true },
   { name: 'BOQ Details', path: '/designer/boq/:documentId', element: <BoqDetail /> },

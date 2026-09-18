@@ -13,6 +13,25 @@ const pick = (body, fields) => Object.fromEntries(fields.filter((key) => body[ke
 const invalid = (res, id) => !mongoose.isObjectIdOrHexString(id) && (res.status(400).json({ error: { message: 'Invalid id' } }), true);
 const pageParams = (query) => ({ page: Math.max(Number.parseInt(query.page, 10) || 1, 1), limit: Math.min(Math.max(Number.parseInt(query.limit, 10) || 25, 1), 100) });
 const supplierFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'taxId', 'notes', 'serviceTypes', 'status'];
+export const requiresShadeDetails = (materialType, category) => !['SHEET', 'TUBE'].includes(materialType) && !['sheet', 'tube', 'profile', 'hardware'].includes(category);
+export const vendorLocation = (vendor) => String(vendor?.address || '').trim();
+export const validateHardwareSpecs = (category, specs = {}) => {
+  if (category !== 'hardware') return;
+  if (specs.hardwareType === 'colour_spray') {
+    if (!String(specs.colorName || '').trim()) throw Object.assign(new Error('Color name is required for Colour spray'), { statusCode: 400 });
+    if (!Number.isFinite(specs.bottleQuantity) || specs.bottleQuantity <= 0) throw Object.assign(new Error('Bottle quantity must be greater than zero for Colour spray'), { statusCode: 400 });
+    return;
+  }
+  if (!String(specs.size || '').trim()) throw Object.assign(new Error('Size is required for hardware'), { statusCode: 400 });
+  if (!Number.isFinite(specs.length) || specs.length <= 0) throw Object.assign(new Error('Length must be greater than zero for hardware'), { statusCode: 400 });
+};
+async function supplierLocation(supplierId) {
+  if (!supplierId) return '';
+  if (!mongoose.isObjectIdOrHexString(supplierId)) throw Object.assign(new Error('Invalid purchase material vendor'), { statusCode: 400 });
+  const supplier = await Supplier.findById(supplierId).lean();
+  if (!supplier) throw Object.assign(new Error('Purchase material vendor not found'), { statusCode: 400 });
+  return vendorLocation(supplier);
+}
 export function validateMaterialDimensions(materialType, dimensions = {}) {
   const height = Number(dimensions.heightFt); const width = Number(dimensions.widthFt); const length = Number(dimensions.lengthFt);
   if (materialType === 'SHEET' && (!Number.isFinite(height) || height <= 0 || !Number.isFinite(width) || width <= 0)) throw Object.assign(new Error('Sheet height and width must be greater than zero'), { statusCode: 400 });
@@ -44,13 +63,23 @@ export async function deleteCategory(req, res) {
 export async function listSuppliers(req, res) {
   const filter = req.query.status ? { status: req.query.status } : {};
   if (req.query.serviceType) {
-    if (!['laser_cut', 'powder_coating'].includes(req.query.serviceType)) return res.status(400).json({ error: { message: 'Invalid supplier service type' } });
+    if (!['laser_cut', 'powder_coating', 'purchase_material'].includes(req.query.serviceType)) return res.status(400).json({ error: { message: 'Invalid supplier service type' } });
     filter.serviceTypes = req.query.serviceType;
   }
   return res.json({ data: await Supplier.find(filter).sort({ name: 1 }).lean() });
 }
 export async function createSupplier(req, res) { const supplier = await Supplier.create(pick(req.body, supplierFields)); await auditEvent(req, { action: 'inventory.supplier.create', entity: 'inventory_supplier', entityId: supplier._id, after: supplier.toObject() }); return res.status(201).json({ data: supplier }); }
 export async function updateSupplier(req, res) { if (invalid(res, req.params.id)) return; const supplier = await Supplier.findByIdAndUpdate(req.params.id, pick(req.body, supplierFields), { new: true, runValidators: true }); return supplier ? res.json({ data: supplier }) : res.status(404).json({ error: { message: 'Supplier not found' } }); }
+export async function deleteSupplier(req, res) {
+  if (invalid(res, req.params.id)) return;
+  const supplier = await Supplier.findById(req.params.id);
+  if (!supplier) return res.status(404).json({ error: { message: 'Vendor not found' } });
+  const before = supplier.toObject();
+  supplier.status = 'inactive';
+  await supplier.save();
+  await auditEvent(req, { action: 'inventory.supplier.delete', entity: 'inventory_supplier', entityId: supplier._id, before, after: supplier.toObject() });
+  return res.status(204).end();
+}
 export async function listItems(req, res) {
   const { page, limit } = pageParams(req.query);
   const filter = {};
@@ -95,10 +124,12 @@ export async function createItem(req, res) {
   input.hsnCode = String(input.hsnCode || '').trim() || DEFAULT_HSN_CODE;
   input.shadeName = String(input.shadeName || '').trim();
   input.shadeCode = String(input.shadeCode || '').trim().toUpperCase();
-  if (!input.shadeName || !input.shadeCode) return res.status(400).json({ error: { message: 'Shade name and shade code are required' } });
+  if (requiresShadeDetails(input.materialType, input.category) && (!input.shadeName || !input.shadeCode)) return res.status(400).json({ error: { message: 'Shade name and shade code are required' } });
   validateMaterialDimensions(input.materialType, input.defaultDimensions);
   for (const key of ['productImage', 'shadeImage']) if (input[key] && !(input[key] = trustedAttachment(input[key]))) return res.status(400).json({ error: { message: `Invalid ${key}` } });
   await validateSpecs(input.category, input.specs || {});
+  validateHardwareSpecs(input.category, input.specs);
+  input.location = await supplierLocation(input.supplier);
   const item = await InventoryItem.create(input);
   await auditEvent(req, { action: 'inventory.item.create', entity: 'inventory_item', entityId: item._id, after: item.toObject() });
   return res.status(201).json({ data: item });
@@ -115,6 +146,8 @@ export async function updateItem(req, res) {
   const category = input.category || item.category;
   validateMaterialDimensions(input.materialType || item.materialType, input.defaultDimensions === undefined ? item.defaultDimensions : input.defaultDimensions);
   if (input.specs !== undefined || input.category !== undefined) await validateSpecs(category, input.specs === undefined ? item.specs.toObject() : input.specs);
+  validateHardwareSpecs(category, input.specs === undefined ? item.specs.toObject() : input.specs);
+  input.location = await supplierLocation(input.supplier === undefined ? item.supplier : input.supplier);
   Object.assign(item, input); await item.save();
   await auditEvent(req, { action: 'inventory.item.update', entity: 'inventory_item', entityId: item._id, after: item.toObject() });
   return res.json({ data: item });

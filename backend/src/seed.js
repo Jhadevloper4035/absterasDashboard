@@ -14,8 +14,6 @@ import { InventoryItem } from './modules/inventory/models/item.model.js';
 import { InventoryPermission, INVENTORY_MODULES } from './modules/inventory/models/permission.model.js';
 import { Supplier } from './modules/inventory/models/supplier.model.js';
 import { StockTransaction } from './modules/inventory/models/transaction.model.js';
-import { LaserCutVendor } from './modules/lasercut/models.js';
-import { PowderCoatVendor } from './modules/powdercoating/models.js';
 
 const inventoryCategories = [
   ['tube', 'Tube', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm'], ['coating', 'Coating/Paint', 'string']]],
@@ -23,7 +21,7 @@ const inventoryCategories = [
   ['profile', 'Profile / Section', [['codeOrSize', 'Code/Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['width', 'Width (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
   ['hand_rail', 'Hand Rail', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
   ['bottom_rail', 'Bottom Rail', [['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm'], ['thickness', 'Thickness (mm)', 'number', true, 'mm']]],
-  ['hardware', 'Hardware', [['hardwareType', 'Hardware Type', 'string', true], ['size', 'Size', 'string', true], ['length', 'Length (mm)', 'number', true, 'mm']]],
+  ['hardware', 'Hardware', [['hardwareType', 'Hardware Type', 'string', true], ['colorName', 'Color name', 'string'], ['bottleQuantity', 'Bottle quantity (ml)', 'number', false, 'ml'], ['size', 'Size', 'string'], ['length', 'Length (mm)', 'number', false, 'mm']]],
 ].map(([slug, label, fields]) => ({ slug, label, fields: fields.map(([key, fieldLabel, type, required = false, unit]) => ({ key, label: fieldLabel, type, required, unit })) }));
 const demoInventoryItems = [
   ['TUBE-0001', 'tube', 'Aluminium Tube 25x50', 'pcs', 100, 25, 'A-01', 42, '7608', { size: '25x50', length: 3657, thickness: 1, coating: 'Powder coated white' }],
@@ -63,17 +61,19 @@ const demoSuppliers = [
   ['Prime Facade Materials', 'Arjun Singh', '+919810000103', 'dispatch@primefacade.example.com', 'Plot 7, Industrial Area, Sector 58, Faridabad, Haryana 121004', '06AABCP0003C1Z3'],
   ['Vertex Hardware House', 'Pooja Mehta', '+919810000104', 'purchases@vertexhardware.example.com', '17 Okhla Industrial Estate Phase 2, New Delhi 110020', '07AABCV0004D1Z4'],
   ['North Star Profiles', 'Karan Malhotra', '+919810000105', 'supply@northstarprofiles.example.com', 'Plot 91, Noida Special Economic Zone, Noida, Uttar Pradesh 201305', '09AABCN0005E1Z5'],
-].map(([name, contactPerson, phone, email, address, taxId]) => ({ name, contactPerson, phone, email, address, taxId, notes: 'Development dummy supplier', status: 'active' }));
+  ['Galaxy Aluminium & Hardware', 'Vikram Sethi', '+919810000110', 'orders@galaxyaluminium.example.com', 'Plot 63, Sector 5, IMT Manesar, Gurugram, Haryana 122051', '06AABCG0010G1Z0'],
+  ['BuildCraft Industrial Supplies', 'Meera Nair', '+919810000111', 'sales@buildcraft.example.com', 'Shed 16, Sector 24, Faridabad, Haryana 121005', '06AABCB0011H1Z1'],
+].map(([name, contactPerson, phone, email, address, taxId]) => ({ name, contactPerson, phone, email, address, taxId, notes: 'Development dummy supplier', serviceTypes: ['purchase_material'], status: 'active' }));
 
 const demoLaserCutVendors = [
   ['Precision Laser Works', 'Amit Bansal', '+919810000106', 'orders@precisionlaser.example.com', 'Plot 12, Udyog Vihar, Gurugram, Haryana 122016'],
   ['Cutline Fabrication', 'Sonal Gupta', '+919810000107', 'dispatch@cutline.example.com', 'Shed 21, Sector 37, Faridabad, Haryana 121003'],
-].map(([name, contactPerson, phone, email, address]) => ({ name, contactPerson, phone, email, address, notes: 'Development dummy laser-cut vendor', status: 'active' }));
+].map(([name, contactPerson, phone, email, address], index) => ({ name, contactPerson, phone, email, address, taxId: `06AABCL000${index + 6}L1Z${index + 6}`, notes: 'Development dummy laser-cut vendor', serviceTypes: ['laser_cut'], status: 'active' }));
 
 const demoPowderCoatVendors = [
   ['Spectrum Powder Coats', 'Manish Arora', '+919810000108', 'orders@spectrumpowder.example.com', 'Plot 44, IMT Manesar, Gurugram, Haryana 122051'],
   ['FinishPro Coatings', 'Ritika Jain', '+919810000109', 'dispatch@finishpro.example.com', 'Shed 8, Udyog Vihar Phase 2, Gurugram, Haryana 122008'],
-].map(([name, contactPerson, phone, email, address]) => ({ name, contactPerson, phone, email, address, notes: 'Development dummy powder-coating vendor', status: 'active' }));
+].map(([name, contactPerson, phone, email, address], index) => ({ name, contactPerson, phone, email, address, taxId: `06AABCP000${index + 8}P1Z${index + 8}`, notes: 'Development dummy powder-coating vendor', serviceTypes: ['powder_coating'], status: 'active' }));
 
 const demoUsers = [
   {
@@ -254,8 +254,7 @@ async function seed() {
   if (superadmin) await Promise.all(INVENTORY_MODULES.map((module) => InventoryPermission.findOneAndUpdate({ user: superadmin._id, module }, { access: 'manage', grantedBy: superadmin._id }, { upsert: true, runValidators: true })));
   for (const category of inventoryCategories) await CategoryDefinition.updateOne({ slug: category.slug }, { $set: category }, { upsert: true, runValidators: true });
   const suppliers = await Promise.all(demoSuppliers.map((supplier) => Supplier.findOneAndUpdate({ email: supplier.email }, { $set: supplier }, { new: true, upsert: true, runValidators: true })));
-  await Promise.all(demoLaserCutVendors.map((vendor) => LaserCutVendor.findOneAndUpdate({ email: vendor.email }, { $set: vendor }, { new: true, upsert: true, runValidators: true })));
-  await Promise.all(demoPowderCoatVendors.map((vendor) => PowderCoatVendor.findOneAndUpdate({ email: vendor.email }, { $set: vendor }, { new: true, upsert: true, runValidators: true })));
+  await Promise.all([...demoLaserCutVendors, ...demoPowderCoatVendors].map((vendor) => Supplier.findOneAndUpdate({ email: vendor.email }, { $set: vendor }, { new: true, upsert: true, runValidators: true })));
   for (const [index, item] of demoInventoryItems.entries()) await InventoryItem.updateOne({ sku: item.sku }, { $set: { ...item, supplier: suppliers[index % suppliers.length]._id, status: 'active' } }, { upsert: true, runValidators: true });
 
   const creator = await User.findOne({ status: 'active', role: { $in: ['admin', 'superadmin'] } }).sort({ role: 1, createdAt: 1 });
@@ -355,7 +354,7 @@ async function seed() {
   console.log(`Seeded ${challanCount} demo challans`);
   console.log(`Seeded ${taskCount} demo tasks`);
   console.log(`Seeded ${inventoryCategories.length} inventory categories and ${demoInventoryItems.length} inventory items`);
-  console.log(`Ensured ${demoSuppliers.length} demo suppliers, ${demoLaserCutVendors.length} laser-cut vendors, ${demoPowderCoatVendors.length} powder-coating vendors, assigned ${assignedSupplierCount} missing product suppliers, and added ${purchaseCount} opening purchases`);
+  console.log(`Ensured ${demoSuppliers.length} purchase-material vendors, ${demoLaserCutVendors.length} laser-cut vendors, ${demoPowderCoatVendors.length} powder-coating vendors, assigned ${assignedSupplierCount} missing product suppliers, and added ${purchaseCount} opening purchases`);
   if (process.env.RESET_DEMO_INVENTORY === 'true') console.log(`Removed ${deletedInventoryCount} inventory products and ${deletedTransactionCount} stock transactions before seeding`);
 }
 

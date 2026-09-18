@@ -3,7 +3,7 @@ import { DEFAULT_HSN_CODE, InventoryItem, laserCutMaterialDetails } from '../inv
 import { Client } from '../clients/models/client.model.js';
 import { Supplier } from '../inventory/models/supplier.model.js';
 import { StockTransaction } from '../inventory/models/transaction.model.js';
-import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage, LaserCutVendor } from './models.js';
+import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage } from './models.js';
 import { transportationCostFrom } from '../../helpers/transportation-cost.js';
 import { paymentScreenshot, referenceAttachments } from '../../helpers/process-attachments.js';
 import { signAttachmentUrls } from '../../services/upload.service.js';
@@ -15,8 +15,6 @@ const validId = (value) => mongoose.isObjectIdOrHexString(value);
 const number = (value) => Number(value);
 const round = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 const plain = (value) => value?.toObject ? value.toObject() : value;
-const vendorFields = ['name', 'contactPerson', 'phone', 'email', 'address', 'notes', 'status'];
-const vendorPayload = (body) => Object.fromEntries(vendorFields.filter((field) => body?.[field] !== undefined).map((field) => [field, body[field]]));
 function dimensionsFor(materialType, values = {}) {
   const dimensions = { heightFt: number(values.heightFt), widthFt: number(values.widthFt), lengthFt: number(values.lengthFt) };
   if (materialType === 'SHEET' && (!Number.isFinite(dimensions.heightFt) || dimensions.heightFt <= 0 || !Number.isFinite(dimensions.widthFt) || dimensions.widthFt <= 0)) throw badRequest('Sheet height and width must be greater than zero');
@@ -134,10 +132,7 @@ export async function normalizedItems(items) {
   });
 }
 
-export async function listVendors(req, res) { return res.json({ data: await LaserCutVendor.find(req.query.status ? { status: req.query.status } : {}).sort({ name: 1 }).lean() }); }
-export async function createVendor(req, res) { const vendor = await LaserCutVendor.create(vendorPayload(req.body)); return res.status(201).json({ data: vendor }); }
-export async function updateVendor(req, res) { if (!validId(req.params.id)) throw badRequest('Invalid laser-cut vendor'); const vendor = await LaserCutVendor.findByIdAndUpdate(req.params.id, vendorPayload(req.body), { new: true, runValidators: true }); if (!vendor) throw missing('Laser-cut vendor not found'); return res.json({ data: vendor }); }
-export async function deleteVendor(req, res) { if (!validId(req.params.id)) throw badRequest('Invalid laser-cut vendor'); const vendor = await LaserCutVendor.findByIdAndUpdate(req.params.id, { status: 'inactive' }, { new: true, runValidators: true }); if (!vendor) throw missing('Laser-cut vendor not found'); return res.json({ data: vendor }); }
+export async function listVendors(req, res) { return res.json({ data: await Supplier.find({ serviceTypes: 'laser_cut', ...(req.query.status ? { status: req.query.status } : {}) }).sort({ name: 1 }).lean() }); }
 
 function orderIncrement(items) {
   return items.reduce((totals, item) => {
@@ -255,7 +250,7 @@ export async function createChallan(req, res) {
   if (type === 'OUT' && !validId(req.body?.clientRef)) throw badRequest('A valid parent client is required');
   if (req.body.clientSiteRef && !validId(req.body.clientSiteRef)) throw badRequest('Invalid child client site');
   if (req.body.orderRef && !validId(req.body.orderRef)) throw badRequest('Invalid order');
-  const [vendor, client, clientSite, order, items] = await Promise.all([LaserCutVendor.findOne({ _id: req.body.vendorRef, status: 'active' }).lean(), req.body.clientRef ? Client.findOne({ _id: req.body.clientRef, parentClient: null }).lean() : null, req.body.clientSiteRef ? Client.findOne({ _id: req.body.clientSiteRef, parentClient: req.body.clientRef }).lean() : null, req.body.orderRef ? LaserCutOrder.findById(req.body.orderRef).lean() : null, normalizedItems(req.body.items)]);
+  const [vendor, client, clientSite, order, items] = await Promise.all([Supplier.findOne({ _id: req.body.vendorRef, serviceTypes: 'laser_cut', status: 'active' }).lean(), req.body.clientRef ? Client.findOne({ _id: req.body.clientRef, parentClient: null }).lean() : null, req.body.clientSiteRef ? Client.findOne({ _id: req.body.clientSiteRef, parentClient: req.body.clientRef }).lean() : null, req.body.orderRef ? LaserCutOrder.findById(req.body.orderRef).lean() : null, normalizedItems(req.body.items)]);
   if (!vendor) throw missing('Active vendor not found');
   const vendorAddress = String(vendor.address || '').trim();
   if (!vendorAddress) throw badRequest('Laser-cut vendor address is required for the drop location');

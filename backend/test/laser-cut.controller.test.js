@@ -5,7 +5,7 @@ import { createChallan, createUsage, deleteOrder, listOrders, materialKey, norma
 import { InventoryItem } from '../src/modules/inventory/models/item.model.js';
 import { Supplier } from '../src/modules/inventory/models/supplier.model.js';
 import { StockTransaction } from '../src/modules/inventory/models/transaction.model.js';
-import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage, LaserCutVendor } from '../src/modules/lasercut/models.js';
+import { LaserCutAudit, LaserCutChallan, LaserCutOrder, LaserCutStock, LaserCutUsage } from '../src/modules/lasercut/models.js';
 import { Client } from '../src/modules/clients/models/client.model.js';
 
 test('laser-cut order status clamps over-delivery and keeps each material outstanding', () => {
@@ -177,13 +177,13 @@ test('laser-cut challan snapshots the selected product pickup supplier and addre
 });
 
 test('laser-cut challan stores the selected Laser-cut vendor address as the drop location', async () => {
-  const originals = { itemFind: InventoryItem.find, vendorFindOne: LaserCutVendor.findOne, challanCreate: LaserCutChallan.create, auditCreate: LaserCutAudit.create };
+  const originals = { itemFind: InventoryItem.find, vendorFindOne: Supplier.findOne, challanCreate: LaserCutChallan.create, auditCreate: LaserCutAudit.create };
   const vendorId = '507f1f77bcf86cd799439023';
   const itemId = '507f1f77bcf86cd799439024';
   let saved;
   try {
     InventoryItem.find = () => ({ lean: async () => [{ _id: itemId, name: 'Bracket', status: 'active', materialType: 'OTHER', unit: 'pcs', hsnCode: '8302' }] });
-    LaserCutVendor.findOne = () => ({ lean: async () => ({ _id: vendorId, name: 'Laser Works', address: 'Laser Works, Gurugram' }) });
+    Supplier.findOne = () => ({ lean: async () => ({ _id: vendorId, name: 'Laser Works', address: 'Laser Works, Gurugram' }) });
     LaserCutChallan.create = async (challan) => { saved = challan; return { _id: '507f1f77bcf86cd799439025', ...challan }; };
     LaserCutAudit.create = async () => [];
     let response;
@@ -196,7 +196,7 @@ test('laser-cut challan stores the selected Laser-cut vendor address as the drop
     assert.equal(response.data.deliveryAddress, 'Laser Works, Gurugram');
   } finally {
     InventoryItem.find = originals.itemFind;
-    LaserCutVendor.findOne = originals.vendorFindOne;
+    Supplier.findOne = originals.vendorFindOne;
     LaserCutChallan.create = originals.challanCreate;
     LaserCutAudit.create = originals.auditCreate;
   }

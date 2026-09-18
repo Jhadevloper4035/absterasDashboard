@@ -11,9 +11,6 @@ powderCoatingRouter.use(asyncHandler(authenticate), authorizeAppModule('powder-c
 powderCoatingRouter.get('/summary', asyncHandler(controller.summary));
 powderCoatingRouter.post('/uploads', authorizeAppModule('powder-coating', 'manage'), asyncHandler(rateLimit({ scope: 'powder-coating-upload', limit: 10, windowMs: 15 * 60 * 1000 })), multipartUpload, asyncHandler(uploadFiles));
 powderCoatingRouter.get('/vendors', asyncHandler(controller.listVendors));
-powderCoatingRouter.post('/vendors', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.createVendor));
-powderCoatingRouter.patch('/vendors/:id', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.updateVendor));
-powderCoatingRouter.delete('/vendors/:id', authorizeAppModule('powder-coating', 'manage'), asyncHandler(controller.deleteVendor));
 powderCoatingRouter.get('/orders', asyncHandler(controller.listOrders));
 powderCoatingRouter.get('/laser-cut-orders/:id/transferable-items', asyncHandler(controller.getLaserCutTransferItems));
 powderCoatingRouter.get('/orders/:id', asyncHandler(controller.getOrder));

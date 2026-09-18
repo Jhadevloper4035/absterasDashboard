@@ -48,7 +48,7 @@ export default function PowderCoatingManagementPage() {
       <PageMetaData title="Powder Coating Dashboard" />
       <div className="d-flex flex-wrap justify-content-between gap-3 mb-3">
         <div><h4 className="mb-1">Powder Coating Dashboard</h4><p className="text-muted mb-0">Current coating progress and delivery status for every order.</p></div>
-        <div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/powder-coating-management/vendors">Manage vendors</Link><Link className="btn btn-primary" to="/powder-coating-management/challans/create">Create order</Link></div>
+        <div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/vendor-management">Manage vendors</Link><Link className="btn btn-primary" to="/powder-coating-management/challans/create">Create order</Link></div>
       </div>
       {error && <Alert variant="danger">{error}</Alert>}
       <div className="row g-3 mb-3">

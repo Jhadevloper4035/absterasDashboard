@@ -155,7 +155,7 @@ export default function CreatePowderCoatingOrderPage({ laserCutOrderId: provided
   return (
     <>
       <PageMetaData title="Create Powder Coating Order" />
-      <div className="d-flex justify-content-between align-items-start gap-3 mb-3"><div><h4 className="mb-1">Send {laserCutOrder ? `laser-cut order ${laserCutOrder.orderName}` : 'inventory'} to powder coating</h4><p className="text-muted mb-0">This creates the outward challan. After coating, record ready batches and send only ready material to the client site.</p></div><div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/powder-coating-management/vendors">Manage vendors</Link><Link className="btn btn-outline-secondary" to={cancelTo}>{laserCutOrder ? 'Change order' : 'Cancel'}</Link></div></div>
+      <div className="d-flex justify-content-between align-items-start gap-3 mb-3"><div><h4 className="mb-1">Send {laserCutOrder ? `laser-cut order ${laserCutOrder.orderName}` : 'inventory'} to powder coating</h4><p className="text-muted mb-0">This creates the outward challan. After coating, record ready batches and send only ready material to the client site.</p></div><div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/vendor-management">Manage vendors</Link><Link className="btn btn-outline-secondary" to={cancelTo}>{laserCutOrder ? 'Change order' : 'Cancel'}</Link></div></div>
       <Card><CardBody>
         <Form noValidate onSubmit={save}>
           {!laserCutOrder && <Alert variant="info"><strong>Direct flow:</strong> Inventory → Powder Coating → Client Site. Select material from inventory below; its supplier, HSN, unit, available stock, and shade are copied into the Powder Coating challan.</Alert>}

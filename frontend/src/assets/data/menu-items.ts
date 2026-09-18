@@ -199,7 +199,6 @@ export const MENU_ITEMS: MenuItemType[] = [
         parentKey: 'inventory-management',
         requiresManage: true,
       },
-      { key: 'inventory-suppliers', label: 'Suppliers', url: '/inventory/suppliers', parentKey: 'inventory-management' },
       { key: 'inventory-purchases', label: 'Purchase History', url: '/inventory/purchases', parentKey: 'inventory-management' },
     ],
   },
@@ -212,7 +211,6 @@ export const MENU_ITEMS: MenuItemType[] = [
       { key: 'laser-cut-current-orders', label: 'Current Orders', url: '/laser-cut-management/orders', parentKey: 'laser-cut-management' },
       { key: 'laser-cut-move-in', label: 'Move In', url: '/laser-cut-management/challans/create', parentKey: 'laser-cut-management', requiresManage: true },
       { key: 'laser-cut-move-out', label: 'Move Out', url: '/laser-cut-management/move-out', parentKey: 'laser-cut-management', requiresManage: true },
-      { key: 'laser-cut-vendors', label: 'Vendors', url: '/laser-cut-management/vendors', parentKey: 'laser-cut-management' },
     ],
   },
   {
@@ -224,7 +222,15 @@ export const MENU_ITEMS: MenuItemType[] = [
       { key: 'powder-coating-orders', label: 'Current Orders', url: '/powder-coating-management/orders', parentKey: 'powder-coating-management' },
       { key: 'powder-coating-move-in', label: 'Move In', url: '/powder-coating-management/challans/create', parentKey: 'powder-coating-management', requiresManage: true },
       { key: 'powder-coating-move-out', label: 'Move Out', url: '/powder-coating-management/move-out', parentKey: 'powder-coating-management', requiresManage: true },
-      { key: 'powder-coating-vendors', label: 'Vendors', url: '/powder-coating-management/vendors', parentKey: 'powder-coating-management' },
+    ],
+  },
+  {
+    key: 'vendor-management',
+    icon: 'iconamoon:store-duotone',
+    label: 'Vendor Management',
+    children: [
+      { key: 'vendor-list', label: 'All Vendors', url: '/vendor-management', parentKey: 'vendor-management' },
+      { key: 'vendor-create', label: 'Create Vendor', url: '/vendor-management/create', parentKey: 'vendor-management', requiresManage: true },
     ],
   },
   {

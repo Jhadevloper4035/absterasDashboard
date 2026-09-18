@@ -53,7 +53,7 @@ const ChallanFormPage = () => {
     apiFetch<{ data: InventoryItem[] }>('/inventory/items?limit=100')
       .then(({ data }) => setMaterials(data))
       .catch(() => {})
-    apiFetch<{ data: Supplier[] }>('/inventory/suppliers?status=active')
+    apiFetch<{ data: Supplier[] }>('/inventory/suppliers?status=active&serviceType=purchase_material')
       .then(({ data }) => setSuppliers(data))
       .catch(() => {})
     if (challanId)

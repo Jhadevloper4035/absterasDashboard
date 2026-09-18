@@ -146,7 +146,7 @@ export default function LaserCutManagementPage() {
           <h4 className="mb-1">Laser Cut Management</h4>
           <p className="text-muted mb-0">Track vendor-held sheet and tube stock without mixing it into central inventory.</p>
         </div>
-        <div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/laser-cut-management/vendors">Manage vendors</Link><Button variant="outline-secondary" onClick={load} disabled={loading}>Refresh</Button></div>
+        <div className="d-flex gap-2"><Link className="btn btn-outline-primary" to="/vendor-management">Manage vendors</Link><Button variant="outline-secondary" onClick={load} disabled={loading}>Refresh</Button></div>
       </div>
       {error && <Alert variant="danger">{error}</Alert>}
       <Row className="g-3 mb-3">
