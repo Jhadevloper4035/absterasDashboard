@@ -131,6 +131,7 @@ data "aws_iam_policy_document" "uploader" {
     actions = [
       "s3:GetObject",
       "s3:PutObject",
+      "s3:DeleteObject",
     ]
     resources = ["${aws_s3_bucket.uploads.arn}/${local.upload_prefix}/*"]
   }

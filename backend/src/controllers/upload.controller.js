@@ -6,6 +6,6 @@ export async function uploadFiles(req, res) {
 }
 
 export async function deleteUpload(req, res) {
-  await deleteUploadedAttachment(req.body, req.user);
+  await deleteUploadedAttachment(req.body);
   return res.status(204).end();
 }

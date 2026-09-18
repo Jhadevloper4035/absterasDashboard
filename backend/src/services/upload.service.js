@@ -1,7 +1,7 @@
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import sharp from 'sharp';
 import { env } from '../config/env.js';
@@ -139,15 +139,20 @@ export function trustedAttachment(file) {
   return isTrustedUploadKey(attachment.key) && file?.attachmentToken === createAttachmentToken(attachment) ? attachment : null;
 }
 
-export async function deleteUploadedAttachment(file, user) {
+export async function deleteUploadedAttachment(file) {
   assertS3Configured();
   const attachment = trustedAttachment(file);
   if (!attachment) throw uploadError(400, 'Invalid attachment');
 
-  const object = await s3Client.send(new HeadObjectCommand({ Bucket: env.s3.bucket, Key: attachment.key }));
-  if (object.Metadata?.uploadedby !== String(user._id)) throw uploadError(403, 'You can only remove files you uploaded');
+  try {
+    await s3Client.send(new DeleteObjectCommand({ Bucket: env.s3.bucket, Key: attachment.key }));
+  } catch (error) {
+    if (error.name === 'AccessDenied' || error.Code === 'AccessDenied') {
+      throw uploadError(503, 'S3 delete permission is not configured');
+    }
 
-  await s3Client.send(new DeleteObjectCommand({ Bucket: env.s3.bucket, Key: attachment.key }));
+    throw uploadError(502, 'Unable to remove attachment from storage');
+  }
 }
 
 export function detectUploadType({ originalname, mimetype, buffer, size = buffer?.length || 0 }) {

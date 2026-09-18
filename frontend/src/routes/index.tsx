@@ -23,6 +23,8 @@ const UpcomingHolidays = lazy(() => import('@/app/(admin)/hr/upcoming-holidays/p
 const HrOrganization = lazy(() => import('@/app/(admin)/hr/settings/organization/page'))
 const Attendance = lazy(() => import('@/app/(admin)/hr/attendance/page'))
 const Leave = lazy(() => import('@/app/(admin)/hr/leave/page'))
+const MyLeave = lazy(() => import('@/app/(admin)/hr/my-leave/page'))
+const Holidays = lazy(() => import('@/app/(admin)/hr/holidays/page'))
 const Payroll = lazy(() => import('@/app/(admin)/hr/payroll/page'))
 const PayrollDetail = lazy(() => import('@/app/(admin)/hr/payroll/[runId]/page'))
 const Advances = lazy(() => import('@/app/(admin)/hr/payroll/advances/page'))
@@ -216,6 +218,7 @@ export type RoutesProps = {
   roles?: string[]
   moduleAccess?: 'view' | 'manage'
   allowModuleRoleBypass?: boolean
+  directorHrManagementOnly?: boolean
   strictRoles?: boolean
   exact?: boolean
 }
@@ -310,24 +313,26 @@ const generalRoutes: RoutesProps[] = [
   { path: '/hr/my-attendance', name: 'My Attendance', element: <MyAttendance />, roles: ['employee'], strictRoles: true },
   { path: '/hr/my-id-card', name: 'My ID Card', element: <MyIdCard />, roles: ['employee'], strictRoles: true },
   { path: '/hr/my-payslips', name: 'My Salary Slips', element: <MyPayslips />, roles: ['employee'], strictRoles: true },
+  { path: '/hr/my-leave', name: 'My Leave', element: <MyLeave />, roles: ['employee'], strictRoles: true },
   { path: '/hr/upcoming-holidays', name: 'Upcoming Holidays', element: <UpcomingHolidays />, roles: ['employee'], strictRoles: true },
   { path: '/hr/settings/departments', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/hr/settings/designations', name: 'Departments & Designations', element: <HrOrganization />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/hr/attendance', name: 'Attendance', element: <Attendance />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/hr/attendance/reports', name: 'Attendance reports', element: <Navigate to="/hr/attendance" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
-  { path: '/hr/settings/holidays', name: 'Holidays', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
-  { path: '/hr/leave', name: 'Leave', element: <Leave />, roles: [...hrAccessRoles, 'employee'], allowModuleRoleBypass: true },
-  { path: '/hr/leave/approvals', name: 'Leave approvals', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
-  { path: '/hr/leave/calendar', name: 'Leave calendar', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
-  { path: '/hr/settings/leave-types', name: 'Leave types', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/settings/holidays', name: 'Holidays', element: <Navigate to="/hr/holidays" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
+  { path: '/hr/holidays', name: 'Holidays', element: <Holidays />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
+  { path: '/hr/leave', name: 'Leave approvals', element: <Leave />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
+  { path: '/hr/leave/approvals', name: 'Leave approvals', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
+  { path: '/hr/leave/calendar', name: 'Leave calendar', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
+  { path: '/hr/settings/leave-types', name: 'Leave types', element: <Navigate to="/hr/leave" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
   { path: '/hr/payroll', name: 'Payroll', element: <Payroll />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/hr/payroll/:runId', name: 'Payroll run', element: <PayrollDetail />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/hr/payroll/salaries', name: 'Salary structures', element: <Navigate to="/hr/payroll" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
-  { path: '/hr/payroll/advances', name: 'Advances', element: <Advances />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/payroll/advances', name: 'Advances', element: <Advances />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
   { path: '/hr/advances', name: 'Salary advance', element: <MyAdvances />, roles: ['employee'], strictRoles: true },
   { path: '/hr/payroll/settlements', name: 'Settlements', element: <Settlements />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/hr/expenses', name: 'Expenses', element: <Expenses />, roles: [...hrAccessRoles, 'employee'], allowModuleRoleBypass: true },
-  { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles, allowModuleRoleBypass: true },
+  { path: '/hr/expenses/approvals', name: 'Reimbursement approvals', element: <ExpenseApprovals />, roles: hrAccessRoles, allowModuleRoleBypass: true, directorHrManagementOnly: true },
   { path: '/hr/reports', name: 'HR reports', element: <Navigate to="/hr" replace />, roles: hrAccessRoles, allowModuleRoleBypass: true },
   { path: '/clients', name: 'Client Management', element: <ClientManagement />, roles: allRoles, allowModuleRoleBypass: true },
   { path: '/clients/create', name: 'Create Client', element: <CreateClient />, roles: allRoles, moduleAccess: 'manage', allowModuleRoleBypass: true },

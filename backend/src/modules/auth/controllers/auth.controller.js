@@ -2,7 +2,7 @@ import { User } from '../../../models/user.model.js';
 import { LoginHistory } from '../models/login-history.model.js';
 import { requestIp } from '../../../helpers/request-ip.js';
 import { verifyPassword } from '../services/password.service.js';
-import { createSession, revokeActiveUserSessions, rotateSession, revokeSession } from '../services/auth-session.service.js';
+import { createSession, rotateSession, revokeSession } from '../services/auth-session.service.js';
 import { clearFailedLoginAttempts, LOGIN_ATTEMPT_WINDOW_SECONDS, MAX_LOGIN_ATTEMPTS, recordFailedLoginAttempt } from '../services/login-attempt.service.js';
 import { verifyAccessToken } from '../services/token.service.js';
 
@@ -122,7 +122,6 @@ export async function login(req, res) {
   await clearFailedLoginAttempts(user._id);
   user.lastLoginAt = lastLoginAt;
 
-  await revokeActiveUserSessions(user._id);
   const session = await createSession(user, req);
   await recordLogin(user, req, lastLoginAt);
   setRefreshCookie(res, session.refreshToken, session.refreshTokenExpiresAt);

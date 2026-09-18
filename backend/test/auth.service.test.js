@@ -7,7 +7,7 @@ import { RateLimit } from '../src/models/rate-limit.model.js';
 import { User } from '../src/models/user.model.js';
 import { env } from '../src/config/env.js';
 import { cleanIpAddress } from '../src/helpers/request-ip.js';
-import { allowFirstSuperadminOrUserManager, appAccessLevel, authorizeAppModule, authorizeHrModule, authorizeRoles, userRoles } from '../src/modules/auth/middleware/auth.middleware.js';
+import { allowFirstSuperadminOrUserManager, appAccessLevel, authorizeAppModule, authorizeHrApprover, authorizeHrModule, authorizeRoles, userRoles } from '../src/modules/auth/middleware/auth.middleware.js';
 import { rateLimit } from '../src/middleware/rate-limit.middleware.js';
 import { login, logout } from '../src/modules/auth/controllers/auth.controller.js';
 import { clearFailedLoginAttempts, recordFailedLoginAttempt, setLoginAttemptStoreForTest } from '../src/modules/auth/services/login-attempt.service.js';
@@ -103,6 +103,10 @@ test('module permissions determine app access for non-privileged profiles', () =
 });
 
 test('HR module management applies regardless of account profile', async () => {
+  const employeeListRequest = { method: 'GET', user: { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] } };
+  await authorizeHrModule('employees', 'view')(employeeListRequest, {}, (error) => assert.equal(error, undefined));
+  assert.equal(employeeListRequest.hrAccess, 'manage');
+
   const employeeRequest = { method: 'GET', user: { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] } };
   await authorizeHrModule('expenses', 'manage')(employeeRequest, {}, (error) => assert.equal(error, undefined));
   assert.equal(employeeRequest.hrAccess, 'manage');
@@ -110,6 +114,15 @@ test('HR module management applies regardless of account profile', async () => {
   const clientRequest = { method: 'GET', user: { workProfile: 'client', modulePermissions: [{ module: 'hr', access: 'manage' }] } };
   await authorizeHrModule('payroll', 'manage')(clientRequest, {}, (error) => assert.equal(error, undefined));
   assert.equal(clientRequest.hrAccess, 'manage');
+});
+
+test('only Directors with HR management access can approve HR requests', () => {
+  let error;
+  authorizeHrApprover({ user: { workProfile: 'employee', modulePermissions: [{ module: 'hr', access: 'manage' }] } }, {}, (value) => { error = value; });
+  assert.equal(error.statusCode, 403);
+
+  authorizeHrApprover({ user: { workProfile: 'director', modulePermissions: [{ module: 'hr', access: 'manage' }] } }, {}, (value) => { error = value; });
+  assert.equal(error, undefined);
 });
 
 test('explicit HR permission grants app and payroll management access', async () => {
@@ -307,7 +320,7 @@ test('login updates lastLoginAt without revalidating legacy user fields', async 
   assert.ok(response.cookies.sales_crm_refresh);
 });
 
-test('login revokes an existing active session instead of blocking the user', async () => {
+test('login keeps existing active sessions for other tabs and devices', async () => {
   const passwordHash = await hashPassword('CodexAdmin123!');
   const user = {
     _id: 'user-1',
@@ -320,17 +333,9 @@ test('login revokes an existing active session instead of blocking the user', as
 
   User.findOne = () => ({ select: () => Promise.resolve(user) });
   User.updateOne = async () => {};
-  AuthSession.find = () => ({
-    select() {
-      return this;
-    },
-    lean() {
-      return Promise.resolve([{ accessTokenJti: 'access-1' }]);
-    },
-  });
-  let revokedFilter;
-  AuthSession.updateMany = async (filter) => {
-    revokedFilter = filter;
+  let revokeAttempted = false;
+  AuthSession.updateMany = async () => {
+    revokeAttempted = true;
   };
   AuthSession.create = async () => ({});
   BlockedToken.updateOne = async () => {};
@@ -362,7 +367,7 @@ test('login revokes an existing active session instead of blocking the user', as
   );
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(revokedFilter, { user: 'user-1', revokedAt: null });
+  assert.equal(revokeAttempted, false);
   assert.ok(response.cookies.sales_crm_refresh);
 });
 

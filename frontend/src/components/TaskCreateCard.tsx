@@ -66,6 +66,7 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   const pendingUploadsRef = useRef(0)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadFailed, setUploadFailed] = useState(false)
+  const [removingAttachmentKey, setRemovingAttachmentKey] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const canAssign = canManageModule(user, 'tasks')
@@ -131,13 +132,19 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
   }
 
   const removeAttachment = async (file: TaskAttachment) => {
-    if (!token) return
+    if (!token || removingAttachmentKey) return
     setError('')
+    setRemovingAttachmentKey(file.key)
     try {
       await apiFetch('/tasks/uploads', { method: 'DELETE', token, body: JSON.stringify(file) })
       setForm((value) => ({ ...value, attachments: value.attachments.filter((item) => item.key !== file.key) }))
+      toast.success('Attachment removed')
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unable to remove attachment')
+      const message = error instanceof Error ? error.message : 'Unable to remove attachment'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setRemovingAttachmentKey('')
     }
   }
 
@@ -329,8 +336,14 @@ const TaskCreateCard = ({ taskId }: { taskId?: string }) => {
                             <IconifyIcon icon="bx:download" />
                           </a>
                         )}
-                        <Button variant="link" className="attachment-remove" onClick={() => removeAttachment(file)} aria-label={`Remove ${attachmentName(file)}`}>
-                          <IconifyIcon icon="bx:x" />
+                        <Button
+                          variant="link"
+                          className="attachment-remove"
+                          disabled={removingAttachmentKey === file.key}
+                          onClick={() => removeAttachment(file)}
+                          aria-label={`Remove ${attachmentName(file)}`}
+                        >
+                          {removingAttachmentKey === file.key ? <Spinner className="spinner-border-sm" tag="span" /> : <IconifyIcon icon="bx:x" />}
                         </Button>
                       </div>
                     ))}

@@ -26,6 +26,8 @@ export const hasFullAppAccess = (user?: UserType) => [user?.role, ...(user?.addi
   .some((role) => role === 'superadmin' || role === 'admin')
 export const canAccessModule = (user: UserType | undefined, module?: AppModule, required: RequiredModuleAccess = 'view') => !module || hasFullAppAccess(user) || (module === 'hr' && required === 'view' && user?.workProfile === 'employee') || Boolean(user?.modulePermissions?.some((permission) => permission.module === module && (required === 'view' ? permission.access !== 'none' : permission.access === 'manage')))
 export const canManageModule = (user: UserType | undefined, module: AppModule) => hasFullAppAccess(user) || Boolean(user?.modulePermissions?.some((permission) => permission.module === module && permission.access === 'manage'))
+export const hasDirectorHrManagementAccess = (user?: UserType) => user?.workProfile === 'director' && Boolean(user.modulePermissions?.some((permission) => permission.module === 'hr' && permission.access === 'manage'))
+export const canApproveHrRequests = hasDirectorHrManagementAccess
 export const canReviewDesignerDocuments = (user?: UserType) => user?.workProfile === 'director' && Boolean(user.modulePermissions?.some((permission) => permission.module === 'designer' && permission.access !== 'none'))
 
 export const moduleForPath = (path: string) => {

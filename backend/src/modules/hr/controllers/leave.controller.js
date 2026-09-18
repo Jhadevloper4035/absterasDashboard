@@ -129,7 +129,7 @@ export async function decideLeaveRequest(req, res) {
   await request.save();
   await auditEvent(req, { action: `hr.leave.${status}`, entity: 'leave_request', entityId: request._id, after: { status } });
   const employee = await Employee.findById(request.employee).select('user');
-  await notifyEmployeeRequestDecision(req.user, employee?.user, { title: `Leave ${status}`, body: `${request.days} day(s) ${status}.`, type: `hr.leave.${status}`, link: '/hr/leave' });
+  await notifyEmployeeRequestDecision(req.user, employee?.user, { title: `Leave ${status}`, body: `${request.days} day(s) ${status}.`, type: `hr.leave.${status}`, link: '/hr/my-leave' });
   return res.json({ data: request });
 }
 

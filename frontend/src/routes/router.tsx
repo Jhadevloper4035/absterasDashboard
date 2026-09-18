@@ -5,7 +5,7 @@ import { useAuthContext } from '@/context/useAuthContext'
 import { appRoutes, authRoutes } from '@/routes/index'
 import AdminLayout from '@/layouts/AdminLayout'
 import type { UserType } from '@/types/auth'
-import { canAccessModule, hasFullAppAccess, moduleForPath } from '@/helpers/moduleAccess'
+import { canAccessModule, hasDirectorHrManagementAccess, hasFullAppAccess, moduleForPath } from '@/helpers/moduleAccess'
 
 const dashboardPath = (_user?: UserType) => '/dashboard/analytics'
 const accessRoles = (user?: UserType): string[] => [user?.role, ...(user?.additionalRoles || []), ...(user?.accessTypes || []), ...(user?.workProfile === 'employee' ? ['employee'] : []), ...(user?.workProfile === 'admin' ? ['admin'] : []), ...(user?.workProfile === 'superadmin' ? ['superadmin'] : []), ...(user?.workProfile === 'client' ? ['client'] : []), ...(user?.workProfile === 'director' ? ['director'] : [])].filter(Boolean) as string[]
@@ -42,7 +42,7 @@ const AppRouter = (props: RouteProps) => {
               const hasModuleAccess = !module || canAccessModule(user, module, route.moduleAccess)
               const superadminOnly = route.roles?.length === 1 && route.roles[0] === 'superadmin'
               const roleAllowed = !route.roles || roles.some((role) => route.roles?.includes(role)) || (!route.strictRoles && !superadminOnly && hasFullAppAccess(user)) || Boolean(route.allowModuleRoleBypass && hasExplicitModuleAccess(user, module))
-              return hasModuleAccess && roleAllowed
+              return hasModuleAccess && roleAllowed && (!route.directorHrManagementOnly || hasDirectorHrManagementAccess(user))
             })() ? (
               <AdminLayout {...props}>{route.element}</AdminLayout>
             ) : (

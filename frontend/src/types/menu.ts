@@ -16,6 +16,7 @@ export type MenuItemType = {
   roles?: string[]
   adminOnly?: boolean
   directorOnly?: boolean
+  directorHrManagementOnly?: boolean
   requiresManage?: boolean
   children?: MenuItemType[]
 }

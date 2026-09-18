@@ -54,6 +54,7 @@ export const appAccessLevel = (user, module) => {
 };
 
 export const hasDesignerReviewAccess = (user) => user?.workProfile === 'director' && (user.modulePermissions || []).some((permission) => permission.module === 'designer' && permission.access !== 'none');
+export const hasDirectorHrManagementAccess = (user) => user?.workProfile === 'director' && (user.modulePermissions || []).some((permission) => permission.module === 'hr' && permission.access === 'manage');
 
 export function authorizeDesignerDirector(req, res, next) {
   if (!hasDesignerReviewAccess(req.user)) return next(authError(403, 'Director Designer access is required'));
@@ -77,13 +78,14 @@ export function authorizeHrModule(module, minAccess = 'view') {
   const levels = { none: 0, view: 1, manage: 2 };
   return async (req, res, next) => {
     if (!req.user) return next(authError(401, 'Authentication required'));
-    if (req.user.workProfile === 'employee' && minAccess === 'view' && ['attendance', 'expenses', 'leave', 'payroll', 'employee-overview', 'employees'].includes(module)) {
+    const hrAccessLevel = appAccessLevel(req.user, 'hr');
+    if (req.user.workProfile === 'employee' && hrAccessLevel < 2 && minAccess === 'view' && ['attendance', 'expenses', 'leave', 'payroll', 'employee-overview', 'employees'].includes(module)) {
       req.hrAccess = 'view';
       return next();
     }
-    if (appAccessLevel(req.user, 'hr') < (req.method === 'GET' ? required : 2)) return next(authError(403, 'Forbidden'));
+    if (hrAccessLevel < (req.method === 'GET' ? required : 2)) return next(authError(403, 'Forbidden'));
     const accessTypes = userRoles(req.user);
-    if (appAccessLevel(req.user, 'hr') === 2) {
+    if (hrAccessLevel === 2) {
       req.hrAccess = 'manage';
       return next();
     }
@@ -96,6 +98,11 @@ export function authorizeHrModule(module, minAccess = 'view') {
     req.hrAccess = permission.access;
     return next();
   };
+}
+
+export function authorizeHrApprover(req, res, next) {
+  if (!hasDirectorHrManagementAccess(req.user)) return next(authError(403, 'Director HR management access is required'));
+  return next();
 }
 
 export function authorizeInventoryModule(module, minAccess = 'view') {

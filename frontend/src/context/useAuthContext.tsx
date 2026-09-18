@@ -4,18 +4,6 @@ import { createContext, useContext, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { ChildrenType } from '../types/component-props'
 
-const ACTIVE_TAB_KEY = 'sales_crm_active_tab'
-const DUPLICATE_TAB_KEY = 'sales_crm_duplicate_tab'
-
-function tabId() {
-  const existing = sessionStorage.getItem(ACTIVE_TAB_KEY)
-  if (existing) return existing
-
-  const id = globalThis.crypto?.randomUUID?.() || String(Date.now() + Math.random())
-  sessionStorage.setItem(ACTIVE_TAB_KEY, id)
-  return id
-}
-
 export type AuthContextType = {
   user: UserType | undefined
   token: string | undefined
@@ -51,38 +39,9 @@ export function AuthProvider({ children }: ChildrenType) {
       if (!token) clearSession()
       return
     }
-    if (token || sessionStorage.getItem(DUPLICATE_TAB_KEY) === 'true') return
-
-    const activeTab = localStorage.getItem(ACTIVE_TAB_KEY)
-    const currentTab = sessionStorage.getItem(ACTIVE_TAB_KEY)
-    if (activeTab && activeTab !== currentTab) {
-      sessionStorage.setItem(DUPLICATE_TAB_KEY, 'true')
-      clearSession()
-      return
-    }
-
+    if (token) return
     refresh().catch(() => {})
   }, [clearSession, pathname, refresh, token])
-
-  useEffect(() => {
-    if (!token) return
-
-    sessionStorage.removeItem(DUPLICATE_TAB_KEY)
-    const currentTab = tabId()
-    localStorage.setItem(ACTIVE_TAB_KEY, currentTab)
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === ACTIVE_TAB_KEY && event.newValue && event.newValue !== currentTab) {
-        sessionStorage.setItem(DUPLICATE_TAB_KEY, 'true')
-        clearSession()
-      }
-    }
-
-    window.addEventListener('storage', onStorage)
-    return () => {
-      window.removeEventListener('storage', onStorage)
-      if (localStorage.getItem(ACTIVE_TAB_KEY) === currentTab) localStorage.removeItem(ACTIVE_TAB_KEY)
-    }
-  }, [clearSession, token])
 
   const removeSession = async () => {
     await logout()

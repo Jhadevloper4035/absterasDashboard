@@ -5,13 +5,8 @@ import { notifyUsers } from '../../notifications/services/notification.service.j
 
 const HR_APPROVER_QUERY = {
   status: 'active',
-  $or: [
-    { role: { $in: ['superadmin', 'admin'] } },
-    { additionalRoles: { $in: ['superadmin', 'admin'] } },
-    { accessTypes: { $in: ['superadmin', 'admin', 'hr-management'] } },
-    { workProfile: { $in: ['superadmin', 'admin'] } },
-    { modulePermissions: { $elemMatch: { module: 'hr', access: 'manage' } } },
-  ],
+  workProfile: 'director',
+  modulePermissions: { $elemMatch: { module: 'hr', access: 'manage' } },
 };
 
 export async function notifyHrApprovers(actor, { title, body, link } = {}) {

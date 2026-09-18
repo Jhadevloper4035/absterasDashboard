@@ -23,6 +23,7 @@ const isVisible = (item: MenuItemType, roles: string[] = [], hrModules: string[]
   const fullAccess = hasFullAppAccess(roles, workProfile)
   if (item.adminOnly && !fullAccess) return false
   if (item.directorOnly && !(workProfile === 'director' && hasAppAccess(modulePermissions, 'designer'))) return false
+  if (item.directorHrManagementOnly && !(workProfile === 'director' && hasAppAccess(modulePermissions, 'hr', true))) return false
   return (module ? fullAccess || hasAppAccess(modulePermissions, module, item.requiresManage) : isSuperadminOnly(item) ? roles.includes('superadmin') : fullAccess || !item.roles || roles.some((role) => item.roles?.includes(role))) && (fullAccess || !HR_MENU_MODULES[item.key] || hasHrAccess(hrModules, modulePermissions, HR_MENU_MODULES[item.key])) && (fullAccess || !INVENTORY_MENU_MODULES[item.key] || hasInventoryAccess(inventoryModules, modulePermissions, INVENTORY_MENU_MODULES[item.key]))
 }
 
