@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import mongoose from 'mongoose';
-import { addTaskNote, createTask, createTaskWorkType, deleteTask, deleteTaskWorkType, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from '../src/modules/tasks/controllers/task.controller.js';
+import { addTaskNote, createTask, createTaskWorkType, deleteTask, deleteTaskWorkType, handoffTask, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from '../src/modules/tasks/controllers/task.controller.js';
 import { Task, TASK_STATUSES } from '../src/modules/tasks/models/task.model.js';
 import { TaskWorkType } from '../src/modules/tasks/models/task-work-type.model.js';
 import { User } from '../src/models/user.model.js';
@@ -428,6 +428,29 @@ test('only the task creator can reassign it', async () => {
 
   assert.equal(response.statusCode, 403);
   assert.equal(response.body.error.message, 'Only the task creator can reassign it');
+});
+
+test('current assignee can hand off a task and keeps an assignment timeline', async () => {
+  const task = { _id: 'task-1', ticketNumber: 'T-123456', title: 'Site preparation', status: 'In Progress', createdBy: 'sales-2', assignee: 'sales-1', notes: [], history: [], save: async () => {}, populate: async () => {} };
+  Task.findOne = async () => task;
+  User.findOne = async () => ({ _id: 'sales-3', role: 'operations', status: 'active' });
+
+  const response = res();
+  await handoffTask({ user: taskManager(), params: { id: 'task-1' }, body: { assignee: 'sales-3', note: 'Site work is complete. Please install the fixtures.' } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(task.assignee, 'sales-3');
+  assert.equal(task.status, 'To Do');
+  assert.equal(task.notes[0].title, 'Work handed off');
+  assert.deepEqual(task.history[0], {
+    action: 'handed_off',
+    description: 'Site work is complete. Please install the fixtures.',
+    actor: 'sales-1',
+    fromAssignee: 'sales-1',
+    toAssignee: 'sales-3',
+    fromStatus: 'In Progress',
+    toStatus: 'To Do',
+  });
 });
 
 test('task assignees cannot change priority', async () => {

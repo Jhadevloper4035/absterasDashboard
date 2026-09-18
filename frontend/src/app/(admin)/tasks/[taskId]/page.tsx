@@ -9,6 +9,7 @@ import PageMetaData from '@/components/PageTitle'
 import Spinner from '@/components/Spinner'
 import IconifyIcon from '@/components/wrappers/IconifyIcon'
 import { apiFetch } from '@/helpers/api'
+import { canManageModule } from '@/helpers/moduleAccess'
 import { uploadMultipartFiles } from '@/helpers/upload'
 import { useAuthStore } from '@/store/authStore'
 import type { UploadFileType } from '@/types/component-props'
@@ -18,6 +19,7 @@ import { formatFileSize } from '@/utils/other'
 type TaskUser = Pick<UserType, '_id' | 'name' | 'email' | 'role' | 'status'>
 type TaskAttachment = { key: string; url?: string; originalName?: string; contentType?: string; size?: number; checksum?: string; attachmentToken?: string }
 type TaskNote = { _id: string; title: string; description: string; attachments?: TaskAttachment[]; createdBy?: string | TaskUser; createdAt?: string }
+type TaskHistory = { _id: string; action: string; description?: string; actor?: string | TaskUser; fromAssignee?: string | TaskUser; toAssignee?: string | TaskUser; fromStatus?: string; toStatus?: string; createdAt?: string }
 
 type Task = {
   _id: string
@@ -36,6 +38,7 @@ type Task = {
   createdAt?: string
   updatedAt?: string
   notes?: TaskNote[]
+  history?: TaskHistory[]
 }
 
 const personName = (person?: string | TaskUser) => (typeof person === 'object' ? person.name : 'Not assigned')
@@ -59,7 +62,9 @@ const statusVariant = (status: string) => (status === 'Done' ? 'success' : statu
 const priorityVariant = (priority: string) => (priority === 'Critical' || priority === 'High' ? 'danger' : priority === 'Medium' ? 'warning' : 'success')
 const attachmentName = (file: TaskAttachment) => (file.originalName || file.key).replace(/^\.?\//, '')
 const attachmentExtension = (file: TaskAttachment) => attachmentName(file).split('.').pop()?.toUpperCase() || 'FILE'
-const attachmentIcon = (file: TaskAttachment) => file.contentType?.startsWith('image/') ? 'bx:image' : 'bx:paperclip'
+const isImageAttachment = (file: TaskAttachment) => Boolean(file.url && (file.contentType?.startsWith('image/') || /\.(avif|gif|jpe?g|png|webp)$/i.test(attachmentName(file))))
+const attachmentIcon = (file: TaskAttachment) => isImageAttachment(file) ? 'bx:image' : 'bx:paperclip'
+const historyTitle = (action: string) => ({ created: 'Task created', reassigned: 'Task reassigned', handed_off: 'Work handed off', completed: 'Task completed', status_changed: 'Status changed' }[action] || 'Task updated')
 
 const AttachmentDownloadList = ({ attachments }: { attachments?: TaskAttachment[] }) => (
   attachments?.length ? (
@@ -67,7 +72,7 @@ const AttachmentDownloadList = ({ attachments }: { attachments?: TaskAttachment[
       {attachments.map((file) => (
         <div className="attachment-row" key={file.key}>
           <span className="attachment-icon">
-            <IconifyIcon icon={attachmentIcon(file)} />
+            {isImageAttachment(file) ? <img src={file.url} alt={attachmentName(file)} className="rounded" style={{ height: 38, objectFit: 'cover', width: 38 }} loading="lazy" /> : <IconifyIcon icon={attachmentIcon(file)} />}
           </span>
           <span className="attachment-meta">
             <span className="attachment-name" title={attachmentName(file)}>{attachmentName(file)}</span>
@@ -75,8 +80,8 @@ const AttachmentDownloadList = ({ attachments }: { attachments?: TaskAttachment[
           </span>
           {file.url ? (
             <a className="btn btn-sm btn-outline-primary text-nowrap" href={file.url} target="_blank" rel="noreferrer">
-              <IconifyIcon icon="bx:download" className="me-1" />
-              Download
+              <IconifyIcon icon={isImageAttachment(file) ? 'bx:show' : 'bx:download'} className="me-1" />
+              {isImageAttachment(file) ? 'View' : 'Download'}
             </a>
           ) : (
             <Button size="sm" variant="outline-secondary" disabled className="text-nowrap">Unavailable</Button>
@@ -94,6 +99,8 @@ const TaskDetail = () => {
   const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
   const [task, setTask] = useState<Task>()
+  const [assignees, setAssignees] = useState<UserType[]>([])
+  const [handoff, setHandoff] = useState({ assignee: '', note: '' })
   const [note, setNote] = useState({ title: '', description: '', attachments: [] as TaskAttachment[] })
   const [submissionAttachments, setSubmissionAttachments] = useState<TaskAttachment[]>([])
   const [submissionDescription, setSubmissionDescription] = useState('')
@@ -108,8 +115,14 @@ const TaskDetail = () => {
   const [error, setError] = useState('')
   const isTaskCreator = Boolean(task && String(personId(task.createdBy)) === String(user?._id || ''))
   const canCloseTask = Boolean(task && task.status !== 'Done' && String(personId(task.assignee)) === String(user?._id || ''))
+  const canHandoffTask = canCloseTask && canManageModule(user, 'tasks')
   const canAddTaskNote = isTaskCreator || canCloseTask
   const backPath = ['superadmin', 'admin'].includes(user?.role || '') ? '/dashboard/analytics' : '/tasks/assigned-to-me'
+  const taskTimeline = task?.history?.length
+    ? task.history
+    : task?.createdAt
+      ? [{ _id: 'created', action: 'created', description: 'Task created and assigned.', actor: task.createdBy, toAssignee: task.assignee, toStatus: task.status, createdAt: task.createdAt }]
+      : []
 
   useEffect(() => {
     if (!token || !taskId) return
@@ -120,6 +133,16 @@ const TaskDetail = () => {
       .catch((e) => setError(e instanceof Error ? e.message : 'Unable to load task'))
       .finally(() => setLoading(false))
   }, [taskId, token])
+
+  useEffect(() => {
+    if (!token || !canHandoffTask) {
+      setAssignees([])
+      return
+    }
+    apiFetch<{ data: UserType[] }>('/tasks/assignees', { token })
+      .then((res) => setAssignees(res.data))
+      .catch(() => setAssignees([]))
+  }, [canHandoffTask, token])
 
   const addNote = async (event: FormEvent) => {
     event.preventDefault()
@@ -207,6 +230,25 @@ const TaskDetail = () => {
       toast.success('Task submitted')
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unable to submit task'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handoffTask = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!token || !taskId || !canHandoffTask || !handoff.assignee) return
+    setSaving(true)
+    setError('')
+    try {
+      const res = await apiFetch<{ data: Task }>(`/tasks/${taskId}/handoff`, { method: 'POST', token, body: JSON.stringify(handoff) })
+      setTask(res.data)
+      setHandoff({ assignee: '', note: '' })
+      toast.success('Task handed off')
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to hand off task'
       setError(message)
       toast.error(message)
     } finally {
@@ -302,6 +344,26 @@ const TaskDetail = () => {
               </Card>
             </Col>
             <Col xl={4}>
+              {canHandoffTask && <Card className="mb-3">
+                <CardBody>
+                  <h4 className="card-title mb-1">Hand off task</h4>
+                  <p className="text-muted mb-3">Your part is complete? Assign the next part without closing the task.</p>
+                  <Form onSubmit={handoffTask}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Next assignee</Form.Label>
+                      <Form.Select required value={handoff.assignee} onChange={(event) => setHandoff({ ...handoff, assignee: event.target.value })}>
+                        <option value="">Choose a user</option>
+                        {assignees.map((assignee) => <option key={assignee._id} value={assignee._id}>{assignee.name}{assignee.department?.name ? ` · ${assignee.department.name}` : ''}</option>)}
+                      </Form.Select>
+                    </Form.Group>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Handoff note (optional)</Form.Label>
+                      <Form.Control as="textarea" rows={3} value={handoff.note} onChange={(event) => setHandoff({ ...handoff, note: event.target.value })} placeholder="Explain what is finished and what remains." />
+                    </Form.Group>
+                    <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Hand off task'}</Button>
+                  </Form>
+                </CardBody>
+              </Card>}
               {canCloseTask && <Card className="mb-3">
                 <CardBody>
                   <h4 className="card-title mb-1">Submit task</h4>
@@ -387,6 +449,28 @@ const TaskDetail = () => {
                   </Form>
                 </CardBody>
               </Card>}
+              <Card className="mb-3">
+                <CardBody>
+                  <h4 className="card-title mb-3">Task history</h4>
+                  {taskTimeline.length ? (
+                    <div className="position-relative border-start ps-3">
+                      {[...taskTimeline].reverse().map((item) => (
+                        <div className="position-relative pb-4" key={item._id}>
+                          <span className="position-absolute bg-primary rounded-circle" style={{ width: 10, height: 10, left: -21, top: 6 }} />
+                          <div className="d-flex justify-content-between gap-2 flex-wrap">
+                            <strong>{historyTitle(item.action)}</strong>
+                            <span className="text-muted fs-13">{dateText(item.createdAt)}</span>
+                          </div>
+                          <div className="text-muted fs-13 mb-1">By {personName(item.actor)}</div>
+                          {item.fromAssignee && item.toAssignee && <div className="fs-13 mb-1">{personName(item.fromAssignee)} → {personName(item.toAssignee)}</div>}
+                          {item.fromStatus && item.toStatus && <div className="fs-13 mb-1">{item.fromStatus} → {item.toStatus}</div>}
+                          {item.description && <div className="text-muted fs-13">{item.description}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <Alert variant="info" className="mb-0">No history yet</Alert>}
+                </CardBody>
+              </Card>
               <Card>
                 <CardBody>
                   <h4 className="card-title mb-3">Notes</h4>

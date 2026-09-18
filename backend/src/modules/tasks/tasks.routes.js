@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { addTaskNote, createTask, createTaskWorkType, deleteTask, deleteTaskWorkType, getTask, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from './controllers/task.controller.js';
+import { addTaskNote, createTask, createTaskWorkType, deleteTask, deleteTaskWorkType, getTask, handoffTask, listTaskAssignees, listTaskWorkTypes, listTasks, updateTask } from './controllers/task.controller.js';
 import { deleteUpload, uploadFiles } from '../../controllers/upload.controller.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
 import { multipartUpload } from '../../middleware/upload.middleware.js';
@@ -18,5 +18,6 @@ taskRouter.delete('/work-types/:role/:name', authorizeAppModule('tasks', 'manage
 taskRouter.post('/', authorizeAppModule('tasks', 'manage'), asyncHandler(createTask));
 taskRouter.get('/:id', asyncHandler(getTask));
 taskRouter.patch('/:id', asyncHandler(updateTask));
+taskRouter.post('/:id/handoff', asyncHandler(handoffTask));
 taskRouter.post('/:id/notes', asyncHandler(addTaskNote));
 taskRouter.delete('/:id', authorizeAppModule('tasks', 'manage'), asyncHandler(deleteTask));

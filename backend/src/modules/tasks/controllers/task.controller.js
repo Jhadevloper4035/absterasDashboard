@@ -60,12 +60,20 @@ function patchTask(task, body, actorId) {
   if (body.definitionOfDone !== undefined) task.definitionOfDone = body.definitionOfDone;
 }
 
+function addTaskHistory(task, entry) {
+  task.history ||= [];
+  task.history.push(entry);
+}
+
 function populateTask(task) {
   return task.populate([
     { path: 'assignee', select: 'name email role status' },
     { path: 'createdBy', select: 'name email role status' },
     { path: 'completedBy', select: 'name email role status' },
     { path: 'notes.createdBy', select: 'name email role status' },
+    { path: 'history.actor', select: 'name email role status' },
+    { path: 'history.fromAssignee', select: 'name email role status' },
+    { path: 'history.toAssignee', select: 'name email role status' },
   ]);
 }
 
@@ -285,6 +293,7 @@ export async function createTask(req, res) {
 
   const task = new Task({ createdBy: req.user._id, assignee: assignee._id });
   patchTask(task, req.body, req.user._id);
+  addTaskHistory(task, { action: 'created', description: 'Task created and assigned.', actor: req.user._id, toAssignee: assignee._id, toStatus: task.status });
   await task.save();
   await invalidateCache('task-lists');
   await populateTask(task);
@@ -348,6 +357,18 @@ export async function updateTask(req, res) {
       createdBy: req.user._id,
     });
   }
+  if (previousStatus !== task.status) {
+    addTaskHistory(task, {
+      action: task.status === 'Done' ? 'completed' : 'status_changed',
+      description: task.status === 'Done' ? 'Task marked as complete.' : `Status changed to ${task.status}.`,
+      actor: req.user._id,
+      fromStatus: previousStatus,
+      toStatus: task.status,
+    });
+  }
+  if (String(previousAssignee || '') !== String(task.assignee || '')) {
+    addTaskHistory(task, { action: 'reassigned', description: 'Task reassigned by its creator.', actor: req.user._id, fromAssignee: previousAssignee, toAssignee: task.assignee });
+  }
   await task.save({ validateModifiedOnly: true });
   await invalidateCache('task-lists');
   if (previousStatus !== task.status) {
@@ -361,6 +382,48 @@ export async function updateTask(req, res) {
     title: `${task.status === 'Done' ? 'Task completed' : 'Task updated'}: ${task.ticketNumber}`,
     body: task.title,
     metadata: taskNotificationMetadata('task.updated', task, req.user),
+  });
+  return res.json({ data: await taskData(task) });
+}
+
+export async function handoffTask(req, res) {
+  const task = await Task.findOne(taskQueryFor(req.user, { _id: req.params.id }));
+  if (!task) return res.status(404).json({ error: { message: 'Task not found' } });
+  if (task.status === 'Done') return res.status(409).json({ error: { message: 'Closed tasks cannot be handed off' } });
+  if (!canAssignTasks(req.user) || String(task.assignee) !== String(req.user._id)) {
+    return res.status(403).json({ error: { message: 'Only the current assignee can hand off this task' } });
+  }
+
+  const nextAssignee = await findAssignee(req.body.assignee);
+  if (!nextAssignee || String(nextAssignee._id) === String(req.user._id)) {
+    return res.status(400).json({ error: { message: 'Choose another active user with Task Management access' } });
+  }
+
+  const previousAssignee = task.assignee;
+  const previousStatus = task.status;
+  const handoffNote = String(req.body.note || '').trim();
+  task.assignee = nextAssignee._id;
+  task.status = 'To Do';
+  task.completedAt = undefined;
+  task.completedBy = undefined;
+  if (handoffNote) task.notes.push({ title: 'Work handed off', description: handoffNote, createdBy: req.user._id });
+  addTaskHistory(task, {
+    action: 'handed_off',
+    description: handoffNote || 'Completed work was handed off to the next owner.',
+    actor: req.user._id,
+    fromAssignee: previousAssignee,
+    toAssignee: nextAssignee._id,
+    fromStatus: previousStatus,
+    toStatus: task.status,
+  });
+  await task.save({ validateModifiedOnly: true });
+  await invalidateCache('task-lists');
+  await auditEvent(req, { action: 'task.handoff', entity: 'task', entityId: task._id, before: { assignee: previousAssignee, status: previousStatus }, after: { assignee: task.assignee, status: task.status } });
+  await populateTask(task);
+  await notifyUsers([task.assignee, task.createdBy].filter((id) => String(id || '') !== String(req.user._id)), {
+    title: `Task handed off: ${task.ticketNumber}`,
+    body: task.title,
+    metadata: taskNotificationMetadata('task.handed_off', task, req.user),
   });
   return res.json({ data: await taskData(task) });
 }

@@ -29,6 +29,19 @@ const noteSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+const historySchema = new mongoose.Schema(
+  {
+    action: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    fromAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    toAssignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    fromStatus: { type: String, enum: TASK_STATUSES },
+    toStatus: { type: String, enum: TASK_STATUSES },
+  },
+  { timestamps: true },
+);
+
 const taskSchema = new mongoose.Schema(
   {
     ticketNumber: {
@@ -67,6 +80,7 @@ const taskSchema = new mongoose.Schema(
     technicalNotes: { type: String, trim: true },
     attachments: [attachmentSchema],
     notes: [noteSchema],
+    history: [historySchema],
     definitionOfDone: { type: String, trim: true },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
